@@ -134,6 +134,22 @@ fun PlayerControlsOverlay(
     }
 }
 
+/**
+ * The slider fraction that keeps the thumb tracking playback: [positionMs] over
+ * [durationMs], clamped to `0f..1f`. Returns `null` when the thumb should be left
+ * untouched — while the user is scrubbing ([isScrubbing]) or before the duration is
+ * known ([durationMs] `<= 0`) — so automatic tracking never fights an in-progress drag.
+ *
+ * Extracted from the player's position-sync effect so the tricky live case can be
+ * verified without a running player: a live DVR window's duration keeps growing
+ * while the position rides the live edge, so a fraction computed once would drift
+ * toward 0; recomputing here keeps the thumb pinned near the right edge.
+ */
+internal fun playbackTrackingFraction(positionMs: Long, durationMs: Long, isScrubbing: Boolean): Float? {
+    if (isScrubbing || durationMs <= 0L) return null
+    return (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+}
+
 internal fun formatPlaybackTime(timeMs: Long): String {
     val totalSeconds = timeMs.coerceAtLeast(0L) / 1000L
     val hours = totalSeconds / 3600L
