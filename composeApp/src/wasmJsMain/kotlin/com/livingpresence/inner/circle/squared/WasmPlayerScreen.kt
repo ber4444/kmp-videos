@@ -184,6 +184,14 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     var scrubFraction by remember { mutableStateOf(0f) }
     var previewDataUrl by remember { mutableStateOf<String?>(null) }
 
+    // Keep the slider thumb tracking playback while not being dragged — shared with
+    // Android/iOS via [playbackTrackingFraction]. Live HLS duration grows, so a
+    // fraction set once would drift from the true position.
+    LaunchedEffect(currentTime, duration, isScrubbing) {
+        playbackTrackingFraction((currentTime * 1000).toLong(), (duration * 1000).toLong(), isScrubbing)
+            ?.let { scrubFraction = it }
+    }
+
     LaunchedEffect(Unit) {
         initPreviewEngine()
     }

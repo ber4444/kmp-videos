@@ -137,6 +137,14 @@ actual fun PlatformPlayerScreen(
             }
         }
     
+    // Keep the slider thumb tracking playback while not being dragged — shared with
+    // Android/web via [playbackTrackingFraction]. AVPlayer's live HLS window grows
+    // (duration keeps increasing), so a fraction set once would drift from the true
+    // position; recomputing keeps the thumb pinned near the live edge.
+    LaunchedEffect(positionMs, durationMs, isScrubbing) {
+        playbackTrackingFraction(positionMs, durationMs, isScrubbing)?.let { scrubFraction = it }
+    }
+
     val engine = remember { PreviewFrameEngine() }
     var previewBitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
     val eventNumber = remember(url) { parseEventNumber(url) }
