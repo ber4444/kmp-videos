@@ -199,10 +199,8 @@ private fun ExoPlayerScreen(
     // so a fraction computed once would drift further from the true position
     // every time the window grows.
     LaunchedEffect(state.currentPosition, state.duration, isScrubbing) {
-        if (!isScrubbing && state.duration > 0L) {
-            sliderFraction = (state.currentPosition.toFloat() / state.duration.toFloat())
-                .coerceIn(0f, 1f)
-        }
+        playbackTrackingFraction(state.currentPosition, state.duration, isScrubbing)
+            ?.let { sliderFraction = it }
     }
 
     // ── Scrub preview (plan.md FU-1, Scrutiny #1) ────────────────────────────
