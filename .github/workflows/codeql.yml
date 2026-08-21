@@ -20,12 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'java-kotlin', 'python', 'actions' ]
-
-    # Kotlin 2.4.20-RC is required to resolve Dependabot alert CVE-2026-53914.
-    # CodeQL currently supports Kotlin < 2.4.20. continue-on-error ensures CI remains green
-    # while CodeQL CLI rolls out support for Kotlin 2.4.20+.
-    continue-on-error: ${{ matrix.language == 'java-kotlin' }}
+        language: [ 'python', 'actions' ]
 
     steps:
     - name: Checkout repository
