@@ -92,6 +92,9 @@ class MainActivity : ComponentActivity() {
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
         if (!isPlayingVideo.get() || !packageManager.hasSystemFeature(
                 android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE,
             )
@@ -100,24 +103,18 @@ class MainActivity : ComponentActivity() {
         }
         val params = PictureInPictureParams.Builder()
         pipAspectRatio.get()?.let { aspectRatio ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                params.setAspectRatio(aspectRatio)
-            }
+            params.setAspectRatio(aspectRatio)
         }
         // Source-rect hint: tells the platform the exact on-screen video bounds so
         // the PiP enter animation is seamless (no crop/flash from mismatched rects).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            pipSourceRect.get()?.let { sourceRect ->
-                runCatching { params.setSourceRectHint(sourceRect) }
-            }
+        pipSourceRect.get()?.let { sourceRect ->
+            runCatching { params.setSourceRectHint(sourceRect) }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             params.setAutoEnterEnabled(true)
         }
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                enterPictureInPictureMode(params.build())
-            }
+            enterPictureInPictureMode(params.build())
         }
     }
 
