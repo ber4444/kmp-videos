@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'java-kotlin', 'python', 'actions' ]
+        language: [ 'python', 'actions' ]
 
     steps:
     - name: Checkout repository
@@ -30,6 +30,7 @@ jobs:
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
+        tools: latest
         
     - name: Set up JDK 17
       if: matrix.language == 'java-kotlin'

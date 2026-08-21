@@ -1,6 +1,8 @@
 [versions]
 agp = "9.3.1"
-kotlin = "2.4.0"
+# 2.4.20-RC (pre-release): first version with the fix for CVE-2026-53914, unsafe deserialization
+# in the Kotlin build cache metadata. 2.4.20 has no stable release yet; move to it when it ships.
+kotlin = "2.4.20-RC"
 compose = "1.11.4"
 compose-multiplatform = "1.11.1"
 compose-icons = "1.7.8"
