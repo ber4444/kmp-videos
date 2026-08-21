@@ -1,22 +1,32 @@
 buildscript {
-    // The Android Gradle Plugin drags vulnerable transitive libraries (netty, bouncycastle,
-    // jose4j, jdom2, protobuf) onto the plugin classpath. They surface in GitHub's dependency
-    // graph and trip Dependabot high/critical alerts. Force patched versions on the buildscript
-    // classpath so only fixed versions are ever resolved.
-    // NOTE: jackson is deliberately NOT forced here. Dokka (every version through 2.1.0) depends
-    // on jackson-databind 2.12.7.1 and calls TypeFactory(LRUMap), a constructor removed in 2.16;
-    // the jackson-databind CVE is only patched in 2.18.8, so there is no version that satisfies
-    // both Dokka and the advisory. Forcing jackson breaks `dokkaHtml`. See the allprojects block.
+    // The Android Gradle Plugin and Dokka drag vulnerable transitive libraries (netty,
+    // bouncycastle, jackson, jsoup, commons-lang3, httpclient, jose4j, jdom2, protobuf) onto the
+    // plugin classpath. They surface in GitHub's dependency graph and trip Dependabot alerts.
+    // Force patched versions on the buildscript classpath so only fixed versions are ever resolved.
     // (Inlined rather than shared with the allprojects block below: the buildscript block is
     // evaluated before top-level script declarations exist.)
     configurations.all {
         resolutionStrategy.eachDependency {
-            when (requested.group) {
-                "io.netty" -> useVersion("4.1.135.Final")
-                "org.bouncycastle" -> useVersion("1.81.1")
-                "com.google.protobuf" -> if (requested.name != "protobuf-bom") useVersion("3.25.5")
-                "org.bitbucket.b_c" -> if (requested.name == "jose4j") useVersion("0.9.6")
-                "org.jdom" -> if (requested.name == "jdom2") useVersion("2.0.6.1")
+            when {
+                requested.group == "io.netty" -> useVersion("4.1.137.Final")
+                requested.group == "org.bouncycastle" -> useVersion("1.84")
+                requested.group == "org.jsoup" -> useVersion("1.23.1")
+                // Covers jackson-core/databind/annotations plus the dataformat, module and bom
+                // artifacts, which all share one version line. Dokka 2.2.0 requests 2.15.3;
+                // 2.18.10 is the newest 2.18.x and clears every open jackson advisory. (Dokka
+                // <= 2.1.0 could not be forced past 2.15 — it called TypeFactory(LRUMap), removed
+                // in jackson 2.16 — which is why jackson used to be excluded here.)
+                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+                requested.group == "com.google.protobuf" ->
+                    if (requested.name != "protobuf-bom") useVersion("3.25.5")
+                requested.group == "org.apache.commons" ->
+                    if (requested.name == "commons-lang3") useVersion("3.18.0")
+                requested.group == "org.apache.httpcomponents" ->
+                    if (requested.name == "httpclient") useVersion("4.5.14")
+                requested.group == "org.bitbucket.b_c" ->
+                    if (requested.name == "jose4j") useVersion("0.9.6")
+                requested.group == "org.jdom" ->
+                    if (requested.name == "jdom2") useVersion("2.0.6.1")
             }
         }
     }
@@ -38,19 +48,27 @@ plugins {
 // so CodeQL can trace the compiler invocations without triggering native linking (which causes OOMs).
 val isMac = System.getProperty("os.name").startsWith("Mac OS X")
 
-// Force patched versions of vulnerable transitive dependencies (Dependabot high/critical
-// alerts). The same libraries the AGP plugin classpath pulls in (see the buildscript block)
-// also appear in AGP-injected project configurations — e.g. the Unified Test Platform, which
-// brings in protobuf-java/protobuf-kotlin. Apply the override to every project configuration.
-// jackson is intentionally omitted (see the buildscript block): forcing it to the patched
-// 2.18.8 breaks Dokka's runtime classpath, which requires jackson 2.12.x.
+// Force patched versions of vulnerable transitive dependencies (Dependabot alerts). The same
+// libraries the AGP plugin classpath pulls in (see the buildscript block) also appear in
+// AGP-injected project configurations — e.g. the Unified Test Platform, which brings in
+// protobuf-java/protobuf-kotlin. Apply the override to every project configuration. Keep this
+// list in sync with the buildscript block above.
 fun DependencyResolveDetails.forceSecurityPatchedVersions() {
-    when (requested.group) {
-        "io.netty" -> useVersion("4.1.135.Final")
-        "org.bouncycastle" -> useVersion("1.81.1")
-        "com.google.protobuf" -> if (requested.name != "protobuf-bom") useVersion("3.25.5")
-        "org.bitbucket.b_c" -> if (requested.name == "jose4j") useVersion("0.9.6")
-        "org.jdom" -> if (requested.name == "jdom2") useVersion("2.0.6.1")
+    when {
+        requested.group == "io.netty" -> useVersion("4.1.137.Final")
+        requested.group == "org.bouncycastle" -> useVersion("1.84")
+        requested.group == "org.jsoup" -> useVersion("1.23.1")
+        requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+        requested.group == "com.google.protobuf" ->
+            if (requested.name != "protobuf-bom") useVersion("3.25.5")
+        requested.group == "org.apache.commons" ->
+            if (requested.name == "commons-lang3") useVersion("3.18.0")
+        requested.group == "org.apache.httpcomponents" ->
+            if (requested.name == "httpclient") useVersion("4.5.14")
+        requested.group == "org.bitbucket.b_c" ->
+            if (requested.name == "jose4j") useVersion("0.9.6")
+        requested.group == "org.jdom" ->
+            if (requested.name == "jdom2") useVersion("2.0.6.1")
     }
 }
 
