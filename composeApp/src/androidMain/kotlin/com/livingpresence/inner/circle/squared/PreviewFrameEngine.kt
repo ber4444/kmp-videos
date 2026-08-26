@@ -186,7 +186,30 @@ class PreviewFrameEngine(
         val player: ExoPlayer,
         val reader: ImageReaderCapture,
     ) {
+        /**
+         * Set when the renderer puts a frame on the surface. Cleared before each
+         * seek so a capture can tell "the frame for the position I just asked
+         * for" from "whatever was already sitting there".
+         *
+         * Without this the reuse optimisation actively lies: `seekTo` returns
+         * immediately, the surface still holds the previous frame, and PixelCopy
+         * happily succeeds on it — so every preview showed a stale position
+         * instead of the one under the finger.
+         */
+        val frameRendered = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        private val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                frameRendered.set(true)
+            }
+        }
+
+        init {
+            player.addListener(listener)
+        }
+
         fun release() {
+            runCatching { player.removeListener(listener) }
             runCatching { player.release() }
             runCatching { reader.release() }
         }
@@ -226,7 +249,10 @@ class PreviewFrameEngine(
         } else {
             existing?.release()
             val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
-            val player = buildExtractionPlayer(url, reader)
+            // Paused: this player exists to render one seeked frame at a time, not
+            // to run. Left playing it would drift past the requested position
+            // between the seek and the capture.
+            val player = buildExtractionPlayer(url, reader, startPlaying = false)
             ScrubSession(url, width, height, player, reader).also { scrubSession = it }
         }
 
@@ -237,14 +263,31 @@ class PreviewFrameEngine(
                 if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
                 delay(SEEK_POLL_MS)
             }
+            // Arm the flag *before* seeking, then wait for the renderer to report
+            // a frame for the new position. Capturing straight after seekTo reads
+            // back whatever the previous seek left on the surface.
+            session.frameRendered.set(false)
             session.player.seekTo(positionMs)
+            while (!session.frameRendered.get()) {
+                if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
+                delay(SEEK_POLL_MS)
+            }
             session.reader.awaitFrame()
         }
         frame?.let { cropToAspectRatio(it, width, height) }
     }
 
-    /** A muted, video-only, lowest-bitrate player rendering into [reader]. */
-    private fun buildExtractionPlayer(url: String, reader: ImageReaderCapture): ExoPlayer =
+    /**
+     * A muted, video-only, lowest-bitrate player rendering into [reader].
+     *
+     * @param startPlaying the poster path lets it run to reach a first frame;
+     *   the scrub path keeps it paused and drives it purely by seeking.
+     */
+    private fun buildExtractionPlayer(
+        url: String,
+        reader: ImageReaderCapture,
+        startPlaying: Boolean = true,
+    ): ExoPlayer =
         ExoPlayer.Builder(context)
             .setTrackSelector(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
@@ -269,7 +312,7 @@ class PreviewFrameEngine(
                         .build(),
                 )
                 prepare()
-                playWhenReady = true
+                playWhenReady = startPlaying
             }
 
     private suspend fun captureFrame(
