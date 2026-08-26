@@ -143,20 +143,20 @@ class PreviewFrameEngine(
         val cacheKey = scrubCacheKey(eventNumber, positionMs)
         scrubCache.get(cacheKey)?.let { return it }
 
-        val tiers = listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
-        for (tier in tiers) {
-            val frame = captureFrame(
-                url = config.renditionUrl(eventNumber, tier),
-                width = width,
-                height = height,
-                positionMs = bucketPosition(positionMs),
-            )
-            if (frame != null) {
-                scrubCache.put(cacheKey, frame)
-                return frame
-            }
+        // Only `_160p` here, unlike the poster path's fallback chain: a scrub is
+        // interactive, and trying three renditions in series would spend longer
+        // failing than the user spends on the whole drag. If `_160p` is missing
+        // the bubble falls back to its time-only form.
+        val frame = captureScrubFrame(
+            url = config.renditionUrl(eventNumber, RenditionTier.P160),
+            width = width,
+            height = height,
+            positionMs = bucketPosition(positionMs),
+        )
+        if (frame != null) {
+            scrubCache.put(cacheKey, frame)
         }
-        return null
+        return frame
     }
 
     /** Snaps [positionMs] to the nearest keyframe boundary ([KEYFRAME_GRANULARITY_MS]). */
@@ -171,14 +171,81 @@ class PreviewFrameEngine(
         return (eventNumber.toLong() shl EVENT_SHIFT) or (bucket and POSITION_MASK)
     }
 
-    private suspend fun captureFrame(
+    /**
+     * A prepared extraction player kept alive across scrub requests.
+     *
+     * Building and preparing an [ExoPlayer] costs seconds — long enough that the
+     * per-request player the scrub path used to create never finished before the
+     * next drag position cancelled it, so a scrub preview frame effectively never
+     * appeared. Held open for the duration of a drag, only the seek remains.
+     */
+    private class ScrubSession(
+        val url: String,
+        val width: Int,
+        val height: Int,
+        val player: ExoPlayer,
+        val reader: ImageReaderCapture,
+    ) {
+        fun release() {
+            runCatching { player.release() }
+            runCatching { reader.release() }
+        }
+    }
+
+    private var scrubSession: ScrubSession? = null
+
+    /** Serializes access to [scrubSession] — drags can overlap requests. */
+    private val scrubSessionMutex = Mutex()
+
+    /**
+     * Releases the reusable scrub player. Called when a drag ends, so an idle
+     * decoder is not left holding a surface and a network buffer.
+     */
+    fun endScrub() {
+        scrubSession?.release()
+        scrubSession = null
+    }
+
+    /**
+     * Extracts a scrub frame using the reusable [ScrubSession], creating one on
+     * first use (or when the URL/size changes) and seeking on every use after.
+     */
+    private suspend fun captureScrubFrame(
         url: String,
         width: Int,
         height: Int,
-        positionMs: Long?,
-    ): Bitmap? {
-        val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
-        val player = ExoPlayer.Builder(context)
+        positionMs: Long,
+    ): Bitmap? = scrubSessionMutex.withLock {
+        val existing = scrubSession
+        val session = if (existing != null &&
+            existing.url == url &&
+            existing.width == width &&
+            existing.height == height
+        ) {
+            existing
+        } else {
+            existing?.release()
+            val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
+            val player = buildExtractionPlayer(url, reader)
+            ScrubSession(url, width, height, player, reader).also { scrubSession = it }
+        }
+
+        val frame = withTimeoutOrNull(EXTRACT_TIMEOUT_MS) {
+            while (session.player.playbackState == Player.STATE_IDLE ||
+                session.player.playbackState == Player.STATE_BUFFERING
+            ) {
+                if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
+                delay(SEEK_POLL_MS)
+            }
+            session.player.seekTo(positionMs)
+            session.reader.awaitFrame()
+        }
+        frame?.let { cropToAspectRatio(it, width, height) }
+    }
+
+    /** A muted, video-only, lowest-bitrate player rendering into [reader]. */
+    private fun buildExtractionPlayer(url: String, reader: ImageReaderCapture): ExoPlayer =
+        ExoPlayer.Builder(context)
             .setTrackSelector(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     // Video-only, lowest bitrate available.
@@ -204,6 +271,15 @@ class PreviewFrameEngine(
                 prepare()
                 playWhenReady = true
             }
+
+    private suspend fun captureFrame(
+        url: String,
+        width: Int,
+        height: Int,
+        positionMs: Long?,
+    ): Bitmap? {
+        val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
+        val player = buildExtractionPlayer(url, reader)
 
         return try {
             val frame: Bitmap? = withTimeoutOrNull(EXTRACT_TIMEOUT_MS) {
@@ -267,6 +343,7 @@ class PreviewFrameEngine(
     fun release() {
         bitmapCache.evictAll()
         scrubCache.evictAll()
+        endScrub()
         diskCache.purge()
     }
 
