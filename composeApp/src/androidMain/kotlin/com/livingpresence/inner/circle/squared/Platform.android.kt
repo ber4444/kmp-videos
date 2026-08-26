@@ -160,6 +160,35 @@ private fun ExoPlayerScreen(
     val density = LocalDensity.current
     val videoTapInteractionSource = remember { MutableInteractionSource() }
 
+    /**
+     * Leaving the player *on purpose* ends playback; merely backgrounding the app
+     * does not.
+     *
+     * The two look identical from the service's side — it owns the player
+     * precisely so audio survives the screen going away — so the difference has
+     * to be signalled here, at the point where the user actually asked to leave.
+     * Disposal is not that signal: the composition is also disposed when Android
+     * destroys a backgrounded Activity under memory pressure, which is exactly
+     * the case where audio must keep playing.
+     *
+     * `clearMediaItems` on top of `stop` is what lets the service drop out of the
+     * foreground and take the media notification with it; `stop` alone leaves a
+     * paused session sitting in the shade.
+     */
+    val closePlayer: () -> Unit = remember(player, onClose) {
+        {
+            runCatching {
+                player.stop()
+                player.clearMediaItems()
+            }
+            onClose()
+        }
+    }
+
+    // System back is an explicit close too. Without this it pops the nav stack
+    // directly and never reaches [closePlayer], leaving audio running.
+    androidx.activity.compose.BackHandler(onBack = closePlayer)
+
     LaunchedEffect(player, resolvedMediaItemUri) {
         val item = playbackMediaItem(resolvedMediaItemUri)
         player.setMediaItem(item)
@@ -388,7 +417,7 @@ private fun ExoPlayerScreen(
                                 sliderFraction = 1f
                                 isScrubbing = false
                             },
-                            onClose = onClose,
+                            onClose = closePlayer,
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             topRightControls = {
                                 PlayerTopRightControls(
@@ -467,7 +496,7 @@ private fun ExoPlayerScreen(
             PlayerErrorOverlay(
                 error = playbackError,
                 onRetry = { player.prepare(); player.play() },
-                onClose = onClose,
+                onClose = closePlayer,
             )
         }
     }
