@@ -5,6 +5,7 @@ import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import android.view.PixelCopy
 import android.view.Surface
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -51,15 +52,32 @@ class ImageReaderCapture(width: Int, height: Int) {
     private val captureHeight: Int = height.coerceAtLeast(1)
 
     /**
-     * Suspends briefly to let frames render, then copies one into a [Bitmap]
-     * via [PixelCopy]. Returns null on API 23, on copy failure, or if the
-     * request throws — never raises. The caller wraps this in
-     * `withTimeoutOrNull` for the outer cutoff.
+     * Copies a rendered frame out of the surface via [PixelCopy], retrying until
+     * one is available or [timeoutMs] elapses. Returns null on API 23, on
+     * persistent copy failure, or if the request throws — never raises.
+     *
+     * The retry is the whole point. How long the decoder takes to queue its first
+     * buffer after a seek varies with network latency, segment size and codec
+     * startup, so a single sample at a fixed delay is a race: `PixelCopy` fails
+     * with "Surface doesn't have any previously queued frames" and the tile
+     * silently falls back to a placeholder. Polling converts a coin flip into a
+     * wait, and a frame that arrives at 900 ms is just as good as one at 400 ms.
      */
-    suspend fun awaitFrame(): Bitmap? {
+    suspend fun awaitFrame(timeoutMs: Long = DEFAULT_AWAIT_TIMEOUT_MS): Bitmap? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null
-        // Give the decoder a beat to push at least one buffer to the surface.
+        // Give the decoder a beat before the first attempt — usually enough, and
+        // it avoids a guaranteed-failing copy on the common path.
         kotlinx.coroutines.delay(FIRST_FRAME_SETTLE_MS)
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (true) {
+            copyFrame()?.let { return it }
+            if (SystemClock.uptimeMillis() >= deadline) return null
+            kotlinx.coroutines.delay(RETRY_INTERVAL_MS)
+        }
+    }
+
+    /** One [PixelCopy] attempt. Null when no frame is on the surface yet. */
+    private suspend fun copyFrame(): Bitmap? {
         val bitmap = Bitmap.createBitmap(captureWidth, captureHeight, Bitmap.Config.ARGB_8888)
         return suspendCancellableCoroutine { cont ->
             val listener = PixelCopy.OnPixelCopyFinishedListener { result ->
@@ -76,6 +94,7 @@ class ImageReaderCapture(width: Int, height: Int) {
                 bitmap.recycle()
                 if (cont.isActive) cont.resume(null)
             }
+            cont.invokeOnCancellation { runCatching { bitmap.recycle() } }
         }
     }
 
@@ -89,5 +108,15 @@ class ImageReaderCapture(width: Int, height: Int) {
         // Let the first frames land before sampling. PixelCopy needs a buffer
         // present; sampling too early yields SUCCESS but a black frame or none.
         const val FIRST_FRAME_SETTLE_MS = 400L
+
+        /** Gap between retries — cheap enough to poll, coarse enough not to spin. */
+        const val RETRY_INTERVAL_MS = 100L
+
+        /**
+         * How long to keep retrying. Comfortably covers a slow segment fetch plus
+         * decoder startup, while still leaving room inside the engine's per-tier
+         * budget for the next rendition to be tried.
+         */
+        const val DEFAULT_AWAIT_TIMEOUT_MS = 4_000L
     }
 }
