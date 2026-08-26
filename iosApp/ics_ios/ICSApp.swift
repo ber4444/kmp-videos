@@ -6,6 +6,12 @@ struct ICSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // The Discord OAuth redirect returns as an `icsquared://` deep
+                // link. Forward every URL — the shared code ignores the ones that
+                // are not an authorization result.
+                .onOpenURL { url in
+                    MainViewControllerKt.handleDeepLink(url: url.absoluteString)
+                }
         }
     }
 }

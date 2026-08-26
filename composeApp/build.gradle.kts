@@ -183,6 +183,9 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
             implementation(libs.kotlinx.serialization.json)
+            // SHA-256 for the Discord OAuth2 PKCE code challenge. Discord accepts
+            // only S256, and no target-shared hash ships with Kotlin/ktor.
+            implementation(libs.kotlincrypto.sha2)
             implementation(project(":mediakit"))
         }
         androidMain.dependencies {
@@ -239,9 +242,15 @@ val generateWebTranscriptionKeys by tasks.registering {
     outputs.dir(outputDir)
     val deepgram = transcriptionSecrets.getProperty("DEEPGRAM_API_KEY", "")
     val soniox = transcriptionSecrets.getProperty("SONIOX_API_KEY", "")
+    // Discord OAuth config for the landing screen's Apollo gate — public values,
+    // carried in the same file so a fork configures its own Discord application.
+    val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
+    val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
     // Track key values so the task re-runs when they change.
     inputs.property("deepgram", deepgram)
     inputs.property("soniox", soniox)
+    inputs.property("discordClientId", discordClientId)
+    inputs.property("apolloGuildId", apolloGuildId)
     doLast {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\${'$'}")
         val dir = outputDir.get().asFile
@@ -254,6 +263,8 @@ val generateWebTranscriptionKeys by tasks.registering {
             internal object TranscriptionKeys {
                 const val DEEPGRAM_API_KEY = "${esc(deepgram)}"
                 const val SONIOX_API_KEY = "${esc(soniox)}"
+                const val DISCORD_CLIENT_ID = "${esc(discordClientId)}"
+                const val APOLLO_GUILD_ID = "${esc(apolloGuildId)}"
             }
             """.trimIndent() + "\n"
         )

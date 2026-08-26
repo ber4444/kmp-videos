@@ -57,9 +57,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.livingpresence.inner.circle.squared.generated.resources.Res
-import com.livingpresence.inner.circle.squared.generated.resources.background_image
-import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource as androidPainterResource
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -96,10 +95,22 @@ actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
 }
 
 @Composable
-actual fun loginBackgroundModifier(): Modifier = Modifier.paint(
-    painter = painterResource(Res.drawable.background_image),
-    contentScale = ContentScale.Crop,
-)
+actual fun loginBackgroundModifier(): Modifier {
+    // See HostBridge.backgroundDrawableResId: Compose resources are not packaged
+    // for the Android target, so the background comes from the host module's
+    // res/drawable instead. The gradient is the fallback for a host that never
+    // set an id — a washed-out landing page beats a crash.
+    val resId = HostBridge.backgroundDrawableResId
+    if (resId == 0) {
+        return Modifier.background(
+            Brush.verticalGradient(listOf(Color(0xFF37474F), Color(0xFF263238))),
+        )
+    }
+    return Modifier.paint(
+        painter = androidPainterResource(resId),
+        contentScale = ContentScale.Crop,
+    )
+}
 
 @Composable
 actual fun PlatformPlayerScreen(

@@ -41,6 +41,7 @@ import androidx.savedstate.read
 import com.livingpresence.mediakit.EventInfo
 
 private object AppRoute {
+    const val Landing = "landing"
     const val Gallery = "gallery"
     const val PlayerEventNumberArg = "eventNumber"
     const val Player = "player/{$PlayerEventNumberArg}"
@@ -69,9 +70,22 @@ fun App() {
 
             NavHost(
                 navController = navController,
-                startDestination = AppRoute.Gallery,
+                startDestination = AppRoute.Landing,
                 modifier = Modifier.fillMaxSize(),
             ) {
+
+                composable(route = AppRoute.Landing) {
+                    LandingRoute(
+                        onConnected = {
+                            // Drop the landing page from the back stack: once the
+                            // Apollo check has passed, backing into the gate again
+                            // would only offer to re-authorize.
+                            navController.navigate(AppRoute.Gallery) {
+                                popUpTo(AppRoute.Landing) { inclusive = true }
+                            }
+                        },
+                    )
+                }
 
                 composable(route = AppRoute.Gallery) {
                     GalleryScreen(
