@@ -1,5 +1,5 @@
 [versions]
-agp = "9.3.1"
+agp = "9.3.2"
 # 2.4.10: first version with the fix for CVE-2026-53914, unsafe deserialization
 # in the Kotlin build cache metadata.
 kotlin = "2.4.10"
