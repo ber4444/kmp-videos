@@ -18,10 +18,28 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<!-- Discord OAuth2 redirect: discord-<APP_ID>:/authorize/callback, the only
+	     mobile shape Discord's portal accepts. DISCORD_REDIRECT_SCHEME must be
+	     set to discord-$(DISCORD_CLIENT_ID) in the Xcode build settings. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).discord</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(DISCORD_REDIRECT_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>APOLLO_GUILD_ID</key>
+	<string>$(APOLLO_GUILD_ID)</string>
 	<key>DEEPGRAM_API_KEY</key>
 	<string>$(DEEPGRAM_API_KEY)</string>
+	<key>DISCORD_CLIENT_ID</key>
+	<string>$(DISCORD_CLIENT_ID)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>SONIOX_API_KEY</key>
