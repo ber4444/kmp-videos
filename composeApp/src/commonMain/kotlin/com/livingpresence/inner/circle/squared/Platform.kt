@@ -57,10 +57,14 @@ fun parseEventNumber(url: String): Int? =
     Regex("""event(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
 /**
- * Background for the login screen. Android renders the `background_image`
- * resource (works there); wasmJs uses a gradient because decoding the raster
- * JPEG via `Image(painterResource(...))` throws an unrecoverable exception under
- * Kotlin/Wasm (a Skiko image-decode crash on this asset that kills composition).
+ * Background for the landing screen — the `background_image` photo, cropped to
+ * fill.
+ *
+ * iOS and wasm paint it from the shared `composeResources` copy. Android cannot:
+ * the AGP KMP library plugin assembles composeResources for the iOS and wasm
+ * targets only, so `Res.drawable.background_image` compiles but throws
+ * `MissingResourceException` at runtime. The Android actual reads the host
+ * module's `res/drawable` copy instead, via `HostBridge.backgroundDrawableResId`.
  */
 @Composable
 expect fun loginBackgroundModifier(): Modifier

@@ -21,6 +21,19 @@ android {
         buildConfig = true
     }
 
+    defaultConfig {
+        // Discord mandates the redirect scheme `discord-<APP_ID>` for mobile deep
+        // links. Generated from the same secrets.properties value the runtime
+        // reads, so the manifest filter and the redirect URI cannot drift apart.
+        // Placeholder must be non-empty even when unconfigured or the manifest
+        // merger fails, hence the "unset" sentinel (which simply never matches).
+        val discordClientIdForScheme = Properties().apply {
+            val f = rootProject.file("secrets.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }.getProperty("DISCORD_CLIENT_ID", "").ifBlank { "unset" }
+        manifestPlaceholders["discordRedirectScheme"] = "discord-$discordClientIdForScheme"
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -31,6 +44,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -61,6 +75,15 @@ androidComponents {
 
         val sonioxKey = transcriptionSecrets.getProperty("SONIOX_API_KEY", "")
         variant.buildConfigFields?.put("SONIOX_API_KEY", com.android.build.api.variant.BuildConfigField("String", "\"$sonioxKey\"", "Soniox API key (local, gitignored)"))
+
+        // Discord OAuth config for the landing screen's Apollo gate. Not secrets
+        // (the client id is public and the guild id is a snowflake), but kept in
+        // the same gitignored file so a fork configures its own Discord app.
+        val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
+        variant.buildConfigFields?.put("DISCORD_CLIENT_ID", com.android.build.api.variant.BuildConfigField("String", "\"$discordClientId\"", "Discord OAuth2 client id"))
+
+        val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
+        variant.buildConfigFields?.put("APOLLO_GUILD_ID", com.android.build.api.variant.BuildConfigField("String", "\"$apolloGuildId\"", "Snowflake of the Apollo Discord guild"))
     }
 }
 

@@ -26,17 +26,33 @@
     <application
         android:label="Inner Circle Squared"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="true">
 
+        <!-- launchMode=singleTask so the Discord OAuth redirect below re-enters the
+             existing task via onNewIntent instead of stacking a second instance. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/AppTheme"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Discord OAuth2 redirect: discord-<APP_ID>:/authorize/callback, the
+                 only mobile shape Discord's portal accepts. The scheme is injected
+                 from DISCORD_CLIENT_ID (see androidApp/build.gradle.kts).
+                 Scheme only, no host: the redirect has a single slash and so has no
+                 authority, and Android ignores host/path matching without one. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${discordRedirectScheme}" />
             </intent-filter>
         </activity>
 

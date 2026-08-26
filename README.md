@@ -15,6 +15,16 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 
 ## Features
 
+- **Discord-gated landing page.** The app opens on a photo landing screen whose
+  only action is *Connect to Discord*. Authorization uses the OAuth2
+  authorization-code grant with PKCE (mandatory for Discord mobile deep links,
+  and no client secret ever reaches the device), then `/users/@me/guilds` decides
+  access: members of the Apollo server land in the events feed, everyone else is
+  told *"User must be on the Apollo server."* The session persists across
+  launches via a refresh token — stored in `SharedPreferences` on Android, the
+  Keychain on iOS, `localStorage` on web — and membership is **re-verified on
+  every launch**, so leaving Apollo revokes access at the next start rather than
+  never. See [Configuration](#configuration).
 - **Adaptive streaming.** Genuine client-side ABR synthesized from four
   unadvertised sibling renditions, with viewport-aware track selection so the
   chosen quality matches the surface size.
@@ -116,6 +126,13 @@ migration.” The migration PR intentionally leaves these follow-ups out:
 - [ ] Consider a later full AGP-defaults/R8 audit with release smoke testing.
   The migration adopts defaults needed for AGP 9, but does not redesign keep
   rules, shrinking policy, packaging, or release delivery.
+- [ ] **Compose resources are not packaged for the Android target.** The
+  `com.android.kotlin.multiplatform.library` plugin assembles
+  `composeResources/` for iOS and wasm but produces nothing for Android, so any
+  `Res.drawable.*` lookup compiles and then throws `MissingResourceException` at
+  runtime. The landing background works around this by reading the host module's
+  `res/drawable` copy through `HostBridge.backgroundDrawableResId`. Any future
+  shared resource needs the same treatment until the plugin gap is closed.
 
 ## Building
 
@@ -173,6 +190,39 @@ binary-breaking changes fail CI. Dokka API docs are published to GitHub Pages on
 ## Configuration
 
 Transcription API keys (for Deepgram and Soniox) are read from `secrets.properties` in the project root. See `secrets.properties.example` for details.
+
+### Discord / Apollo gate
+
+The landing screen's gate reads two more values from the same `secrets.properties`.
+Neither is a secret — the client id is public by design and the guild id is a
+snowflake — but they live there so a fork configures its own Discord application:
+
+| Key | Where to get it |
+| --- | --- |
+| `DISCORD_CLIENT_ID` | Discord Developer Portal → your application → OAuth2 → Client ID |
+| `APOLLO_GUILD_ID` | Enable Developer Mode in Discord, then right-click the Apollo server icon → Copy Server ID |
+
+Register these redirect URIs on the application (OAuth2 → Redirects) — they must
+match byte-for-byte or Discord rejects the request:
+
+- Android & iOS: `discord-<DISCORD_CLIENT_ID>:/authorize/callback`
+  — Discord mandates this exact shape for mobile deep links (note the **single**
+  slash, and the `discord-` prefix). Arbitrary schemes are rejected by the portal.
+- Web: the URL the wasm bundle is served from (origin + path, no query/fragment)
+
+Also enable **Public Client** on the OAuth2 page. PKCE is mandatory for mobile
+deep links, and the public-client flag is what lets the token exchange omit the
+client secret — without it the exchange fails with `401 invalid_client`.
+
+The Android manifest's redirect scheme is generated from `DISCORD_CLIENT_ID` (see
+`androidApp/build.gradle.kts`), so the intent filter and the redirect URI cannot
+drift apart. On iOS, set `DISCORD_REDIRECT_SCHEME` to `discord-$(DISCORD_CLIENT_ID)`
+in the Xcode build settings.
+
+Leaving `DISCORD_CLIENT_ID` empty disables the gate — the button then reports that
+sign-in is not configured rather than opening a broken authorization URL. Leaving
+`APOLLO_GUILD_ID` empty falls back to matching the guild *name* `Apollo`, which is
+convenient for a first run but not unique on Discord.
 
 ## Manual Test Scenarios
 

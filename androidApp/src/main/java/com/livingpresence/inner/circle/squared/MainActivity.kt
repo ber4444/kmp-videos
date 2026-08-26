@@ -2,6 +2,7 @@ package com.livingpresence.inner.circle.squared
 
 import android.app.PictureInPictureParams
 import android.content.ComponentCallbacks2
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +14,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.view.WindowCompat
+import com.livingpresence.inner.circle.squared.discord.DiscordAuthBroker
+import com.livingpresence.inner.circle.squared.discord.DiscordConfig
 import com.livingpresence.inner.circle.squared.transcription.TranscriptionSecrets
 import java.util.concurrent.atomic.AtomicReference
 
@@ -40,10 +43,27 @@ class MainActivity : ComponentActivity() {
 
         HostBridge.isDebug = { BuildConfig.DEBUG }
 
+        // The landing background lives in this module's res/drawable rather than
+        // as a Compose resource: the AGP KMP library plugin does not package
+        // composeResources for the Android target (it does for iOS and wasm), so
+        // the shared copy is missing at runtime. See HostBridge for details.
+        HostBridge.backgroundDrawableResId = R.drawable.background_image
+
         // Streaming-ASR keys from the gitignored secrets.properties (via BuildConfig).
         // Empty when unset — the caption clients then surface a "missing key" error.
         TranscriptionSecrets.deepgramApiKey = BuildConfig.DEEPGRAM_API_KEY
         TranscriptionSecrets.sonioxApiKey = BuildConfig.SONIOX_API_KEY
+
+        // Discord OAuth wiring for the landing screen's Apollo gate. Neither value
+        // is a secret (the client id is public, the guild id is a snowflake), but
+        // both come from the gitignored secrets.properties so forks configure
+        // their own Discord application. Empty client id disables the gate.
+        DiscordConfig.clientId = BuildConfig.DISCORD_CLIENT_ID
+        DiscordConfig.apolloGuildId = BuildConfig.APOLLO_GUILD_ID
+
+        // The launching Intent may itself be the OAuth redirect (the browser deep
+        // links straight into a cold-started task), so check it before composing.
+        deliverDiscordRedirect(intent)
 
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -58,6 +78,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
             HostBridge.HostApp(pipController)
+        }
+    }
+
+    /**
+     * The activity is `singleTask`, so a redirect arriving while the app is
+     * already running is delivered here rather than starting a new instance.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deliverDiscordRedirect(intent)
+    }
+
+    /**
+     * Forwards a Discord OAuth redirect deep link to the landing screen. Anything
+     * that is not our registered redirect URI is ignored — the same activity also
+     * handles the ordinary LAUNCHER intent.
+     */
+    private fun deliverDiscordRedirect(intent: Intent?) {
+        val uri = intent?.data?.toString() ?: return
+        if (DiscordAuthBroker.isAuthRedirect(uri)) {
+            DiscordAuthBroker.deliver(uri)
         }
     }
 
