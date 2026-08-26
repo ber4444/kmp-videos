@@ -257,8 +257,14 @@ class PreviewFrameEngine(
         }
 
         val frame = withTimeoutOrNull(EXTRACT_TIMEOUT_MS) {
-            while (session.player.playbackState == Player.STATE_IDLE ||
-                session.player.playbackState == Player.STATE_BUFFERING
+            // Bounded: a paused extraction player does not reliably advertise
+            // STATE_READY, so waiting for it indefinitely parks the capture until
+            // the drag ends and cancels it — the reason previews stopped
+            // appearing entirely. seekTo is valid in any state; ExoPlayer queues
+            // it. So give READY a chance, then seek regardless.
+            val readyDeadline = android.os.SystemClock.uptimeMillis() + READY_WAIT_MS
+            while (session.player.playbackState != Player.STATE_READY &&
+                android.os.SystemClock.uptimeMillis() < readyDeadline
             ) {
                 if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
                 delay(SEEK_POLL_MS)
@@ -268,7 +274,18 @@ class PreviewFrameEngine(
             // back whatever the previous seek left on the surface.
             session.frameRendered.set(false)
             session.player.seekTo(positionMs)
-            while (!session.frameRendered.get()) {
+
+            // Bounded, not unbounded. Waiting forever for onRenderedFirstFrame
+            // means that if the renderer does not report one — which it may not,
+            // depending on how the seek resolves against what is already
+            // buffered — the whole capture burns the outer timeout and returns
+            // nothing, so no preview appears at all. Past this deadline the
+            // seeked frame is on the surface regardless; capturing it is far
+            // better than giving up.
+            val renderDeadline = android.os.SystemClock.uptimeMillis() + RENDER_WAIT_MS
+            while (!session.frameRendered.get() &&
+                android.os.SystemClock.uptimeMillis() < renderDeadline
+            ) {
                 if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
                 delay(SEEK_POLL_MS)
             }
@@ -410,6 +427,19 @@ class PreviewFrameEngine(
         private const val SEEK_FRACTION = 0.10
         private const val SEEK_POLL_MS = 50L
         private const val EXTRACT_TIMEOUT_MS = 8_000L
+
+        /**
+         * How long a scrub capture waits for the renderer to confirm a frame for
+         * the seeked position before capturing anyway. Long enough for a normal
+         * seek to land, short enough to stay interactive.
+         */
+        private const val RENDER_WAIT_MS = 1_200L
+
+        /**
+         * How long to give the extraction player to reach STATE_READY before
+         * seeking anyway. A paused player may never report it.
+         */
+        private const val READY_WAIT_MS = 2_000L
 
         /** Disk cache directory under [Context.getCacheDir] (system-managed, purged on low space). */
         private const val DISK_CACHE_DIR = "media_thumbnails"
