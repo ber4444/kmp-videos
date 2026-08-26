@@ -249,10 +249,14 @@ class PreviewFrameEngine(
         } else {
             existing?.release()
             val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
-            // Paused: this player exists to render one seeked frame at a time, not
-            // to run. Left playing it would drift past the requested position
-            // between the seek and the capture.
-            val player = buildExtractionPlayer(url, reader, startPlaying = false)
+            // Left running on purpose. Pausing it looks tidier — one seeked frame
+            // at a time, no drift — but the capture surface is a SurfaceTexture
+            // nothing ever consumes from, so a paused player queues a frame and
+            // stops, and PixelCopy goes back to finding nothing to read. That is
+            // the same "no previously queued frames" failure the feed thumbnails
+            // had. A running player keeps frames flowing, and the render signal
+            // below is what keeps the captured one honest.
+            val player = buildExtractionPlayer(url, reader, startPlaying = true)
             ScrubSession(url, width, height, player, reader).also { scrubSession = it }
         }
 
@@ -289,7 +293,10 @@ class PreviewFrameEngine(
                 if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
                 delay(SEEK_POLL_MS)
             }
-            session.reader.awaitFrame()
+            // settleMs = 0: the render signal above already told us a frame for
+            // this position is up, so any extra delay only lets a running player
+            // drift further past it.
+            session.reader.awaitFrame(settleMs = 0L)
         }
         frame?.let { cropToAspectRatio(it, width, height) }
     }
