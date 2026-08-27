@@ -107,24 +107,24 @@
   <div class="breadcrumbs"><a href="../../../index.html">mediakit</a><span class="delimiter">/</span><a href="../index.html">com.livingpresence.mediakit</a><span class="delimiter">/</span><span class="current">EventInfo</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Event</span><wbr></wbr><span><span>Info</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">EventInfo</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>eventNumber<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>isLive<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>durationMs<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></span></span><span class="token punctuation">)</span></div><p class="paragraph">One event's catalog entry. <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long/PointingToCallableParameters(1)/">isLive</span> is derived from playlist inspection (absence of <code class="lang-kotlin">#EXT-X-ENDLIST</code>); when <code class="lang-kotlin">false</code> the playlist is bounded and the event is downloadable.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">EventInfo</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>eventNumber<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>isLive<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>durationMs<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>title<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span><span class="token string">&quot;Event &quot;</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>streamUrl<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span>MediaKitConfig.Default.eventUrl(eventNumber)</span></span><span class="token punctuation">)</span></div><p class="paragraph">One entry in the feed. <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(1)/">isLive</span> is derived from playlist inspection (absence of <code class="lang-kotlin">#EXT-X-ENDLIST</code>); when <code class="lang-kotlin">false</code> the playlist is bounded and the entry is downloadable.</p><p class="paragraph">Two kinds of entry share this shape:</p><ul><li><p class="paragraph"><strong>Numbered events</strong> from <a href="../-event-catalog/index.html">EventCatalog</a>, whose <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(4)/">streamUrl</span> follows the     <code class="lang-kotlin">…/live/event{n}</code> scheme and therefore has the unadvertised rendition     ladder <a href="../-ladder-resolver/index.html">LadderResolver</a> can synthesize.</p></li><li><p class="paragraph"><strong>Extra videos</strong> from <a href="../-extra-video-catalog/index.html">ExtraVideoCatalog</a>'s remote manifest, which are     arbitrary playlist URLs with no sibling renditions (<a href="has-rendition-ladder.html">hasRenditionLadder</a>     is <code class="lang-kotlin">false</code>) and a synthetic <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(0)/">eventNumber</span> from     <a href="../-extra-video-catalog/-companion/-e-x-t-r-a_-e-v-e-n-t_-n-u-m-b-e-r_-b-a-s-e.html">ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE</a> up.</p></li></ul><p class="paragraph"><span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(0)/">eventNumber</span> stays the stable identity for both — download ids, thumbnail cache keys and the player route are all keyed by it — while <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(4)/">streamUrl</span> is the single source of truth for what to actually play.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
     <div class="tabs-section-body">
       <div data-togglable="CONSTRUCTOR">
         <h2 class="tableheader">Constructors</h2>
-        <div class="table"><a data-name="-1679467676%2FConstructors%2F1594100157" anchor-label="EventInfo" id="-1679467676%2FConstructors%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
+        <div class="table"><a data-name="1037888110%2FConstructors%2F1594100157" anchor-label="EventInfo" id="1037888110%2FConstructors%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
           <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":mediakit/commonMain" data-filterable-set=":mediakit/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
                   <div><a href="-event-info.html"><span>Event</span><wbr></wbr><span><span>Info</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1679467676%2FConstructors%2F1594100157"></span>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1037888110%2FConstructors%2F1594100157"></span>
                     <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">eventNumber<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">isLive<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter ">durationMs<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></span></span><span class="token punctuation">)</span></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">eventNumber<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">isLive<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter ">durationMs<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">title<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span><span class="token string">&quot;Event &quot;</span><span class="token punctuation">, </span></span><span class="parameter ">streamUrl<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span>MediaKitConfig.Default.eventUrl(eventNumber)</span></span><span class="token punctuation">)</span></div></div></div>
                 </div>
               </div>
             </div>
@@ -163,6 +163,21 @@
               </div>
             </div>
           </div>
+<a data-name="-982358470%2FProperties%2F1594100157" anchor-label="hasRenditionLadder" id="-982358470%2FProperties%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":mediakit/commonMain" data-filterable-set=":mediakit/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="has-rendition-ladder.html"><span>has</span><wbr></wbr><span>Rendition</span><wbr></wbr><span><span>Ladder</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-982358470%2FProperties%2F1594100157"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="has-rendition-ladder.html">hasRenditionLadder</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(4)/">streamUrl</span> is a numbered mediakit event, and so has the <code class="lang-kotlin">_360p</code>/<code class="lang-kotlin">_160p</code>/<code class="lang-kotlin">_aac</code> siblings the ABR ladder and the download tiers are built from. <code class="lang-kotlin">false</code> for manifest extras, which are played and downloaded from <span data-unresolved-link="com.livingpresence.mediakit/EventInfo//#kotlin.Int#kotlin.Boolean#kotlin.Long#kotlin.String#kotlin.String/PointingToCallableParameters(4)/">streamUrl</span> as-is.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="867981440%2FProperties%2F1594100157" anchor-label="isLive" id="867981440%2FProperties%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":mediakit/commonMain" data-filterable-set=":mediakit/commonMain">
             <div class="main-subrow keyValue ">
@@ -174,6 +189,36 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="is-live.html">isLive</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="733994229%2FProperties%2F1594100157" anchor-label="streamUrl" id="733994229%2FProperties%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":mediakit/commonMain" data-filterable-set=":mediakit/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="stream-url.html"><span>stream</span><wbr></wbr><span><span>Url</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="733994229%2FProperties%2F1594100157"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="stream-url.html">streamUrl</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1147383820%2FProperties%2F1594100157" anchor-label="title" id="1147383820%2FProperties%2F1594100157" data-filterable-set=":mediakit/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":mediakit/commonMain" data-filterable-set=":mediakit/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="title.html"><span><span>title</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1147383820%2FProperties%2F1594100157"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":mediakit/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="title.html">title</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div></div>
                 </div>
               </div>
             </div>
