@@ -16,8 +16,14 @@ def get_stream_url(event_str: str, rendition: str) -> str:
     if not event_num:
         event_num = event_str
     
-    # Construct Wowza URL similar to MediaKitConfig
-    host = os.environ.get("WOWZA_HOST", "stream-host.example:443")
+    # Construct Wowza URL similar to MediaKitConfig. The host is not committed —
+    # export WOWZA_HOST (or put STREAM_HOST in secrets.properties and export it).
+    host = os.environ.get("WOWZA_HOST", "")
+    if not host:
+        raise SystemExit(
+            "WOWZA_HOST is not set. Export the stream host (scheme excluded), e.g.\n"
+            "  export WOWZA_HOST=$(sed -n 's|^STREAM_HOST=https\\?://||p' ../../secrets.properties)"
+        )
     user = os.environ.get("WOWZA_USER")
     passwd = os.environ.get("WOWZA_PASS")
     
@@ -45,7 +51,7 @@ def fetch_clip(entry: dict, dry_run: bool):
 
     print(f"Fetching {clip_id}...")
     
-    url = f"https://stream-host.example:443/live/event{event}{rendition}/playlist.m3u8?DVR"
+    url = get_stream_url(str(event), rendition)
     print(f"Executing: ffmpeg -ss {start} -i {url} -t {dur} -ar 16000 -ac 1 -c:a pcm_s16le {out_path}")
     
     if dry_run:

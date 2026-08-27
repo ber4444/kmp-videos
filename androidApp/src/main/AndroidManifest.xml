@@ -24,6 +24,7 @@
     </queries>
 
     <application
+        android:name=".IcsApplication"
         android:label="Inner Circle Squared"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

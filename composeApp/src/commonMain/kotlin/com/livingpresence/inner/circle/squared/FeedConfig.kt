@@ -1,5 +1,7 @@
 package com.livingpresence.inner.circle.squared
 
+import com.livingpresence.mediakit.MediaKitConfig
+
 /**
  * Where the feed's extra videos are listed.
  *
@@ -20,6 +22,23 @@ package com.livingpresence.inner.circle.squared
  * authorizes each viewer.
  */
 object FeedConfig {
+
+    /**
+     * Scheme and authority of the stream server, e.g. `https://your-host:443`.
+     *
+     * A pass-through to [MediaKitConfig.defaultHost], which is what actually
+     * builds every playlist URL. It lives here so the platform hosts have one
+     * place to inject build-time configuration — `:androidApp` sees only
+     * `:composeApp`, not the SDK behind it.
+     *
+     * Empty until a host assigns it: probes then resolve nowhere and the feed
+     * comes back empty, rather than reaching a stale hardcoded server.
+     */
+    var streamHost: String
+        get() = MediaKitConfig.defaultHost
+        set(value) {
+            MediaKitConfig.defaultHost = value
+        }
 
     /** Raw URL of the extras manifest. Empty → no extras are fetched. */
     var extraVideosManifestUrl: String = ""

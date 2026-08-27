@@ -224,6 +224,28 @@ binary-breaking changes fail CI. Dokka API docs are published to GitHub Pages on
 
 Transcription API keys (for Deepgram and Soniox) are read from `secrets.properties` in the project root. See `secrets.properties.example` for details.
 
+### Stream host
+
+Every playlist URL is built from one value, `STREAM_HOST` in `secrets.properties`
+— scheme and authority, no trailing slash:
+
+```
+STREAM_HOST=https://your-host.example:443
+```
+
+It is not compiled into the SDK. Each host injects it at startup
+(`FeedConfig.streamHost` → `MediaKitConfig.defaultHost`) from its own gitignored
+source: Android
+`BuildConfig` via `IcsApplication`, the wasm bundle's generated constants, the
+iOS `Info.plist`. Leaving it empty makes every probe resolve nowhere and the feed
+come back empty — a louder failure than reaching a stale hardcoded server.
+
+This is **not** a secret and cannot be: a host the client streams from is on the
+wire and inside the binary — a web build ships it in the bundle, and any deployed
+site (including `gh-pages`) serves it. Keeping it in `secrets.properties` keeps it
+out of a public repository and its history, which is a different and achievable
+goal. `eval/scripts/fetch_clips.py` reads the same host from `WOWZA_HOST`.
+
 ### Extra videos
 
 The feed is the numbered events (`event1`…`event20`) probed on the Wowza server,
