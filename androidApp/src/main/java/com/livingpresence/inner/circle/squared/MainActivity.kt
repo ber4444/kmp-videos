@@ -1,8 +1,10 @@
 package com.livingpresence.inner.circle.squared
 
+import android.Manifest
 import android.app.PictureInPictureParams
 import android.content.ComponentCallbacks2
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +12,7 @@ import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +33,23 @@ class MainActivity : ComponentActivity() {
     /** Whether the user is actively playing video (gates auto-PiP on leave). */
     private val isPlayingVideo = AtomicReference(false)
 
+    /**
+     * POST_NOTIFICATIONS is a runtime permission from API 33. Without it both
+     * foreground services still run, but the system silently drops their
+     * notifications: background playback loses its lock-screen transport
+     * controls and a download shows no progress. Asking is best-effort — a
+     * denial costs the notifications, not the features — so the result is
+     * deliberately ignored and nothing is gated on it.
+     */
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     private val trimCallback = object : ComponentCallbacks2 {
         override fun onConfigurationChanged(newConfig: Configuration) {}
@@ -64,6 +83,8 @@ class MainActivity : ComponentActivity() {
         // The launching Intent may itself be the OAuth redirect (the browser deep
         // links straight into a cold-started task), so check it before composing.
         deliverDiscordRedirect(intent)
+
+        ensureNotificationPermission()
 
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
