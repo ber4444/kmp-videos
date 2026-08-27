@@ -14,7 +14,15 @@ data class EventDownloadState(
     val percent: Float,
 )
 
-enum class DownloadStatus { QUEUED, DOWNLOADING, COMPLETED, FAILED, REMOVING, NOT_DOWNLOADED }
+/**
+ * Per-event download lifecycle.
+ *
+ * [WAITING] is distinct from [QUEUED]: the download is accepted but cannot make
+ * progress until a platform requirement is met (no network, or Wi-Fi-only is on
+ * and the device is metered). Showing it as `0%` is indistinguishable from a
+ * stalled transfer, so the UI calls it out.
+ */
+enum class DownloadStatus { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING, NOT_DOWNLOADED }
 
 /** User-selectable download quality. ~220 MB/h at 360p vs ~450 MB/h at 720p. */
 enum class DownloadQuality { P720, P360, P160, AUDIO }
