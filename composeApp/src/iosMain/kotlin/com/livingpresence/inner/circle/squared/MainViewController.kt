@@ -22,6 +22,13 @@ fun mainViewController() = ComposeUIViewController {
     // disables the gate.
     DiscordConfig.clientId = info?.get("DISCORD_CLIENT_ID") as? String ?: ""
     DiscordConfig.apolloGuildId = info?.get("APOLLO_GUILD_ID") as? String ?: ""
+    // The stream host, kept out of the source tree — every playlist URL is built
+    // from it. Empty → the feed resolves nowhere rather than reaching a stale
+    // hardcoded server.
+    FeedConfig.streamHost = info?.get("STREAM_HOST") as? String ?: ""
+    // Extra videos appended to the feed, listed in a manifest hosted outside the
+    // repo. Empty → the feed is exactly the numbered events.
+    FeedConfig.extraVideosManifestUrl = info?.get("EXTRA_VIDEOS_URL") as? String ?: ""
     App()
 }
 

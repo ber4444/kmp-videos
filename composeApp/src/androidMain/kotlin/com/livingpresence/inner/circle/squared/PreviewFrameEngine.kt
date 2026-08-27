@@ -24,6 +24,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import com.livingpresence.mediakit.ExtraVideoCatalog
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.RenditionTier
 import kotlinx.coroutines.Dispatchers
@@ -85,16 +86,26 @@ class PreviewFrameEngine(
     fun cachedBitmap(eventNumber: Int): Bitmap? = bitmapCache.get(eventNumber)
 
     /**
-     * Extract a poster frame for [eventNumber]: load the `_160p` rendition, seek
-     * ~10% in (CLOSEST_SYNC), grab a frame. Falls back to `_360p` then the base
-     * rendition if `_160p` 404s. Returns null on any failure (the tile then
-     * shows a placeholder, per "no placeholder for a failed 404" → but a
-     * *late* thumbnail failure is a soft degrade, not a list removal).
+     * Extract a poster frame for the feed entry [eventNumber]: load the smallest
+     * available rendition of [streamUrl], seek ~10% in (CLOSEST_SYNC), grab a
+     * frame. Returns null on any failure (the tile then shows a placeholder, per
+     * "no placeholder for a failed 404" → but a *late* thumbnail failure is a
+     * soft degrade, not a list removal).
+     *
+     * For a numbered event the cheap `_160p` rendition is tried first, falling
+     * back to `_360p` and then the base one; a feed extra has no siblings, so
+     * its own playlist is the only candidate.
      *
      * Lookup order is memory LRU → disk → network decode; on a decode the frame
-     * is written back to both tiers.
+     * is written back to both tiers. [eventNumber] is the cache key throughout,
+     * which is why extras get synthetic numbers rather than sharing one.
      */
-    suspend fun requestFrame(eventNumber: Int, width: Int, height: Int): Bitmap? {
+    suspend fun requestFrame(
+        eventNumber: Int,
+        streamUrl: String,
+        width: Int,
+        height: Int,
+    ): Bitmap? {
         // Tier 1: memory.
         bitmapCache.get(eventNumber)?.let { return it }
 
@@ -106,10 +117,9 @@ class PreviewFrameEngine(
         }
 
         // Tier 3: network decode.
-        val tiers = listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
-        for (tier in tiers) {
+        for (url in frameCandidates(streamUrl)) {
             val frame = captureFrame(
-                url = config.renditionUrl(eventNumber, tier),
+                url = url,
                 width = width,
                 height = height,
                 positionMs = null,
@@ -121,6 +131,13 @@ class PreviewFrameEngine(
             }
         }
         return null
+    }
+
+    /** Cheapest-first rendition URLs to try for a poster frame of [streamUrl]. */
+    private fun frameCandidates(streamUrl: String): List<String> {
+        val eventNumber = MediaKitConfig.eventNumberIn(streamUrl) ?: return listOf(streamUrl)
+        return listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
+            .map { tier -> config.renditionUrl(eventNumber, tier) }
     }
 
     /** Cached scrub-preview frame for [eventNumber] at [positionMs], or null. */
@@ -554,13 +571,14 @@ fun rememberPreviewFrameEngine(): PreviewFrameEngine {
 }
 
 /**
- * Composable that loads and displays a poster frame for [eventNumber] using the
- * shared [PreviewFrameEngine], with an in-memory LRU cache. The Android actual
- * of [LiveEventThumbnail].
+ * Composable that loads and displays a poster frame for the feed entry
+ * [eventNumber] using the shared [PreviewFrameEngine], with an in-memory LRU
+ * cache. The Android actual of [LiveEventThumbnail].
  */
 @Composable
 actual fun LiveEventThumbnail(
     eventNumber: Int,
+    streamUrl: String,
     contentDescription: String?,
     modifier: Modifier,
 ) {
@@ -568,10 +586,10 @@ actual fun LiveEventThumbnail(
     val engine = LocalPreviewFrameEngine.current ?: remember { PreviewFrameEngine(context) }
     var bitmap by remember(eventNumber) { mutableStateOf<Bitmap?>(engine.cachedBitmap(eventNumber)) }
 
-    LaunchedEffect(eventNumber) {
+    LaunchedEffect(eventNumber, streamUrl) {
         if (bitmap == null) {
             // Tile render size — small, since _160p is 284×160 already.
-            bitmap = engine.requestFrame(eventNumber, width = 284, height = 160)
+            bitmap = engine.requestFrame(eventNumber, streamUrl, width = 284, height = 160)
         }
     }
 
@@ -599,10 +617,14 @@ private fun ThumbnailPlaceholder(eventNumber: Int, modifier: Modifier) {
         ),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
-        androidx.compose.material3.Text(
-            text = "event $eventNumber",
-            color = androidx.compose.ui.graphics.Color.White,
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-        )
+        // Only a numbered event has a number worth showing; a feed extra's
+        // synthetic one would read as nonsense, and its title is right below.
+        if (eventNumber < ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE) {
+            androidx.compose.material3.Text(
+                text = "event $eventNumber",
+                color = androidx.compose.ui.graphics.Color.White,
+                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }

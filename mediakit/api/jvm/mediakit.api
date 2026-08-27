@@ -1,3 +1,16 @@
+public final class com/livingpresence/mediakit/CachedManifest {
+	public fun <init> (Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun copy (Ljava/lang/String;J)Lcom/livingpresence/mediakit/CachedManifest;
+	public static synthetic fun copy$default (Lcom/livingpresence/mediakit/CachedManifest;Ljava/lang/String;JILjava/lang/Object;)Lcom/livingpresence/mediakit/CachedManifest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBody ()Ljava/lang/String;
+	public final fun getFetchedAtEpochMs ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/livingpresence/mediakit/EventCatalog {
 	public static final field Companion Lcom/livingpresence/mediakit/EventCatalog$Companion;
 	public static final field DEFAULT_MAX_CONCURRENCY I
@@ -16,18 +29,60 @@ public final class com/livingpresence/mediakit/EventCatalog$Companion {
 }
 
 public final class com/livingpresence/mediakit/EventInfo {
-	public fun <init> (IZJ)V
+	public fun <init> (IZJLjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (IZJLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()I
 	public final fun component2 ()Z
 	public final fun component3 ()J
-	public final fun copy (IZJ)Lcom/livingpresence/mediakit/EventInfo;
-	public static synthetic fun copy$default (Lcom/livingpresence/mediakit/EventInfo;IZJILjava/lang/Object;)Lcom/livingpresence/mediakit/EventInfo;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (IZJLjava/lang/String;Ljava/lang/String;)Lcom/livingpresence/mediakit/EventInfo;
+	public static synthetic fun copy$default (Lcom/livingpresence/mediakit/EventInfo;IZJLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/livingpresence/mediakit/EventInfo;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDurationMs ()J
 	public final fun getEventNumber ()I
+	public final fun getHasRenditionLadder ()Z
+	public final fun getStreamUrl ()Ljava/lang/String;
+	public final fun getTitle ()Ljava/lang/String;
 	public fun hashCode ()I
 	public final fun isLive ()Z
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/livingpresence/mediakit/ExtraVideo {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/livingpresence/mediakit/ExtraVideo;
+	public static synthetic fun copy$default (Lcom/livingpresence/mediakit/ExtraVideo;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/livingpresence/mediakit/ExtraVideo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTitle ()Ljava/lang/String;
+	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/livingpresence/mediakit/ExtraVideoCatalog {
+	public static final field Companion Lcom/livingpresence/mediakit/ExtraVideoCatalog$Companion;
+	public static final field EXTRA_EVENT_NUMBER_BASE I
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Lcom/livingpresence/mediakit/ManifestStore;JIIJLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Lcom/livingpresence/mediakit/ManifestStore;JIIJLkotlin/jvm/functions/Function0;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun loadExtras (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun loadExtras$default (Lcom/livingpresence/mediakit/ExtraVideoCatalog;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun loadManifest (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun loadManifest$default (Lcom/livingpresence/mediakit/ExtraVideoCatalog;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/livingpresence/mediakit/ExtraVideoCatalog$Companion {
+	public final fun getDEFAULT_TTL-UwyO8pc ()J
+	public final fun parseManifest (Ljava/lang/String;)Ljava/util/List;
+	public final fun titleFromUrl (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class com/livingpresence/mediakit/InMemoryManifestStore : com/livingpresence/mediakit/ManifestStore {
+	public fun <init> ()V
+	public fun read ()Lcom/livingpresence/mediakit/CachedManifest;
+	public fun write (Lcom/livingpresence/mediakit/CachedManifest;)V
 }
 
 public final class com/livingpresence/mediakit/LadderResolver {
@@ -42,9 +97,13 @@ public final class com/livingpresence/mediakit/LadderSynthesizer {
 	public final fun synthesize (Ljava/util/List;)Ljava/lang/String;
 }
 
+public abstract interface class com/livingpresence/mediakit/ManifestStore {
+	public abstract fun read ()Lcom/livingpresence/mediakit/CachedManifest;
+	public abstract fun write (Lcom/livingpresence/mediakit/CachedManifest;)V
+}
+
 public final class com/livingpresence/mediakit/MediaKitConfig {
 	public static final field Companion Lcom/livingpresence/mediakit/MediaKitConfig$Companion;
-	public static final field DEFAULT_HOST Ljava/lang/String;
 	public static final field DEFAULT_MAX_EVENT_NUMBER I
 	public fun <init> (Ljava/lang/String;)V
 	public fun <init> (Ljava/lang/String;I)V
@@ -64,7 +123,10 @@ public final class com/livingpresence/mediakit/MediaKitConfig {
 }
 
 public final class com/livingpresence/mediakit/MediaKitConfig$Companion {
+	public final fun eventNumberIn (Ljava/lang/String;)Ljava/lang/Integer;
 	public final fun getDefault ()Lcom/livingpresence/mediakit/MediaKitConfig;
+	public final fun getDefaultHost ()Ljava/lang/String;
+	public final fun setDefaultHost (Ljava/lang/String;)V
 }
 
 public final class com/livingpresence/mediakit/PlaylistInspector {

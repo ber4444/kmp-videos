@@ -23,15 +23,39 @@ public enum class RenditionTier(public val urlSuffix: String) {
 }
 
 /**
- * One event's catalog entry. [isLive] is derived from playlist inspection
- * (absence of `#EXT-X-ENDLIST`); when `false` the playlist is bounded and the
- * event is downloadable.
+ * One entry in the feed. [isLive] is derived from playlist inspection (absence
+ * of `#EXT-X-ENDLIST`); when `false` the playlist is bounded and the entry is
+ * downloadable.
+ *
+ * Two kinds of entry share this shape:
+ *  - **Numbered events** from [EventCatalog], whose [streamUrl] follows the
+ *    `…/live/event{n}` scheme and therefore has the unadvertised rendition
+ *    ladder [LadderResolver] can synthesize.
+ *  - **Extra videos** from [ExtraVideoCatalog]'s remote manifest, which are
+ *    arbitrary playlist URLs with no sibling renditions ([hasRenditionLadder]
+ *    is `false`) and a synthetic [eventNumber] from
+ *    [ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE] up.
+ *
+ * [eventNumber] stays the stable identity for both — download ids, thumbnail
+ * cache keys and the player route are all keyed by it — while [streamUrl] is
+ * the single source of truth for what to actually play.
  */
 public data class EventInfo(
     public val eventNumber: Int,
     public val isLive: Boolean,
     public val durationMs: Long,
-)
+    public val title: String = "Event $eventNumber",
+    public val streamUrl: String = MediaKitConfig.Default.eventUrl(eventNumber),
+) {
+    /**
+     * Whether [streamUrl] is a numbered mediakit event, and so has the
+     * `_360p`/`_160p`/`_aac` siblings the ABR ladder and the download tiers are
+     * built from. `false` for manifest extras, which are played and downloaded
+     * from [streamUrl] as-is.
+     */
+    public val hasRenditionLadder: Boolean
+        get() = MediaKitConfig.eventNumberIn(streamUrl) != null
+}
 
 /**
  * A rendition that has been probed from the server: its resolved chunklist URI

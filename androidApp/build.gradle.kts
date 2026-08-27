@@ -22,7 +22,7 @@ android {
         applicationId = "com.livingpresence.inner.circle.squared"
         minSdk = 23
         targetSdk = 36
-        versionCode = 7011
+        versionCode = 7012
         versionName = "8.1.0"
     }
 
@@ -104,6 +104,18 @@ androidComponents {
 
         val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
         variant.buildConfigFields?.put("APOLLO_GUILD_ID", com.android.build.api.variant.BuildConfigField("String", "\"$apolloGuildId\"", "Snowflake of the Apollo Discord guild"))
+
+        // Scheme + authority of the stream server. Deliberately absent from the
+        // source tree — every playlist URL is built from it — so it rides in the
+        // same gitignored file. Empty → the feed resolves nowhere.
+        val streamHost = transcriptionSecrets.getProperty("STREAM_HOST", "")
+        variant.buildConfigFields?.put("STREAM_HOST", com.android.build.api.variant.BuildConfigField("String", "\"$streamHost\"", "Scheme + authority of the stream server"))
+
+        // Raw URL of the extra-videos manifest (a secret gist). Not a credential,
+        // but unlisted: it rides in the same gitignored file so the private list
+        // stays out of this repository. Empty → the feed is events only.
+        val extraVideosUrl = transcriptionSecrets.getProperty("EXTRA_VIDEOS_URL", "")
+        variant.buildConfigFields?.put("EXTRA_VIDEOS_URL", com.android.build.api.variant.BuildConfigField("String", "\"$extraVideosUrl\"", "Raw URL of the extra-videos manifest"))
     }
 }
 

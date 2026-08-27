@@ -64,13 +64,19 @@ private class IOSDownloadController : DownloadController {
     }
 
     override fun enqueue(event: EventInfo, tier: DownloadQuality) {
-        val url = config.renditionUrl(event.eventNumber, tier.toRenditionTier())
+        // A tier only means something for numbered events; a feed extra has a
+        // single playlist and is downloaded from it as-is.
+        val url = if (event.hasRenditionLadder) {
+            config.renditionUrl(event.eventNumber, tier.toRenditionTier())
+        } else {
+            event.streamUrl
+        }
         val nsUrl = NSURL.URLWithString(url) ?: return
         val asset = AVURLAsset.assetWithURL(nsUrl)
         
         val task = session?.assetDownloadTaskWithURLAsset(
             URLAsset = asset,
-            assetTitle = "Event ${event.eventNumber}",
+            assetTitle = event.title,
             assetArtworkData = null,
             options = null
         )

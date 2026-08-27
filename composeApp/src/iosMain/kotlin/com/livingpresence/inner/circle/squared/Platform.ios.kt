@@ -346,14 +346,15 @@ private fun configureBackgroundAudio() {
 @Composable
 actual fun LiveEventThumbnail(
     eventNumber: Int,
+    streamUrl: String,
     contentDescription: String?,
     modifier: Modifier,
 ) {
     val engine = remember { PreviewFrameEngine() }
     var bitmap by remember(eventNumber) { mutableStateOf<ImageBitmap?>(null) }
-    
-    LaunchedEffect(eventNumber) {
-        bitmap = engine.getFrame(eventNumber, 0L)
+
+    LaunchedEffect(eventNumber, streamUrl) {
+        bitmap = engine.getFrame(eventNumber, 0L, streamUrl)
     }
 
     if (bitmap != null) {

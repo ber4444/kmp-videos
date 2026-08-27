@@ -37,6 +37,11 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Background & Picture-in-Picture.** Playback is owned by a `MediaSession`
   service (surviving config changes), with PiP aspect-clamped for vertical video
   and background audio constrained to the low-bitrate audio-only tier.
+- **Remotely-curated extras.** Beyond the numbered events the server exposes, the
+  feed appends videos listed in a plain-text manifest fetched from outside the
+  repository (a secret gist). The body is cached for a day — on disk, so it
+  survives launches — and a pull-to-refresh re-reads it immediately. See
+  [Extra videos](#extra-videos).
 - **Offline downloads.** Bounded (VOD) events download via WorkManager (Android) 
   and `AVAssetDownloadURLSession` (iOS) into a cache shared with playback; 
   truly-live events get no download affordance.
@@ -58,6 +63,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 | **Pillarboxing & Orientation Handling** | ✅ | ✅ | ✅ |
 | **Background Audio** (auto-shifts to audio-only tier) | ✅ | ✅ | ✅ |
 | **Picture-in-Picture (PiP)** | ✅ | ✅ | ✅ |
+| **Remote Extras Manifest** (cached 24h between launches) | ✅ | ✅ | ✅ |
 | **Offline HLS Downloads** | ✅ | ✅ | ❌ |
 | **Preview Disk Caching** (persisted between sessions) | ✅ | ✅ | ❌ |
 | **Memory Governor** (OOM prevention during PiP/bg) | ✅ | ❌ | ❌ |
@@ -228,6 +234,57 @@ captions are on.
 ## Configuration
 
 Transcription API keys (for Deepgram and Soniox) are read from `secrets.properties` in the project root. See `secrets.properties.example` for details.
+
+### Stream host
+
+Every playlist URL is built from one value, `STREAM_HOST` in `secrets.properties`
+— scheme and authority, no trailing slash:
+
+```
+STREAM_HOST=https://your-host.example:443
+```
+
+It is not compiled into the SDK. Each host injects it at startup
+(`FeedConfig.streamHost` → `MediaKitConfig.defaultHost`) from its own gitignored
+source: Android
+`BuildConfig` via `IcsApplication`, the wasm bundle's generated constants, the
+iOS `Info.plist`. Leaving it empty makes every probe resolve nowhere and the feed
+come back empty — a louder failure than reaching a stale hardcoded server.
+
+This is **not** a secret and cannot be: a host the client streams from is on the
+wire and inside the binary — a web build ships it in the bundle, and any deployed
+site (including `gh-pages`) serves it. Keeping it in `secrets.properties` keeps it
+out of a public repository and its history, which is a different and achievable
+goal. `eval/scripts/fetch_clips.py` reads the same host from `WOWZA_HOST`.
+
+### Extra videos
+
+The feed is the numbered events (`event1`…`event20`) probed on the Wowza server,
+plus anything listed in a manifest whose raw URL is `EXTRA_VIDEOS_URL` in
+`secrets.properties`. One video per line, URL first and an optional title after
+it; `#` comments and blank lines are ignored. `docs/extra-videos.example.txt` is
+a copyable starting point:
+
+```
+https://your-stream-host.example/vod/a-recording-8-20-26/playlist.m3u8?DVR   A Recording, Aug 20
+https://your-stream-host.example/vod/another-recording/playlist.m3u8?DVR
+```
+
+Each URL is probed exactly like an event, so extras get the same LIVE badge,
+duration label and download affordance; a 4xx drops the entry, anything else
+keeps it. Editing the manifest is enough to change the feed — no release needed.
+
+The body is cached in `SharedPreferences` / `NSUserDefaults` / `localStorage` and
+reused for 24 hours, so the manifest is fetched about once a day per device; a
+failed refresh falls back to the stale copy rather than emptying the feed. Pull
+to refresh bypasses both that TTL and the event-probe cache.
+
+A **secret gist** is the intended host: it keeps a private list out of this
+repository and off GitHub's search. It is *unlisted, not access-controlled* —
+anyone with the raw URL can read it, and the URL ships inside the app, where it
+is extractable. Recordings that need real privacy want signed URLs or a backend
+that authorizes each viewer. Leaving `EXTRA_VIDEOS_URL` empty disables the
+feature outright: no request is made and the feed is exactly the events.
 
 ### Discord / Apollo gate
 

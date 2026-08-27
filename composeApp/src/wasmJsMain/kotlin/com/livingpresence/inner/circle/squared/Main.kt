@@ -22,6 +22,15 @@ fun main() {
     DiscordConfig.clientId = TranscriptionKeys.DISCORD_CLIENT_ID
     DiscordConfig.apolloGuildId = TranscriptionKeys.APOLLO_GUILD_ID
 
+    // The stream host, kept out of the source tree — every playlist URL is built
+    // from it. Empty → the feed resolves nowhere rather than reaching a stale
+    // hardcoded server.
+    FeedConfig.streamHost = TranscriptionKeys.STREAM_HOST
+
+    // Extra videos appended to the feed, listed in a manifest hosted outside the
+    // repo. Empty → the feed is exactly the numbered events.
+    FeedConfig.extraVideosManifestUrl = TranscriptionKeys.EXTRA_VIDEOS_URL
+
     captureDiscordRedirect()
 
     ComposeViewport(document.body!!) {

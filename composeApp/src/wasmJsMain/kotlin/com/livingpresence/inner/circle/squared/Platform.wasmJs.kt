@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import org.w3c.dom.HTMLVideoElement
+import com.livingpresence.mediakit.ExtraVideoCatalog
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.RenditionTier
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -75,6 +76,7 @@ actual fun PlatformPlayerScreen(
 @Composable
 actual fun LiveEventThumbnail(
     eventNumber: Int,
+    streamUrl: String,
     contentDescription: String?,
     modifier: Modifier,
 ) {
@@ -86,11 +88,15 @@ actual fun LiveEventThumbnail(
             .onGloballyPositioned { coordinates -> bounds = coordinates.boundsInWindow() },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "event $eventNumber",
-            color = Color.White,
-            style = MaterialTheme.typography.titleMedium,
-        )
+        // A feed extra's synthetic number would read as nonsense; its title sits
+        // right below the tile anyway.
+        if (eventNumber < ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE) {
+            Text(
+                text = "event $eventNumber",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 
     DisposableEffect(bounds) {
@@ -113,7 +119,11 @@ actual fun LiveEventThumbnail(
             video.muted = true
 
             document.body?.appendChild(video)
-            val url = MediaKitConfig.Default.renditionUrl(eventNumber, RenditionTier.P160)
+            // The cheap 160p sibling where there is one; a feed extra plays its
+            // own playlist, muted, as its own preview.
+            val url = MediaKitConfig.eventNumberIn(streamUrl)
+                ?.let { MediaKitConfig.Default.renditionUrl(it, RenditionTier.P160) }
+                ?: streamUrl
             hls = attachHls(video, url)
         }
 
