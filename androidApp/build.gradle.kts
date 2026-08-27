@@ -5,6 +5,15 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+// The Play upload key lives outside the repo; `~/key.properties` points at the
+// keystore so release builds carry the certificate Play expects. When it's absent
+// (fresh clone, CI) release falls back to the debug key — fine for local installs,
+// and Play rejects the upload rather than accepting a wrongly signed build.
+val uploadKeyProperties = Properties().apply {
+    val f = File(System.getProperty("user.home"), "key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.livingpresence.inner.circle.squared"
     compileSdk = 37
@@ -41,10 +50,21 @@ android {
     }
 
 
+    signingConfigs {
+        if (uploadKeyProperties.getProperty("storeFile") != null) {
+            create("upload") {
+                storeFile = File(uploadKeyProperties.getProperty("storeFile"))
+                storePassword = uploadKeyProperties.getProperty("storePassword")
+                keyAlias = uploadKeyProperties.getProperty("keyAlias")
+                keyPassword = uploadKeyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
