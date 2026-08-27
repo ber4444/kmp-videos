@@ -7,11 +7,18 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Per-event download state surfaced to the UI (common shape across platforms).
+ *
+ * [streamUrl] is the URL that was actually enqueued — a specific rendition of a
+ * numbered event, or a manifest extra's own playlist. The offline fallback in
+ * `GalleryScreen` needs it: when the feed cannot be loaded, this is the only
+ * record of where a downloaded extra came from. Empty when the platform cannot
+ * report it.
  */
 data class EventDownloadState(
     val eventNumber: Int,
     val state: DownloadStatus,
     val percent: Float,
+    val streamUrl: String = "",
 )
 
 /**
@@ -41,7 +48,9 @@ fun DownloadQuality.toRenditionTier(): RenditionTier = when (this) {
  * no-op (web has no offline-download path in this phase).
  *
  * Only bounded (non-live) events are downloadable — [EventInfo.isLive] gates
- * the download affordance in the UI.
+ * the download affordance in the UI. Feed extras are downloadable too, at
+ * whatever single rendition their playlist offers: [DownloadQuality] applies
+ * only to entries with the ladder ([EventInfo.hasRenditionLadder]).
  */
 interface DownloadController {
     /** True if the platform supports background downloading of VOD events. */

@@ -246,11 +246,14 @@ val generateWebTranscriptionKeys by tasks.registering {
     // carried in the same file so a fork configures its own Discord application.
     val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
     val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
+    // Raw URL of the extra-videos manifest (a secret gist) — see FeedConfig.
+    val extraVideosUrl = transcriptionSecrets.getProperty("EXTRA_VIDEOS_URL", "")
     // Track key values so the task re-runs when they change.
     inputs.property("deepgram", deepgram)
     inputs.property("soniox", soniox)
     inputs.property("discordClientId", discordClientId)
     inputs.property("apolloGuildId", apolloGuildId)
+    inputs.property("extraVideosUrl", extraVideosUrl)
     doLast {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\${'$'}")
         val dir = outputDir.get().asFile
@@ -265,6 +268,7 @@ val generateWebTranscriptionKeys by tasks.registering {
                 const val SONIOX_API_KEY = "${esc(soniox)}"
                 const val DISCORD_CLIENT_ID = "${esc(discordClientId)}"
                 const val APOLLO_GUILD_ID = "${esc(apolloGuildId)}"
+                const val EXTRA_VIDEOS_URL = "${esc(extraVideosUrl)}"
             }
             """.trimIndent() + "\n"
         )

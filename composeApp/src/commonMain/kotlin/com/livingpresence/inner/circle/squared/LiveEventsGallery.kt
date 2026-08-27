@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.IconButton
@@ -46,17 +47,20 @@ import kotlin.math.ceil
 /**
  * The feed of available live/recorded events, replacing the old VideosDialog.
  *
- * Shows loading / error+retry / empty / populated states. When populated, events
+ * Shows loading / error+retry / empty / populated states. When populated, entries
  * render as a horizontal feed of 16:9 tiles (a 2-row grid when more than will
  * fit on one row), each with a poster thumbnail, title, and a LIVE badge (when
- * [EventInfo.isLive]) or a duration label. Tapping a tile plays the event.
+ * [EventInfo.isLive]) or a duration label. Tapping a tile plays it.
+ *
+ * Numbered events and the manifest extras appended after them are the same kind
+ * of tile — [EventInfo.title] and [EventInfo.streamUrl] carry whatever differs.
  */
 @Composable
 fun LiveEventsGallery(
     events: List<EventInfo>,
     isLoading: Boolean,
     error: String?,
-    onPlayEvent: (Int) -> Unit,
+    onPlayEvent: (EventInfo) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     /** Per-event download state; when non-null the tile shows a download affordance. */
@@ -108,7 +112,7 @@ fun LiveEventsGallery(
 @Composable
 private fun EventFeed(
     events: List<EventInfo>,
-    onPlayEvent: (Int) -> Unit,
+    onPlayEvent: (EventInfo) -> Unit,
     downloadStates: Map<Int, EventDownloadState>?,
     onDownload: ((EventInfo) -> Unit)?,
     onRemoveDownload: ((Int) -> Unit)?,
@@ -141,7 +145,7 @@ private fun EventFeed(
 @Composable
 private fun LiveEventTile(
     event: EventInfo,
-    onPlayEvent: (Int) -> Unit,
+    onPlayEvent: (EventInfo) -> Unit,
     modifier: Modifier = Modifier,
     downloadState: EventDownloadState? = null,
     onDownload: ((EventInfo) -> Unit)? = null,
@@ -151,7 +155,7 @@ private fun LiveEventTile(
     Surface(
         modifier = modifier
             .clip(tileShape)
-            .clickable { onPlayEvent(event.eventNumber) },
+            .clickable { onPlayEvent(event) },
         color = Color.Black.copy(alpha = 0.7f),
         shape = tileShape,
     ) {
@@ -164,7 +168,8 @@ private fun LiveEventTile(
             ) {
                 LiveEventThumbnail(
                     eventNumber = event.eventNumber,
-                    contentDescription = "Event ${event.eventNumber} thumbnail",
+                    streamUrl = event.streamUrl,
+                    contentDescription = "${event.title} thumbnail",
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (event.isLive) {
@@ -178,10 +183,17 @@ private fun LiveEventTile(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // weight(1f): a long extra's title ellipsizes rather than
+                // squeezing the download button off the tile.
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(
-                        text = "Event ${event.eventNumber}",
+                        text = event.title,
                         color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )

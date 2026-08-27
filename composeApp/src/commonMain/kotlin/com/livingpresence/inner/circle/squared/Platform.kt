@@ -25,17 +25,22 @@ expect fun PlatformPlayerScreen(
 expect fun onEventClick(eventNumber: Int, defaultAction: () -> Unit)
 
 /**
- * Platform-specific thumbnail for an event tile. Android renders a frame
- * extracted from the `_160p` rendition via a shared [PreviewFrameEngine];
- * wasmJs shows a poster placeholder with a hover-to-play overlay.
+ * Platform-specific thumbnail for a feed tile. Android renders a frame extracted
+ * from the stream via a shared [PreviewFrameEngine]; wasmJs shows a poster
+ * placeholder with a hover-to-play overlay.
  *
- * @param eventNumber The event whose frame to show.
+ * @param eventNumber Identity of the entry — the cache key for the extracted
+ *   frame, not necessarily a number the URL can be derived from (manifest extras
+ *   are numbered synthetically).
+ * @param streamUrl The playlist to pull the frame from. For a numbered event the
+ *   platform may substitute a cheaper rendition of the same stream.
  * @param contentDescription Accessibility description for the thumbnail.
  * @param modifier Layout modifier from the tile.
  */
 @Composable
 expect fun LiveEventThumbnail(
     eventNumber: Int,
+    streamUrl: String,
     contentDescription: String?,
     modifier: Modifier,
 )
@@ -50,11 +55,13 @@ fun getUrl(eventNumber: Int): String =
 
 /**
  * Extracts the event number from a stream/rendition [url], or null if none is
- * present. Matches the `eventNNN` segment of the mediakit URL scheme, so it works
- * for master, rendition and segment URLs alike across every platform.
+ * present — which is the case for the feed's manifest extras, whose URLs are
+ * arbitrary and have no rendition ladder behind them.
+ *
+ * Delegates to [MediaKitConfig.eventNumberIn] so the URL scheme is described in
+ * exactly one place.
  */
-fun parseEventNumber(url: String): Int? =
-    Regex("""event(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+fun parseEventNumber(url: String): Int? = MediaKitConfig.eventNumberIn(url)
 
 /**
  * Background for the landing screen — the `background_image` photo, cropped to

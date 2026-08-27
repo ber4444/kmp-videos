@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
         // their own Discord application. Empty client id disables the gate.
         DiscordConfig.clientId = BuildConfig.DISCORD_CLIENT_ID
         DiscordConfig.apolloGuildId = BuildConfig.APOLLO_GUILD_ID
+        FeedConfig.extraVideosManifestUrl = BuildConfig.EXTRA_VIDEOS_URL
 
         // The launching Intent may itself be the OAuth redirect (the browser deep
         // links straight into a cold-started task), so check it before composing.

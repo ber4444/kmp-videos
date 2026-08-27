@@ -22,6 +22,10 @@ fun main() {
     DiscordConfig.clientId = TranscriptionKeys.DISCORD_CLIENT_ID
     DiscordConfig.apolloGuildId = TranscriptionKeys.APOLLO_GUILD_ID
 
+    // Extra videos appended to the feed, listed in a manifest hosted outside the
+    // repo. Empty → the feed is exactly the numbered events.
+    FeedConfig.extraVideosManifestUrl = TranscriptionKeys.EXTRA_VIDEOS_URL
+
     captureDiscordRedirect()
 
     ComposeViewport(document.body!!) {

@@ -1,0 +1,21 @@
+# Extra videos appended to the app's feed.
+#
+# Copy this file's shape into a *secret* gist and put the gist's raw URL in
+# secrets.properties as EXTRA_VIDEOS_URL. The app fetches it, caches the body for
+# a day, and appends one tile per line after the numbered events.
+#
+# Format
+#   One video per line: the playlist URL first, then an optional title.
+#   Blank lines and lines starting with `#` are ignored.
+#   A line with no title gets one derived from its URL path.
+#   Duplicate URLs are dropped, keeping the first.
+#
+# Editing the gist is enough — no app release is needed. A change reaches a
+# device within a day, or immediately on pull-to-refresh.
+#
+# NOTE: a secret gist is unlisted, not private. Anyone with the raw URL can read
+# it, and that URL ships inside the app. Keep genuinely private recordings behind
+# signed URLs or a backend that authorizes each viewer.
+
+https://stream-host.example:443/vod/thudin-8-20-26/playlist.m3u8?DVR   Thudin, Aug 20
+https://stream-host.example:443/vod/another-recording/playlist.m3u8?DVR

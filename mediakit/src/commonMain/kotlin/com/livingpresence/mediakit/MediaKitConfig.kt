@@ -46,6 +46,21 @@ public data class MediaKitConfig(
 
         /** A [MediaKitConfig] pointed at the production server. */
         public val Default: MediaKitConfig = MediaKitConfig(DEFAULT_HOST)
+
+        /**
+         * The event number in [url], or null when [url] is not a numbered event
+         * stream (a manifest extra, say).
+         *
+         * Matches the `/live/event{n}` segment of the mediakit URL scheme, so it
+         * works for master, rendition and segment URLs alike. The `/live/`
+         * prefix is load-bearing: without it an arbitrary VOD path containing
+         * the word "event" would be mistaken for an event and played from the
+         * wrong stream.
+         */
+        public fun eventNumberIn(url: String): Int? =
+            EVENT_SEGMENT.find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+        private val EVENT_SEGMENT = Regex("""/live/event(\d+)""")
     }
 }
 // CodeQL trigger
