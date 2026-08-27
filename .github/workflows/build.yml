@@ -140,3 +140,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: mediakit/build/dokka/html
           destination_dir: mediakit-api
+
+      # The privacy policy Google Play links to. Published from source rather than
+      # edited on the deploy branch, so the page the store points at is reviewable
+      # here and restored by the next build if the branch is ever clobbered.
+      - name: Publish the privacy policy
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/privacy
+          destination_dir: privacy

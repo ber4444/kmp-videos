@@ -214,6 +214,17 @@ The `:mediakit` public API surface is tracked under `mediakit/api/` — accident
 binary-breaking changes fail CI. Dokka API docs are published to GitHub Pages on
 `main`.
 
+## Privacy
+
+[Privacy policy](https://ber4444.github.io/kmp-videos/privacy/) — the page Google Play links to,
+published from [`docs/privacy/`](./docs/privacy) by the `Dokka API docs` workflow job.
+
+The app collects nothing: no analytics, no crash reporting, no advertising, and no server operated by
+the developer. The Discord refresh token and display name are stored on-device only; the guild list
+is checked in memory and discarded. Live captions send the *media's* audio — never the microphone,
+for which the app holds no permission — to the configured speech-to-text provider, and only while
+captions are on.
+
 ## Configuration
 
 Transcription API keys (for Deepgram and Soniox) are read from `secrets.properties` in the project root. See `secrets.properties.example` for details.
