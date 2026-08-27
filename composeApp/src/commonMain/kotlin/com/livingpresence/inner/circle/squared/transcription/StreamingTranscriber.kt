@@ -3,8 +3,15 @@ package com.livingpresence.inner.circle.squared.transcription
 import com.livingpresence.inner.circle.squared.CaptionCue
 import kotlinx.coroutines.flow.StateFlow
 
-/** Connection/lifecycle state of a [StreamingTranscriber], surfaced to the UI. */
-enum class TranscriberStatus { IDLE, CONNECTING, LISTENING, ERROR }
+/**
+ * Connection/lifecycle state of a [StreamingTranscriber], surfaced to the UI.
+ *
+ * [RECONNECTING] is the normal state after a dropped socket — cloud ASR streams fail
+ * routinely on a long video and the client retries on its own; [ERROR] is reserved for
+ * failures that stay broken (a missing or rejected API key), where captions really have
+ * stopped until the user re-enables them.
+ */
+enum class TranscriberStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
 
 /**
  * A live, streaming speech-to-text backend (Deepgram, Soniox, …). Platform code
