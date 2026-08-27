@@ -56,6 +56,7 @@ private class RawWsTransport : WsTransport {
         val ws = object : WsSession {
             override suspend fun sendBinary(bytes: ByteArray) = wsSendBinary(socket, bytes.toArrayBuffer())
             override suspend fun sendText(text: String) = wsSendText(socket, text)
+            override suspend fun close() { runCatching { wsClose(socket) } }
         }
         val sessionScope = CoroutineScope(coroutineContext + Job())
         sessionScope.session(ws)

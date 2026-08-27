@@ -512,13 +512,19 @@ private fun ExoPlayerScreen(
                     )
                 }
 
-                // Phase 8: rolling transcription captions over the video.
-                if (captionController.enabled) {
+                // Phase 8: rolling transcription captions along the bottom edge of the video.
+                // They yield the bottom of the frame to the controls: while those are up the
+                // captions cross-fade out entirely rather than fighting them for the space,
+                // and they come back at the edge as soon as the controls hide again.
+                AnimatedVisibility(
+                    visible = captionController.enabled && !showVideoControls,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
                     CaptionOverlay(
                         captions = captionController.captions,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 120.dp, start = 24.dp, end = 24.dp),
+                        modifier = Modifier.padding(bottom = CAPTION_EDGE_INSET_DP.dp),
                     )
                 }
             }
