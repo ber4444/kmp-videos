@@ -204,8 +204,9 @@ private fun LiveEventTile(
 }
 
 /**
- * Download button reflecting state: not-downloaded (download), in-progress
- * (percentage ring), completed (check / remove), failed (retry).
+ * Download button reflecting state: not-downloaded (download), queued (…),
+ * waiting on the network (signal glyph), in-progress (percentage), completed
+ * (check / remove), failed (amber retry).
  */
 @Composable
 private fun DownloadAffordance(
@@ -220,7 +221,7 @@ private fun DownloadAffordance(
                 CheckIcon(color = Color(0xFFB9F6CA))
             }
         }
-        DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED -> {
+        DownloadStatus.DOWNLOADING -> {
             val percent = state?.percent ?: 0f
             IconButton(onClick = onRemove) {
                 Text(
@@ -230,10 +231,53 @@ private fun DownloadAffordance(
                 )
             }
         }
-        DownloadStatus.FAILED, DownloadStatus.NOT_DOWNLOADED, DownloadStatus.REMOVING -> {
+        // Accepted but not transferring yet. Distinguishing these from 0% matters:
+        // a queued download is about to start, a waiting one will not move until
+        // the device is back on an acceptable network.
+        DownloadStatus.QUEUED -> {
+            IconButton(onClick = onRemove) {
+                Text(
+                    "…",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+        DownloadStatus.WAITING -> {
+            IconButton(onClick = onRemove) {
+                NetworkWaitIcon(color = Color(0xFFFFD180))
+            }
+        }
+        DownloadStatus.FAILED -> {
+            IconButton(onClick = onDownload) {
+                DownloadIcon(color = Color(0xFFFF8A80))
+            }
+        }
+        DownloadStatus.NOT_DOWNLOADED, DownloadStatus.REMOVING -> {
             IconButton(onClick = onDownload) {
                 DownloadIcon(color = Color.White)
             }
+        }
+    }
+}
+
+/**
+ * Signal bars with the strongest bar dimmed — "queued, waiting for a network
+ * this download is allowed to use".
+ */
+@Composable
+private fun NetworkWaitIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(24.dp)) {
+        val barWidth = size.width * 0.16f
+        val gap = size.width * 0.1f
+        repeat(3) { index ->
+            val barHeight = size.height * (0.3f + 0.22f * index)
+            val left = size.width * 0.16f + index * (barWidth + gap)
+            drawRect(
+                color = if (index == 2) color.copy(alpha = 0.3f) else color,
+                topLeft = androidx.compose.ui.geometry.Offset(left, size.height * 0.85f - barHeight),
+                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+            )
         }
     }
 }
