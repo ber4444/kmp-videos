@@ -54,7 +54,7 @@ class MediaKitConfigTest {
     @Test
     fun eventNumberIn_isNullForUrlsOutsideTheEventScheme() {
         // A feed extra: no ladder behind it, so nothing to resolve.
-        assertNull(MediaKitConfig.eventNumberIn("https://example.test/vod/thudin-8-20-26/playlist.m3u8?DVR"))
+        assertNull(MediaKitConfig.eventNumberIn("https://example.test/vod/a-recording-8-20-26/playlist.m3u8?DVR"))
         // The `/live/` prefix is what stops a VOD slug that merely contains the
         // word "event" from being played as event 2026.
         assertNull(MediaKitConfig.eventNumberIn("https://example.test/vod/event2026-recap/playlist.m3u8"))
