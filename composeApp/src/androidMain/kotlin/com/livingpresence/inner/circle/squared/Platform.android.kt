@@ -277,13 +277,15 @@ private fun ExoPlayerScreen(
      * preview frame was never requested at all. Bucketing means the effect only
      * restarts when the drag crosses into a new ~2 s keyframe span, which is the
      * granularity the extractor can actually resolve anyway.
+     *
+     * Deliberately a plain computed value, not `remember { derivedStateOf { … } }`.
+     * A keyless `remember` here captured [scrubTargetPositionMs]'s delegate from
+     * the first composition — the one whose lambda had closed over `duration` as
+     * a plain `0` before the media was loaded — so the bucket was pinned to 0 and
+     * every preview was extracted from the start of the stream.
      */
-    val scrubBucketMs by remember {
-        derivedStateOf {
-            (scrubTargetPositionMs / PreviewFrameEngine.KEYFRAME_GRANULARITY_MS) *
-                PreviewFrameEngine.KEYFRAME_GRANULARITY_MS
-        }
-    }
+    val scrubBucketMs = (scrubTargetPositionMs / PreviewFrameEngine.KEYFRAME_GRANULARITY_MS) *
+        PreviewFrameEngine.KEYFRAME_GRANULARITY_MS
 
     // Reset the bubble when a scrub ends; otherwise debounce and request a frame.
     LaunchedEffect(isScrubbing, scrubBucketMs) {
@@ -591,14 +593,17 @@ private fun ScrubPreviewBubble(
                     filterQuality = FilterQuality.Low,
                 )
             }
+            // No fillMaxWidth: it stretched this Column to the full screen
+            // width, and the frame above — centred by horizontalAlignment — then
+            // rendered in the middle of *that*, roughly 320 px right of the
+            // offset meant to place it under the thumb, and clipped off-screen.
+            // Wrapping the frame keeps the bubble where the offset puts it.
             Text(
                 text = positionLabel,
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }
