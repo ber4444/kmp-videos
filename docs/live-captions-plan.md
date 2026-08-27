@@ -172,6 +172,33 @@ resolves the per-platform engine (android/darwin/js already in deps) with no eng
   iOS/web reuse it — only the PCM tap stays platform-specific). Keys via xcconfig/Info.plist →
   `TranscriptionSecrets`. Caption overlay: move `CaptionOverlay` to commonMain (step 1.9).
 
+## Resilience: reconnection + keepalive (added after live testing)
+A cloud ASR socket does not survive a feature-length video, and before this the first
+failure ended captions for the rest of the playback — Soniox's `error_message: "Request
+timeout"` (its server drops a stream that goes >20 s without audio or a keepalive, which a
+paused video reaches easily) left the error text frozen in the transcript while the video
+played on.
+
+- `WebSocketTranscriber.start()` now runs a **session loop**: every session that ends —
+  clean close, socket error, or a protocol error reported by a subclass through
+  `failSession` — is followed by a reconnect on the `ReconnectPolicy` schedule
+  (0.5 s → 10 s exponential, reset after any session that stayed up ≥15 s, so the common
+  "ran fine for ten minutes, then timed out" case recovers almost immediately).
+  Only `stop()` or a terminal failure (missing/rejected key) ends the loop.
+- Each attempt gets a **fresh PCM channel** — audio captured while the socket was down is
+  stale by the time a new one opens, so it is dropped rather than replayed.
+- `WsSession.close()` was added (both transports) because providers report protocol errors
+  as an inbound *message*, not a close; the transcriber ends the socket itself.
+- `SonioxClient` sends the documented `{"type":"keepalive"}` control message whenever the
+  audio stream goes quiet for 5 s (base-class `idleFrame`), which prevents most of those
+  timeouts in the first place; an unparsed frame is now logged, not treated as fatal.
+- UI: `TranscriberStatus.RECONNECTING` (`CC↻`) is distinct from `ERROR` (`CC!`), and provider
+  errors surface as a transient partial cue ("… reconnecting") that the next result replaces,
+  never as a finalized line stuck in the rolling transcript.
+- Tests: `ReconnectPolicyTest` (commonTest) for the schedule, and
+  `WebSocketTranscriberReconnectTest` (androidHostTest) which drives the whole loop over a
+  fake transport on virtual time.
+
 ## VOD path (separate, not in this doc)
 Recorded events should get **batch** transcription (once per asset) → WebVTT served as
 an HLS subtitle rendition; Media3's built-in text renderer (already enabled in

@@ -14,9 +14,17 @@ import kotlinx.serialization.json.Json
  * committed as a cue at sentence boundaries, while non-final tokens form the live tail.
  *
  * Because the key travels in the config frame (not a handshake header), Soniox works
- * unchanged on the browser transport. The connect/send/receive lifecycle lives in
- * [WebSocketTranscriber]; this subclass supplies the endpoint, the config handshake,
- * the `finalize` on end-of-stream, close-reason reporting, and Soniox's token protocol.
+ * unchanged on the browser transport. The connect/send/receive lifecycle — including the
+ * reconnect loop — lives in [WebSocketTranscriber]; this subclass supplies the endpoint,
+ * the config handshake, the keepalive, the `finalize` on end-of-stream, and Soniox's
+ * token protocol.
+ *
+ * **Idle timeouts.** Soniox closes a stream that receives neither audio nor a keepalive
+ * for more than ~20 s, reporting `error_message: "Request timeout"` — which a paused video,
+ * or any gap in the platform audio tap, reaches easily. [idleFrame] sends the documented
+ * `{"type":"keepalive"}` control message whenever the audio stream goes quiet, and an error
+ * that arrives anyway is reported through [failSession] so the base class reconnects instead
+ * of leaving the transcript frozen for the rest of the video.
  *
  * NOTE: endpoint host and field names should be re-verified against current Soniox
  * docs (see docs/live-captions-plan.md) — they change and this hasn't been run against
@@ -37,6 +45,12 @@ class SonioxClient(
 
     override fun headers(apiKey: String) = mapOf("Authorization" to "Bearer $apiKey")
 
+    /** Soniox's documented keepalive control message; sent only while no audio is flowing. */
+    override val idleFrame = "{\"type\":\"keepalive\"}"
+
+    /** Well inside Soniox's ~20 s idle limit, and the vendor's recommended 5–10 s cadence. */
+    override val idleFrameIntervalMs = 5_000L
+
     override suspend fun onOpen(ws: WsSession, apiKey: String) {
         lineBuffer.clear()
         val config = SonioxConfig(
@@ -52,22 +66,10 @@ class SonioxClient(
         runCatching { ws.sendText("{\"type\":\"finalize\"}") }
     }
 
-    override fun onClosed(reason: String?) {
-        if (reason != null) {
-            val msg = "Soniox Closed: $reason"
-            setError(msg)
-            accumulator.setPartial(msg)
-        }
-    }
-
     override fun onMissingKey() {
         val msg = "Missing Soniox API key"
         setError(msg)
         accumulator.setPartial(msg)
-    }
-
-    override fun onConnectException(e: Throwable) {
-        accumulator.setPartial("Soniox EXCEPTION: ${e.message ?: "Soniox connection failed"}")
     }
 
     override fun onStop() {
@@ -77,14 +79,14 @@ class SonioxClient(
     override fun handleMessage(text: String) {
         val resp = runCatching { json.decodeFromString<SonioxResponse>(text) }.getOrNull()
         if (resp == null) {
-            val err = "Soniox decode fail: $text"
-            setError(err)
-            accumulator.setPartial(err)
+            // Acks and other frames we don't model: log, but never stop transcribing over one.
+            println("Soniox: unparsed frame: $text")
             return
         }
         if (resp.errorMessage != null) {
-            setError(resp.errorMessage)
-            accumulator.setPartial("Soniox ERROR MSG: ${resp.errorMessage}")
+            // Soniox sends the error, then closes: end this session and let the base class
+            // reconnect. "Request timeout" in particular is routine on a long stream.
+            failSession("Soniox: ${resp.errorMessage}")
             return
         }
         val partial = StringBuilder()

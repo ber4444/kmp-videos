@@ -5,6 +5,7 @@ import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.header
 import io.ktor.websocket.CloseReason
+import io.ktor.websocket.close
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,13 @@ import kotlin.coroutines.coroutineContext
 interface WsSession {
     suspend fun sendBinary(bytes: ByteArray)
     suspend fun sendText(text: String)
+
+    /**
+     * Closes the socket from the client side. Providers report protocol errors as an
+     * inbound *message* and then may leave the socket open, so the transcriber needs a
+     * way to end a session that is dead but not closed (see `WebSocketTranscriber.failSession`).
+     */
+    suspend fun close()
 }
 
 /**
@@ -64,9 +72,13 @@ internal class KtorWsTransport : WsTransport {
             headers.forEach { (k, v) -> header(k, v) }
             if (subprotocols.isNotEmpty()) header("Sec-WebSocket-Protocol", subprotocols.joinToString(", "))
         }) {
+            // Captured so the object below can call the session's own close() without
+            // recursing into its override of the same name.
+            val socket = this
             val ws = object : WsSession {
-                override suspend fun sendBinary(bytes: ByteArray) = send(Frame.Binary(fin = true, data = bytes))
-                override suspend fun sendText(text: String) = send(Frame.Text(text))
+                override suspend fun sendBinary(bytes: ByteArray) = socket.send(Frame.Binary(fin = true, data = bytes))
+                override suspend fun sendText(text: String) = socket.send(Frame.Text(text))
+                override suspend fun close() = socket.close(CloseReason(CloseReason.Codes.NORMAL, "client"))
             }
             val sessionScope = CoroutineScope(coroutineContext + Job())
             sessionScope.session(ws)

@@ -77,15 +77,20 @@ internal fun rememberCaptionController(): CaptionController {
     }
 }
 
+/**
+ * The CC button and its state badge: `CC` off, `CC…` connecting, `CC●` live, `CC↻` while
+ * the client is reconnecting after a dropped socket (routine on a long stream — captions
+ * come back on their own), and `CC!` only when recognition has actually stopped, i.e. a
+ * missing or rejected key.
+ */
 @Composable
 internal fun CaptionToggleButton(controller: CaptionController) {
     val status by controller.status.collectAsState()
-    val error by controller.error.collectAsState()
     val label = when {
         !controller.enabled -> "CC"
-        error != null -> "CC!"
-        status == TranscriberStatus.CONNECTING -> "CC…"
         status == TranscriberStatus.ERROR -> "CC!"
+        status == TranscriberStatus.CONNECTING -> "CC…"
+        status == TranscriberStatus.RECONNECTING -> "CC↻"
         else -> "CC●"
     }
     TextButton(onClick = controller.onToggle) {
