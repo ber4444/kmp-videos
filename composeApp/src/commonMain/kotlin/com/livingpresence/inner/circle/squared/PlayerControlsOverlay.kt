@@ -32,6 +32,7 @@ fun PlayerControlsOverlay(
     onThumbCenterXChanged: (Float) -> Unit = {},
     onTopBarBottomChanged: (Float) -> Unit = {},
     onBottomBarTopChanged: (Float) -> Unit = {},
+    onBottomBarHeightChanged: (Float) -> Unit = {},
     topRightControls: @Composable RowScope.() -> Unit = {},
 ) {
     val density = LocalDensity.current
@@ -62,7 +63,10 @@ fun PlayerControlsOverlay(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .onGloballyPositioned { onBottomBarTopChanged(it.boundsInWindow().top) }
+                .onGloballyPositioned {
+                    onBottomBarTopChanged(it.boundsInWindow().top)
+                    onBottomBarHeightChanged(it.size.height.toFloat())
+                }
                 .background(Color.Black.copy(alpha = 0.55f))
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {

@@ -19,7 +19,6 @@ import io.ktor.client.engine.js.Js
 import kotlinx.coroutines.launch
 import org.w3c.dom.HTMLVideoElement
 import kotlinx.browser.document
-import kotlinx.browser.window
 
 @JsFun("""
 function createBlobUrl(text, mimeType) {
@@ -176,8 +175,10 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     val density = LocalDensity.current.density
     var topBarBottomPx by remember { mutableStateOf(0f) }
     var bottomBarTopPx by remember { mutableStateOf(0f) }
-    // Black strip (CSS px) reserved above the controls for captions when CC is on.
-    val captionStripCss = 72.0
+    var bottomBarHeightPx by remember { mutableStateOf(0f) }
+    // Black strip (CSS px) reserved above the controls for captions when CC is on:
+    // three caption lines plus the strip's own padding and the gap above the controls.
+    val captionStripCss = 88.0
 
     // Scrub Preview State
     var isScrubbing by remember { mutableStateOf(false) }
@@ -350,6 +351,7 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
                 onThumbCenterXChanged = { thumbCenterRootX = it },
                 onTopBarBottomChanged = { topBarBottomPx = it },
                 onBottomBarTopChanged = { bottomBarTopPx = it },
+                onBottomBarHeightChanged = { bottomBarHeightPx = it },
                 topRightControls = {
                     PlayerTopRightControls(
                         captionController = captionController,
@@ -405,13 +407,16 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
                 }
             }
 
-            // Sit the captions just above the bottom control bar (in the reserved
-            // black strip), using the measured bar height so they never overlap the
-            // controls or hide behind the video.
-            val bottomBarHeightDp = (window.innerHeight.toFloat() - bottomBarTopPx / density).coerceAtLeast(0f)
+            // Sit the captions at the bottom of the player, in the reserved black strip
+            // just above the control bar — lifted by the bar's own measured height so
+            // they never overlap the controls or hide behind the video.
+            val captionBottomDp = captionBottomInsetDp(
+                controlsBarHeightDp = bottomBarHeightPx / density,
+                controlsVisible = true,
+            )
             CaptionOverlay(
                 captions = captionController.captions,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomBarHeightDp.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = captionBottomDp.dp)
             )
         }
 

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitView
 import cnames.supported.AVPlayerBridge
@@ -202,6 +203,9 @@ actual fun PlatformPlayerScreen(
             var thumbCenterRootX by remember { mutableStateOf(0f) }
             var controlsBoxRootX by remember { mutableStateOf(0f) }
             var controlsBoxWidthPx by remember { mutableStateOf(0f) }
+            // Measured height of the bottom control bar; captions ride just above it
+            // rather than at a fixed lift (see [captionBottomInsetDp]).
+            var bottomBarHeightPx by remember { mutableStateOf(0f) }
 
             Box(
                 modifier = Modifier
@@ -242,6 +246,7 @@ actual fun PlatformPlayerScreen(
                         bridge.play()
                     },
                     onThumbCenterXChanged = { thumbCenterRootX = it },
+                    onBottomBarHeightChanged = { bottomBarHeightPx = it },
                     onClose = onClose,
                     topRightControls = {
                         PlayerTopRightControls(
@@ -293,9 +298,16 @@ actual fun PlatformPlayerScreen(
                     )
                 }
 
+                // Captions sit at the bottom of the player, lifted only by the control
+                // bar that is always on screen here. In landscape the old fixed lift put
+                // them across the middle of the picture.
+                val captionBottomDp = captionBottomInsetDp(
+                    controlsBarHeightDp = with(LocalDensity.current) { bottomBarHeightPx.toDp() }.value,
+                    controlsVisible = true,
+                )
                 CaptionOverlay(
                     captions = captionController.captions,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp)
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = captionBottomDp.dp)
                 )
             }
     }
