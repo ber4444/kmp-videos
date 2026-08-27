@@ -63,11 +63,18 @@ class ImageReaderCapture(width: Int, height: Int) {
      * silently falls back to a placeholder. Polling converts a coin flip into a
      * wait, and a frame that arrives at 900 ms is just as good as one at 400 ms.
      */
-    suspend fun awaitFrame(timeoutMs: Long = DEFAULT_AWAIT_TIMEOUT_MS): Bitmap? {
+    suspend fun awaitFrame(
+        timeoutMs: Long = DEFAULT_AWAIT_TIMEOUT_MS,
+        settleMs: Long = FIRST_FRAME_SETTLE_MS,
+    ): Bitmap? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null
         // Give the decoder a beat before the first attempt — usually enough, and
-        // it avoids a guaranteed-failing copy on the common path.
-        kotlinx.coroutines.delay(FIRST_FRAME_SETTLE_MS)
+        // it avoids a guaranteed-failing copy on the common path. Callers that
+        // already know a frame was rendered pass 0: on a running extraction
+        // player the wait is not caution, it is drift past the seeked position.
+        if (settleMs > 0) {
+            kotlinx.coroutines.delay(settleMs)
+        }
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (true) {
             copyFrame()?.let { return it }

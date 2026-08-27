@@ -74,7 +74,13 @@ class MainActivity : ComponentActivity() {
                     updatePipAspectRatio(width, height)
                 override fun setPlaying(playing: Boolean) = setPlayingVideo(playing)
                 override fun updateSourceBounds(left: Int, top: Int, right: Int, bottom: Int) {
-                    pipSourceRect.set(android.graphics.Rect(left, top, right, bottom))
+                    val bounds = android.graphics.Rect(left, top, right, bottom)
+                    // onGloballyPositioned fires on every layout pass; only
+                    // re-publish when the bounds actually moved, since
+                    // setPictureInPictureParams is a binder call to the system.
+                    if (pipSourceRect.getAndSet(bounds) != bounds) {
+                        updatePipParams()
+                    }
                 }
             }
             HostBridge.HostApp(pipController)
@@ -120,24 +126,36 @@ class MainActivity : ComponentActivity() {
     internal fun updatePipAspectRatio(width: Int, height: Int) {
         if (width > 0 && height > 0) {
             pipAspectRatio.set(safePipRatio(width, height))
+            updatePipParams()
         }
     }
 
     internal fun setPlayingVideo(playing: Boolean) {
         isPlayingVideo.set(playing)
+        updatePipParams()
     }
 
     /**
-     * Auto-enter PiP when the user navigates away while playing, if the device
-     * supports it. The aspect ratio is clamped to the platform's 1:2.39–2.39:1
-     * range (matters for vertical video — a 9:16 stream is clamped, not clipped).
+     * Registers the current PiP parameters with the system *while the video is
+     * playing*, rather than waiting until the user leaves.
+     *
+     * On API 31+ this is the whole mechanism: `setAutoEnterEnabled` only works if
+     * the system already holds the params when the transition starts, so it has
+     * to be published ahead of time. Setting it inside `onUserLeaveHint` — as
+     * this used to — is doubly broken: too late for the system to auto-enter, yet
+     * early enough that it then refuses the manual call with
+     * "Skip client enterPictureInPictureMode request while pausing,
+     * auto-enter-pip is enabled". Each path disabled the other and PiP never
+     * happened.
+     *
+     * Tied to [isPlayingVideo] so a paused video does not shrink into PiP when
+     * the user leaves for unrelated reasons.
      */
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
+    private fun updatePipParams() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
         }
-        if (!isPlayingVideo.get() || !packageManager.hasSystemFeature(
+        if (!packageManager.hasSystemFeature(
                 android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE,
             )
         ) {
@@ -153,11 +171,44 @@ class MainActivity : ComponentActivity() {
             runCatching { params.setSourceRectHint(sourceRect) }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setAutoEnterEnabled(true)
+            params.setAutoEnterEnabled(isPlayingVideo.get())
         }
-        runCatching {
-            enterPictureInPictureMode(params.build())
+        // Throws if the activity is finishing or does not support PiP.
+        runCatching { setPictureInPictureParams(params.build()) }
+    }
+
+    /**
+     * Enters PiP on API 26–30, which have no auto-enter and so still need the
+     * explicit call when the user navigates away while playing.
+     *
+     * API 31+ deliberately returns early: [updatePipParams] has already told the
+     * system to auto-enter, and calling in here as well is what previously broke
+     * PiP outright — the system rejects a manual request from a pausing activity
+     * that has auto-enter set.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        ) {
+            return
         }
+        if (!isPlayingVideo.get() || !packageManager.hasSystemFeature(
+                android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE,
+            )
+        ) {
+            return
+        }
+        val params = PictureInPictureParams.Builder()
+        // The aspect ratio is clamped to the platform's 1:2.39–2.39:1 range
+        // (matters for vertical video — 9:16 is clamped, not clipped).
+        pipAspectRatio.get()?.let { aspectRatio ->
+            params.setAspectRatio(aspectRatio)
+        }
+        pipSourceRect.get()?.let { sourceRect ->
+            runCatching { params.setSourceRectHint(sourceRect) }
+        }
+        runCatching { enterPictureInPictureMode(params.build()) }
     }
 
     override fun onPictureInPictureModeChanged(

@@ -143,20 +143,20 @@ class PreviewFrameEngine(
         val cacheKey = scrubCacheKey(eventNumber, positionMs)
         scrubCache.get(cacheKey)?.let { return it }
 
-        val tiers = listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
-        for (tier in tiers) {
-            val frame = captureFrame(
-                url = config.renditionUrl(eventNumber, tier),
-                width = width,
-                height = height,
-                positionMs = bucketPosition(positionMs),
-            )
-            if (frame != null) {
-                scrubCache.put(cacheKey, frame)
-                return frame
-            }
+        // Only `_160p` here, unlike the poster path's fallback chain: a scrub is
+        // interactive, and trying three renditions in series would spend longer
+        // failing than the user spends on the whole drag. If `_160p` is missing
+        // the bubble falls back to its time-only form.
+        val frame = captureScrubFrame(
+            url = config.renditionUrl(eventNumber, RenditionTier.P160),
+            width = width,
+            height = height,
+            positionMs = bucketPosition(positionMs),
+        )
+        if (frame != null) {
+            scrubCache.put(cacheKey, frame)
         }
-        return null
+        return frame
     }
 
     /** Snaps [positionMs] to the nearest keyframe boundary ([KEYFRAME_GRANULARITY_MS]). */
@@ -171,14 +171,148 @@ class PreviewFrameEngine(
         return (eventNumber.toLong() shl EVENT_SHIFT) or (bucket and POSITION_MASK)
     }
 
-    private suspend fun captureFrame(
+    /**
+     * A prepared extraction player kept alive across scrub requests.
+     *
+     * Building and preparing an [ExoPlayer] costs seconds — long enough that the
+     * per-request player the scrub path used to create never finished before the
+     * next drag position cancelled it, so a scrub preview frame effectively never
+     * appeared. Held open for the duration of a drag, only the seek remains.
+     */
+    private class ScrubSession(
+        val url: String,
+        val width: Int,
+        val height: Int,
+        val player: ExoPlayer,
+        val reader: ImageReaderCapture,
+    ) {
+        /**
+         * Set when the renderer puts a frame on the surface. Cleared before each
+         * seek so a capture can tell "the frame for the position I just asked
+         * for" from "whatever was already sitting there".
+         *
+         * Without this the reuse optimisation actively lies: `seekTo` returns
+         * immediately, the surface still holds the previous frame, and PixelCopy
+         * happily succeeds on it — so every preview showed a stale position
+         * instead of the one under the finger.
+         */
+        val frameRendered = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        private val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                frameRendered.set(true)
+            }
+        }
+
+        init {
+            player.addListener(listener)
+        }
+
+        fun release() {
+            runCatching { player.removeListener(listener) }
+            runCatching { player.release() }
+            runCatching { reader.release() }
+        }
+    }
+
+    private var scrubSession: ScrubSession? = null
+
+    /** Serializes access to [scrubSession] — drags can overlap requests. */
+    private val scrubSessionMutex = Mutex()
+
+    /**
+     * Releases the reusable scrub player. Called when a drag ends, so an idle
+     * decoder is not left holding a surface and a network buffer.
+     */
+    fun endScrub() {
+        scrubSession?.release()
+        scrubSession = null
+    }
+
+    /**
+     * Extracts a scrub frame using the reusable [ScrubSession], creating one on
+     * first use (or when the URL/size changes) and seeking on every use after.
+     */
+    private suspend fun captureScrubFrame(
         url: String,
         width: Int,
         height: Int,
-        positionMs: Long?,
-    ): Bitmap? {
-        val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
-        val player = ExoPlayer.Builder(context)
+        positionMs: Long,
+    ): Bitmap? = scrubSessionMutex.withLock {
+        val existing = scrubSession
+        val session = if (existing != null &&
+            existing.url == url &&
+            existing.width == width &&
+            existing.height == height
+        ) {
+            existing
+        } else {
+            existing?.release()
+            val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
+            // Left running on purpose. Pausing it looks tidier — one seeked frame
+            // at a time, no drift — but the capture surface is a SurfaceTexture
+            // nothing ever consumes from, so a paused player queues a frame and
+            // stops, and PixelCopy goes back to finding nothing to read. That is
+            // the same "no previously queued frames" failure the feed thumbnails
+            // had. A running player keeps frames flowing, and the render signal
+            // below is what keeps the captured one honest.
+            val player = buildExtractionPlayer(url, reader, startPlaying = true)
+            ScrubSession(url, width, height, player, reader).also { scrubSession = it }
+        }
+
+        val frame = withTimeoutOrNull(EXTRACT_TIMEOUT_MS) {
+            // Bounded: a paused extraction player does not reliably advertise
+            // STATE_READY, so waiting for it indefinitely parks the capture until
+            // the drag ends and cancels it — the reason previews stopped
+            // appearing entirely. seekTo is valid in any state; ExoPlayer queues
+            // it. So give READY a chance, then seek regardless.
+            val readyDeadline = android.os.SystemClock.uptimeMillis() + READY_WAIT_MS
+            while (session.player.playbackState != Player.STATE_READY &&
+                android.os.SystemClock.uptimeMillis() < readyDeadline
+            ) {
+                if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
+                delay(SEEK_POLL_MS)
+            }
+            // Arm the flag *before* seeking, then wait for the renderer to report
+            // a frame for the new position. Capturing straight after seekTo reads
+            // back whatever the previous seek left on the surface.
+            session.frameRendered.set(false)
+            session.player.seekTo(positionMs)
+
+            // Bounded, not unbounded. Waiting forever for onRenderedFirstFrame
+            // means that if the renderer does not report one — which it may not,
+            // depending on how the seek resolves against what is already
+            // buffered — the whole capture burns the outer timeout and returns
+            // nothing, so no preview appears at all. Past this deadline the
+            // seeked frame is on the surface regardless; capturing it is far
+            // better than giving up.
+            val renderDeadline = android.os.SystemClock.uptimeMillis() + RENDER_WAIT_MS
+            while (!session.frameRendered.get() &&
+                android.os.SystemClock.uptimeMillis() < renderDeadline
+            ) {
+                if (session.player.playbackState == Player.STATE_ENDED) return@withTimeoutOrNull null
+                delay(SEEK_POLL_MS)
+            }
+            // settleMs = 0: the render signal above already told us a frame for
+            // this position is up, so any extra delay only lets a running player
+            // drift further past it.
+            session.reader.awaitFrame(settleMs = 0L)
+        }
+        frame?.let { cropToAspectRatio(it, width, height) }
+    }
+
+    /**
+     * A muted, video-only, lowest-bitrate player rendering into [reader].
+     *
+     * @param startPlaying the poster path lets it run to reach a first frame;
+     *   the scrub path keeps it paused and drives it purely by seeking.
+     */
+    private fun buildExtractionPlayer(
+        url: String,
+        reader: ImageReaderCapture,
+        startPlaying: Boolean = true,
+    ): ExoPlayer =
+        ExoPlayer.Builder(context)
             .setTrackSelector(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     // Video-only, lowest bitrate available.
@@ -202,8 +336,17 @@ class PreviewFrameEngine(
                         .build(),
                 )
                 prepare()
-                playWhenReady = true
+                playWhenReady = startPlaying
             }
+
+    private suspend fun captureFrame(
+        url: String,
+        width: Int,
+        height: Int,
+        positionMs: Long?,
+    ): Bitmap? {
+        val reader = ImageReaderCapture(width.coerceAtLeast(2), height.coerceAtLeast(2))
+        val player = buildExtractionPlayer(url, reader)
 
         return try {
             val frame: Bitmap? = withTimeoutOrNull(EXTRACT_TIMEOUT_MS) {
@@ -267,6 +410,7 @@ class PreviewFrameEngine(
     fun release() {
         bitmapCache.evictAll()
         scrubCache.evictAll()
+        endScrub()
         diskCache.purge()
     }
 
@@ -290,6 +434,19 @@ class PreviewFrameEngine(
         private const val SEEK_FRACTION = 0.10
         private const val SEEK_POLL_MS = 50L
         private const val EXTRACT_TIMEOUT_MS = 8_000L
+
+        /**
+         * How long a scrub capture waits for the renderer to confirm a frame for
+         * the seeked position before capturing anyway. Long enough for a normal
+         * seek to land, short enough to stay interactive.
+         */
+        private const val RENDER_WAIT_MS = 1_200L
+
+        /**
+         * How long to give the extraction player to reach STATE_READY before
+         * seeking anyway. A paused player may never report it.
+         */
+        private const val READY_WAIT_MS = 2_000L
 
         /** Disk cache directory under [Context.getCacheDir] (system-managed, purged on low space). */
         private const val DISK_CACHE_DIR = "media_thumbnails"

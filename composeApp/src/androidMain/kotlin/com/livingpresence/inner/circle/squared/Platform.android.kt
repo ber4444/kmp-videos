@@ -268,26 +268,48 @@ private fun ExoPlayerScreen(
         }
     }
 
+    /**
+     * The scrub position snapped to the extractor's keyframe bucket.
+     *
+     * The effect below keys on *this* rather than the raw position. The raw value
+     * changes on every drag pixel — roughly every 16 ms — which restarted the
+     * effect and cancelled its 200 ms debounce before it could ever elapse, so a
+     * preview frame was never requested at all. Bucketing means the effect only
+     * restarts when the drag crosses into a new ~2 s keyframe span, which is the
+     * granularity the extractor can actually resolve anyway.
+     *
+     * Deliberately a plain computed value, not `remember { derivedStateOf { … } }`.
+     * A keyless `remember` here captured [scrubTargetPositionMs]'s delegate from
+     * the first composition — the one whose lambda had closed over `duration` as
+     * a plain `0` before the media was loaded — so the bucket was pinned to 0 and
+     * every preview was extracted from the start of the stream.
+     */
+    val scrubBucketMs = (scrubTargetPositionMs / PreviewFrameEngine.KEYFRAME_GRANULARITY_MS) *
+        PreviewFrameEngine.KEYFRAME_GRANULARITY_MS
+
     // Reset the bubble when a scrub ends; otherwise debounce and request a frame.
-    LaunchedEffect(isScrubbing, scrubTargetPositionMs) {
+    LaunchedEffect(isScrubbing, scrubBucketMs) {
         if (!isScrubbing || duration <= 0L || eventNumber == null) {
             scrubBitmap = null
+            // Drop the reusable extraction player once the drag is over, rather
+            // than leaving an idle decoder holding a surface and a buffer.
+            engine?.endScrub()
             return@LaunchedEffect
         }
         // Show any already-cached frame for this position instantly (free).
-        scrubBitmap = engine?.cachedScrubBitmap(eventNumber, scrubTargetPositionMs)
+        scrubBitmap = engine?.cachedScrubBitmap(eventNumber, scrubBucketMs)
         // Debounce so we don't seek on every pixel of drag (plan.md: ~200 ms).
         delay(SCRUB_DEBOUNCE_MS)
         // Capture the target we requested so a late frame after the drag moves
         // on is dropped rather than flashing a stale position.
-        val requestedPosition = scrubTargetPositionMs
+        val requestedPosition = scrubBucketMs
         val frame = engine?.requestScrubFrame(
             eventNumber = eventNumber,
             positionMs = requestedPosition,
             width = with(density) { ScrubPreviewWidth.roundToPx() },
             height = with(density) { ScrubPreviewHeight.roundToPx() },
         )
-        if (frame != null && isScrubbing && scrubTargetPositionMs == requestedPosition) {
+        if (frame != null && isScrubbing && scrubBucketMs == requestedPosition) {
             scrubBitmap = frame
         }
     }
@@ -571,14 +593,17 @@ private fun ScrubPreviewBubble(
                     filterQuality = FilterQuality.Low,
                 )
             }
+            // No fillMaxWidth: it stretched this Column to the full screen
+            // width, and the frame above — centred by horizontalAlignment — then
+            // rendered in the middle of *that*, roughly 320 px right of the
+            // offset meant to place it under the thumb, and clipped off-screen.
+            // Wrapping the frame keeps the bubble where the offset puts it.
             Text(
                 text = positionLabel,
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }
