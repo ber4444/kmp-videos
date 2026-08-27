@@ -248,12 +248,15 @@ val generateWebTranscriptionKeys by tasks.registering {
     val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
     // Raw URL of the extra-videos manifest (a secret gist) — see FeedConfig.
     val extraVideosUrl = transcriptionSecrets.getProperty("EXTRA_VIDEOS_URL", "")
+    // Scheme + authority of the stream server — see MediaKitConfig.defaultHost.
+    val streamHost = transcriptionSecrets.getProperty("STREAM_HOST", "")
     // Track key values so the task re-runs when they change.
     inputs.property("deepgram", deepgram)
     inputs.property("soniox", soniox)
     inputs.property("discordClientId", discordClientId)
     inputs.property("apolloGuildId", apolloGuildId)
     inputs.property("extraVideosUrl", extraVideosUrl)
+    inputs.property("streamHost", streamHost)
     doLast {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\${'$'}")
         val dir = outputDir.get().asFile
@@ -269,6 +272,7 @@ val generateWebTranscriptionKeys by tasks.registering {
                 const val DISCORD_CLIENT_ID = "${esc(discordClientId)}"
                 const val APOLLO_GUILD_ID = "${esc(apolloGuildId)}"
                 const val EXTRA_VIDEOS_URL = "${esc(extraVideosUrl)}"
+                const val STREAM_HOST = "${esc(streamHost)}"
             }
             """.trimIndent() + "\n"
         )

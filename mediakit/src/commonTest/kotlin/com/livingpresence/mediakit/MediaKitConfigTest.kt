@@ -61,8 +61,26 @@ class MediaKitConfigTest {
     }
 
     @Test
-    fun defaultConfig_pointsAtProductionServer() {
-        assertEquals("https://stream-host.example:443", MediaKitConfig.Default.host)
-        assertEquals(20, MediaKitConfig.Default.maxEventNumber)
+    fun defaultConfig_followsTheInjectedHost() {
+        val previous = MediaKitConfig.defaultHost
+        try {
+            MediaKitConfig.defaultHost = "https://injected.test:443"
+
+            assertEquals("https://injected.test:443", MediaKitConfig.Default.host)
+            assertEquals(
+                "https://injected.test:443/live/event4/playlist.m3u8?DVR",
+                MediaKitConfig.Default.eventUrl(4),
+            )
+            assertEquals(20, MediaKitConfig.Default.maxEventNumber)
+        } finally {
+            MediaKitConfig.defaultHost = previous
+        }
+    }
+
+    @Test
+    fun defaultHost_isEmptyUntilAHostInjectsIt() {
+        // No hardcoded server in the SDK: a build that forgets to inject the host
+        // probes nowhere rather than reaching a stale one.
+        assertEquals("", MediaKitConfig.defaultHost)
     }
 }
