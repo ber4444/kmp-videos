@@ -67,19 +67,35 @@ fun PlayerControlsOverlay(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             if (isSeekable && durationMs > 0L) {
+                // Track geometry only. The thumb's x is derived from it below
+                // rather than computed in here: onGloballyPositioned fires on
+                // layout changes, and dragging the slider does not move or resize
+                // the Slider itself — so reporting the thumb position from this
+                // callback left it frozen at whatever fraction happened to be
+                // current at the last layout pass, pinning the scrub preview to
+                // that spot for the whole drag.
+                var trackRootX by remember { mutableFloatStateOf(0f) }
+                var trackWidthPx by remember { mutableFloatStateOf(0f) }
+
                 Slider(
                     value = sliderFraction,
                     onValueChange = onSliderValueChange,
                     onValueChangeFinished = { onSliderValueChangeFinished(sliderFraction) },
                     valueRange = 0f..1f,
                     modifier = Modifier.fillMaxWidth().onGloballyPositioned { coords ->
-                        val w = coords.size.width
-                        val rootX = coords.positionInRoot().x
-                        val innerStart = rootX + thumbRadiusPx
-                        val innerSpan = (w - 2 * thumbRadiusPx).coerceAtLeast(0f)
-                        onThumbCenterXChanged(innerStart + sliderFraction * innerSpan)
+                        trackRootX = coords.positionInRoot().x
+                        trackWidthPx = coords.size.width.toFloat()
                     }
                 )
+
+                // Re-reports whenever the fraction moves, which is the whole point.
+                LaunchedEffect(trackRootX, trackWidthPx, sliderFraction) {
+                    if (trackWidthPx > 0f) {
+                        val innerStart = trackRootX + thumbRadiusPx
+                        val innerSpan = (trackWidthPx - 2 * thumbRadiusPx).coerceAtLeast(0f)
+                        onThumbCenterXChanged(innerStart + sliderFraction * innerSpan)
+                    }
+                }
             }
 
             val displayedPosition = if (isScrubbing && durationMs > 0L) {
