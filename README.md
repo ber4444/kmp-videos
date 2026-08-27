@@ -70,74 +70,101 @@ golden set of event audio — batch WER/CER, domain-term recall (Entity F1),
 keyterm-boosting impact, and real-time streaming realism (flicker + finalization
 latency). On this material **Soniox clearly outperforms Deepgram** (0.242 vs 0.350
 normalized WER; 0.77 vs 0.49 Entity F1), which is why the app ships Soniox as its
-preferred provider. See the generated [scorecard](./eval/reports/scorecard.md) and
-[`eval/README.md`](./eval/README.md).
+preferred provider. Run [`eval/run_eval.sh`](./eval/run_eval.sh) to regenerate the scorecard at
+`eval/reports/scorecard.md` (generated output, not checked in); see
+[`eval/README.md`](./eval/README.md) for the methodology.
 
 ## Architecture
 
 ```
-:composeApp        — app UI (feed, login, player), navigation, DI wiring
-:mediakit          — KMP playback SDK
+:androidApp        — Android application module: MainActivity, manifest
+                     (services, permissions, Discord redirect filter), signing
+:composeApp        — app UI (feed, login, player), navigation, DI wiring, and
+                     every platform playback integration
+  commonMain       — shared UI, app state, composeResources
+  androidMain      — ExoPlayer (in PlaybackService), DownloadsService/DownloadCenter,
+                     PreviewFrameEngine, MemoryGovernor, LadderMediaSource
+  iosMain          — AVPlayer playback (UIKitView + AVPlayerLayer cinterop),
+                     PiP, background audio, native offline downloads
+  wasmJsMain       — thin web target (poster tiles + in-app player screen)
+:mediakit          — KMP playback SDK: pure-Kotlin core, commonMain only, no
+                     platform sources
   commonMain       — PlaylistInspector (pure-Kotlin HLS parser), LadderSynthesizer
                      (multivariant playlist builder), LadderResolver (JIT rendition
                      probing), EventCatalog (parallel event probing), MediaKitConfig,
                      EventInfo/ProbedRendition/RenditionTier models
-  androidMain      — ExoPlayer (in PlaybackService), PreviewFrameEngine,
-                     DownloadCenter, MemoryGovernor, LadderMediaSourceBuilder
-  iosMain          — AVPlayer playback (UIKitView + AVPlayerLayer cinterop),
-                     PiP, background audio, native offline downloads
-  wasmJsMain       — thin web target (poster tiles + in-app player screen)
 ```
 
-The playback engine lives in `:mediakit`, **owned by a `MediaSessionService`**,
-not by a composable — it survives config changes and enables background
-audio/PiP.
+`:mediakit` holds the platform-independent HLS/ABR brain — parsing, ladder
+synthesis, rendition probing — and nothing else; it compiles for Android, JVM,
+iOS and wasm purely from `commonMain`. The Android playback engine that consumes
+it is **owned by a `MediaSessionService`** in `composeApp/src/androidMain`, not by
+a composable, so it survives config changes and enables background audio/PiP.
 
-- Shared UI and app state live in `composeApp/src/commonMain`
-- Shared image resources live in `composeApp/src/commonMain/composeResources`
-- Android entry points and playback integration live in `composeApp/src/androidMain`
-- iOS entry points and AVPlayer integration live in `composeApp/src/iosMain`
-- Web entry points live in `composeApp/src/wasmJsMain`
+## Possible future work
 
-## Engineering decisions
-
-The load-bearing design calls and the reasoning behind them live in [`plan.md`](./plan.md).
-
-## TODO: deferred from the AGP 9 migration
-
-The supported Gradle 9/AGP 9 migration is planned in
-[`plan.md`](./plan.md) under “Standalone PR plan — Gradle 9 and AGP 9
-migration.” The migration PR intentionally leaves these follow-ups out:
-
-- [ ] Rename `:composeApp` to `:shared` and extract a separate `:webApp`
-  (JetBrains' recommended full platform restructure). The minimum supported
-  split keeps iOS and Wasm in `:composeApp`.
-- [ ] Revisit the ordinary dependency upgrades grouped into Dependabot PR #33.
-  AndroidX, Media3, Ktor, coroutines, Metro, and other runtime updates
-  should be reviewed in smaller dependency-only PRs.
-- [ ] Extract repeated build configuration into convention plugins after the
-  migrated module boundaries have stabilized.
-- [ ] Refresh checked-in or developer-local Android Studio run configurations
-  to target `:androidApp`; this is IDE metadata, not part of the Gradle
-  migration itself.
-- [ ] Consider a later full AGP-defaults/R8 audit with release smoke testing.
-  The migration adopts defaults needed for AGP 9, but does not redesign keep
-  rules, shrinking policy, packaging, or release delivery.
-- [ ] **Compose resources are not packaged for the Android target.** The
-  `com.android.kotlin.multiplatform.library` plugin assembles
-  `composeResources/` for iOS and wasm but produces nothing for Android, so any
-  `Res.drawable.*` lookup compiles and then throws `MissingResourceException` at
-  runtime. The landing background works around this by reading the host module's
-  `res/drawable` copy through `HostBridge.backgroundDrawableResId`. Any future
-  shared resource needs the same treatment until the plugin gap is closed.
+- Rename `:composeApp` to `:shared` and extract a separate `:webApp` — the full
+  platform restructure JetBrains recommends. The current split keeps iOS and
+  wasm in `:composeApp`.
+- Extract repeated build configuration into convention plugins.
+- Audit R8 keep rules, shrinking policy, and packaging against the AGP 9
+  defaults, with release smoke testing.
 
 ## Building
 
 ### Android
 ```bash
-./gradlew assembleDebug            # debug APK → composeApp/build/outputs/apk/debug/
+./gradlew assembleDebug            # debug APK → androidApp/build/outputs/apk/debug/
 ./gradlew installDebug             # install on a connected device
 ```
+
+#### Release signing
+
+Release builds are signed with the Play upload key, which lives outside the repo.
+Create `~/key.properties` pointing at your keystore:
+
+```properties
+storeFile=/absolute/path/to/upload-keystore.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+`androidApp/build.gradle.kts` reads that file and wires it into the `release`
+build type. When it is absent — a fresh clone, or CI — release falls back to the
+debug key, which installs locally but is rejected by Play on upload.
+
+```bash
+./gradlew :androidApp:bundleRelease   # AAB → androidApp/build/outputs/bundle/release/
+```
+
+#### Foreground services and runtime permissions
+
+The Android app runs two foreground services, both declared in
+`androidApp/src/main/AndroidManifest.xml` and both declared to Google Play:
+
+| Service | Type | Purpose |
+| --- | --- | --- |
+| `PlaybackService` | `mediaPlayback` | Keeps ExoPlayer and the `MediaSession` alive for background audio, lock-screen controls, and PiP |
+| `DownloadsService` | `dataSync` | Runs user-initiated offline downloads to completion with a progress notification |
+
+`POST_NOTIFICATIONS` is a runtime permission from API 33 and is requested on
+launch by `MainActivity`. Denying it does not break playback or downloads, but
+the system silently drops both services' notifications — no lock-screen transport
+controls and no download progress.
+
+> **Note.** On Android 15+ a `dataSync` foreground service is capped at 6 hours
+> per 24, and Google steers user-initiated downloads toward user-initiated data
+> transfer jobs (`JobInfo.Builder.setUserInitiated(true)`). media3's
+> `DownloadService` is still on the older path.
+
+> **Compose resources note.** The `com.android.kotlin.multiplatform.library`
+> plugin assembles `composeResources/` for iOS and wasm but produces nothing for
+> Android, so any `Res.drawable.*` lookup compiles and then throws
+> `MissingResourceException` at runtime. The landing background works around this
+> by reading the host module's `res/drawable` copy through
+> `HostBridge.backgroundDrawableResId`. Any future shared resource needs the same
+> treatment until the plugin gap is closed.
 
 ### iOS
 ```bash
@@ -172,12 +199,15 @@ To serve the production build from a static server:
 
 ## Tests & SDK discipline
 ```bash
-./gradlew :mediakit:test                # the pure-Kotlin SDK core (JVM)
-./gradlew :composeApp:testDebugUnitTest # Robolectric unit tests (resize matrix,
-                                        # MemoryGovernor tiers, MainViewModel)
-./gradlew :mediakit:apiCheck            # binary-compatibility validation
-./gradlew :mediakit:dokkaHtml           # API docs → mediakit/build/dokka/html
-./gradlew koverXmlReport                # coverage report
+./gradlew :mediakit:jvmTest              # the pure-Kotlin SDK core (JVM)
+./gradlew :mediakit:allTests             # the same core on every target
+./gradlew :composeApp:testAndroidHostTest # Robolectric unit tests (resize matrix,
+                                         # MemoryGovernor tiers, MainViewModel,
+                                         # download-state mapping, ASR reconnect)
+./gradlew :composeApp:allTests           # adds the commonTest suites
+./gradlew :mediakit:apiCheck             # binary-compatibility validation
+./gradlew :mediakit:dokkaHtml            # API docs → mediakit/build/dokka/html
+./gradlew koverXmlReport                 # coverage report
 ```
 
 The `:mediakit` public API surface is tracked under `mediakit/api/` — accidental
@@ -220,24 +250,3 @@ Leaving `DISCORD_CLIENT_ID` empty disables the gate — the button then reports 
 sign-in is not configured rather than opening a broken authorization URL. Leaving
 `APOLLO_GUILD_ID` empty falls back to matching the guild *name* `Apollo`, which is
 convenient for a first run but not unique on Discord.
-
-## Manual Test Scenarios
-
-If you are verifying feature parity or evaluating a PR, run through these core scenarios:
-
-1. **Live Captions:** Enable CC from the player overlay and verify real-time text flows in seamlessly across platforms.
-2. **ABR Ladder & Engine Playback:**
-   - **ABR Synthesis:** The AI synthesized a ladder client-side from 4 sibling renditions. Use a network throttler to ensure the player gracefully auto-switches between 720p, 360p, 160p, and audio-only tiers. Check the debug stats overlay to confirm.
-   - **Viewport-Aware ABR (FU-5):** Verify that playing on a small device doesn't over-download the 720p stream if 360p fits the physical display perfectly.
-   - **Quality Menu:** Test manual override controls (Auto, 720p, 360p, 160p, Audio) to make sure they stick.
-   - **Orientation & Layout:** Test a 9:16 vertical video. Ensure it pillarboxes correctly in portrait mode rather than cropping awkwardly. Verify that sensor-based rotate-to-fullscreen works for landscape videos.
-3. **Scrubbing & Frame Previews:**
-   - **Scrub Previews:** Drag the seekbar and confirm a floating thumbnail bubble appears. The `PreviewFrameEngine` relies on a secondary muted player hitting the `_160p` stream. Ensure ~2s granularity.
-   - **Disk Caching (FU-2):** Scrub a video, force close the app completely, reopen, and scrub again. It should be instant because of the disk cache.
-   - **Graceful Fallback:** Scrub rapidly. If frames aren't decoded fast enough, verify it falls back to a time-only bubble.
-4. **Background, PiP, & Memory Governor (Mobile Only):**
-   - **Background Audio:** Start playback, and put the app in the background (no PiP). Ensure playback shifts down to the audio-only tier (~51kbps) to save data, and continues with a `MediaSession` notification.
-   - **Picture-in-Picture (PiP):** Enable PiP, minimize the app. Verify the PiP window shows with the correct aspect ratio (especially crucial for vertical videos) and player controls collapse properly.
-   - **Memory Governor:** Simulate Android memory pressure (`adb shell am send-trim-memory <pid> TRIM_MEMORY_CRITICAL`). Ensure background resources like the `PreviewFrameEngine` and thumbnail LRU are immediately released and the player doesn't OOM.
-5. **Live Event Verification:** Verify the jump-to-live button works, seeking is restricted to the DVR window, and that the UI seek slider doesn't infinitely "drift" forward.
-6. **Offline Downloads:** Turn off all networking. Start the app and play a downloaded event to verify it properly resolves via the local cache.
