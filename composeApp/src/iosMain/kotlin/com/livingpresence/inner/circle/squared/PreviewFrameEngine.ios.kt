@@ -54,7 +54,11 @@ class PreviewFrameEngine {
      * Synchronously fetches the frame from disk cache or AVAssetImageGenerator.
      * Must be called off the main thread.
      */
-    suspend fun getFrame(eventNumber: Int, timeMs: Long): ImageBitmap? = withContext(Dispatchers.IO) {
+    suspend fun getFrame(
+        eventNumber: Int,
+        timeMs: Long,
+        streamUrl: String = MediaKitConfig.Default.eventUrl(eventNumber),
+    ): ImageBitmap? = withContext(Dispatchers.IO) {
         val fileName = "${eventNumber}_${timeMs}.jpg"
         val fileUrl = cacheDir.URLByAppendingPathComponent(fileName)!!
 
@@ -66,8 +70,11 @@ class PreviewFrameEngine {
             }
         }
 
-        // 2. Fetch from AVAssetImageGenerator (160p stream)
-        val urlString = MediaKitConfig.Default.renditionUrl(eventNumber, RenditionTier.P160)
+        // 2. Fetch from AVAssetImageGenerator (the 160p stream where there is
+        // one; a feed extra has only its own playlist).
+        val urlString = MediaKitConfig.eventNumberIn(streamUrl)
+            ?.let { MediaKitConfig.Default.renditionUrl(it, RenditionTier.P160) }
+            ?: streamUrl
         val asset = AVURLAsset(uRL = NSURL.URLWithString(urlString)!!, options = null)
         val generator = AVAssetImageGenerator(asset).apply {
             appliesPreferredTrackTransform = true

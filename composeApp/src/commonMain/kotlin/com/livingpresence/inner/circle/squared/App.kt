@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -39,6 +41,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.savedstate.read
 import com.livingpresence.mediakit.EventInfo
+import com.livingpresence.mediakit.ExtraVideoCatalog
+import com.livingpresence.mediakit.MediaKitConfig
 
 private object AppRoute {
     const val Landing = "landing"
@@ -91,10 +95,10 @@ fun App() {
                     GalleryScreen(
                         uiState = uiState,
                         onRetry = mainViewModel::retryLoadingVideos,
-                        onPlayEvent = { eventNumber ->
-                            mainViewModel.playVideo(eventNumber)
-                            onEventClick(eventNumber) {
-                                navController.navigate(AppRoute.player(eventNumber))
+                        onPlayEvent = { event ->
+                            mainViewModel.playVideo(event.eventNumber)
+                            onEventClick(event.eventNumber) {
+                                navController.navigate(AppRoute.player(event.eventNumber))
                             }
                         },
                     )
@@ -111,10 +115,34 @@ fun App() {
                     val arguments = checkNotNull(backStackEntry.arguments)
                     val eventNumber = arguments.read { getInt(AppRoute.PlayerEventNumberArg) }
 
-                    PlatformPlayerScreen(
-                        url = getUrl(eventNumber),
-                        onClose = navController::popBackStack,
-                    )
+                    // The feed is what knows a manifest extra's URL: unlike a
+                    // numbered event, it cannot be rebuilt from the number. After
+                    // process death the back stack is restored before the feed
+                    // reloads, so wait for it rather than play the wrong stream —
+                    // and leave if the reload comes back without this entry.
+                    val event = uiState.availableEvents.firstOrNull { it.eventNumber == eventNumber }
+                    val isUnresolvedExtra =
+                        event == null && eventNumber >= ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE
+
+                    LaunchedEffect(isUnresolvedExtra, uiState.isLoadingVideos) {
+                        if (isUnresolvedExtra && !uiState.isLoadingVideos) {
+                            navController.popBackStack()
+                        }
+                    }
+
+                    if (isUnresolvedExtra) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(Color.Black),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                        }
+                    } else {
+                        PlatformPlayerScreen(
+                            url = event?.streamUrl ?: getUrl(eventNumber),
+                            onClose = navController::popBackStack,
+                        )
+                    }
                 }
             }
         }
@@ -123,7 +151,24 @@ fun App() {
 
 @Composable
 private fun rememberMainViewModel(): MainViewModel {
-    val videoRepository = remember { VideoRepository(createHttpClient()) }
+    val manifestStore = rememberManifestStore()
+    val videoRepository = remember(manifestStore) {
+        val httpClient = createHttpClient()
+        VideoRepository(
+            httpClient = httpClient,
+            // No manifest configured for this build → the feed is exactly the
+            // numbered events, with no extra request made.
+            extras = if (FeedConfig.hasExtraVideos) {
+                ExtraVideoCatalog(
+                    httpClient = httpClient,
+                    manifestUrl = FeedConfig.extraVideosManifestUrl,
+                    store = manifestStore,
+                )
+            } else {
+                null
+            },
+        )
+    }
     // NOTE: previously used lifecycle-viewmodel-compose's `viewModel()` against a
     // manual ViewModelStoreOwner. That factory requires a SavedStateRegistryOwner
     // and threw an unrecoverable exception under Kotlin/Wasm (swallowed by the
@@ -153,7 +198,7 @@ fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
 fun GalleryScreen(
     uiState: MainUiState,
     onRetry: () -> Unit,
-    onPlayEvent: (Int) -> Unit,
+    onPlayEvent: (EventInfo) -> Unit,
 ) {
     val downloadController = rememberDownloadController()
     val downloadStates by downloadController.states.collectAsState()
@@ -164,10 +209,20 @@ fun GalleryScreen(
             downloadStates.values
                 .filter { it.state == DownloadStatus.COMPLETED }
                 .map { state ->
+                    // What was downloaded is a specific rendition URL, and for an
+                    // extra it is the only way back to the stream — the feed that
+                    // named it is exactly what failed to load here.
+                    val url = state.streamUrl.ifEmpty {
+                        MediaKitConfig.Default.eventUrl(state.eventNumber)
+                    }
                     EventInfo(
                         eventNumber = state.eventNumber,
                         isLive = false,
-                        durationMs = 0L
+                        durationMs = 0L,
+                        title = MediaKitConfig.eventNumberIn(url)
+                            ?.let { "Event $it" }
+                            ?: ExtraVideoCatalog.titleFromUrl(url),
+                        streamUrl = url,
                     )
                 }
         } else {

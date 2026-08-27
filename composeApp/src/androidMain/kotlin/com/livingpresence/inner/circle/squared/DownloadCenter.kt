@@ -56,6 +56,8 @@ class DownloadCenter private constructor(
         val eventNumber: Int,
         val state: DownloadState,
         val percent: Float,
+        /** The rendition/playlist URL this download was enqueued with. */
+        val streamUrl: String,
     )
 
     enum class DownloadState { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING }
@@ -111,6 +113,7 @@ class DownloadCenter private constructor(
                 state = downloadState(download.state, isWaitingForRequirements),
                 // HLS reports C.PERCENTAGE_UNSET (-1) until the segment count is known.
                 percent = download.percentDownloaded.coerceIn(0f, 100f),
+                streamUrl = download.request.uri.toString(),
             ),
         )
     }
@@ -118,7 +121,13 @@ class DownloadCenter private constructor(
     /** Enqueue a download for [event] at [tier] (default 360p for size). */
     fun enqueue(event: EventInfo, tier: RenditionTier = RenditionTier.P360) {
         require(!event.isLive) { "Cannot download a live (unbounded) event." }
-        val url = config.renditionUrl(event.eventNumber, tier)
+        // Only numbered events have the `_360p`/`_160p`/`_aac` siblings a tier
+        // selects between; a feed extra is downloaded from its own playlist.
+        val url = if (event.hasRenditionLadder) {
+            config.renditionUrl(event.eventNumber, tier)
+        } else {
+            event.streamUrl
+        }
         val request = DownloadRequest.Builder(event.eventNumber.toString(), android.net.Uri.parse(url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .build()

@@ -94,7 +94,13 @@ private class WasmDownloadController : DownloadController {
             try {
                 _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.DOWNLOADING, 0f)) }
 
-                val masterUrl = MediaKitConfig.Default.renditionUrl(event.eventNumber, tier.toRenditionTier())
+                // A tier only means something for numbered events; a feed extra
+                // has a single playlist and is downloaded from it as-is.
+                val masterUrl = if (event.hasRenditionLadder) {
+                    MediaKitConfig.Default.renditionUrl(event.eventNumber, tier.toRenditionTier())
+                } else {
+                    event.streamUrl
+                }
                 val masterResponse = httpClient.get(masterUrl).bodyAsText()
                 val variants = PlaylistInspector.parseMaster(masterResponse)
                 val chunklistUri = variants.firstOrNull()?.uri ?: throw Exception("No variants found")

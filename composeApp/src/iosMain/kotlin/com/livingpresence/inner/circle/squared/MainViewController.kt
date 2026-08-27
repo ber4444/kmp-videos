@@ -22,6 +22,9 @@ fun mainViewController() = ComposeUIViewController {
     // disables the gate.
     DiscordConfig.clientId = info?.get("DISCORD_CLIENT_ID") as? String ?: ""
     DiscordConfig.apolloGuildId = info?.get("APOLLO_GUILD_ID") as? String ?: ""
+    // Extra videos appended to the feed, listed in a manifest hosted outside the
+    // repo. Empty → the feed is exactly the numbered events.
+    FeedConfig.extraVideosManifestUrl = info?.get("EXTRA_VIDEOS_URL") as? String ?: ""
     App()
 }
 

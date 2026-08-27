@@ -62,7 +62,10 @@ class MainViewModel(
         }
 
         viewModelScope.launch {
-            runCatching { videoRepository.loadEvents() }
+            // Pass the flag through: a pull-to-refresh has to bypass the SDK's
+            // caches (event probes, and the extras manifest's day-long TTL), or
+            // it redraws the same list it already had.
+            runCatching { videoRepository.loadEvents(forceRefresh) }
                 .onSuccess { events ->
                     _uiState.update {
                         it.copy(

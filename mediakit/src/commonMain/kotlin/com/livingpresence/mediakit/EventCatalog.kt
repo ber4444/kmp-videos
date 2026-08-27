@@ -1,15 +1,9 @@
 package com.livingpresence.mediakit
 
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.isSuccess
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlin.time.Duration
@@ -72,6 +66,8 @@ public class EventCatalog(
         require(retryBackoff >= Duration.ZERO) { "retryBackoff must be non-negative" }
     }
 
+    private val probe = PlaylistProbe(httpClient)
+
     /** The cached result and the mark captured when it was produced. */
     private var cached: List<EventInfo>? = null
     private var cachedAt: TimeMark? = null
@@ -132,99 +128,31 @@ public class EventCatalog(
      * (no retry — see [loadEvents] for the retrying path).
      */
     public suspend fun probeEvent(eventNumber: Int): EventInfo? =
-        when (val result = probeEventOnce(eventNumber)) {
-            is ProbeResult.Found -> result.info
-            ProbeResult.Missing, ProbeResult.Transient -> null
-        }
+        (probe.probe(config.eventUrl(eventNumber)) as? ProbeOutcome.Found)
+            ?.let { eventInfo(eventNumber, it) }
 
     /**
      * Probe a single event, retrying transient failures up to [maxProbeAttempts]
      * times. A 4xx "missing" outcome short-circuits to null without retrying.
+     * Exhausted retries also exclude the tile.
      */
     private suspend fun probeEventWithRetry(eventNumber: Int): EventInfo? {
-        repeat(maxProbeAttempts) { attempt ->
-            when (val result = probeEventOnce(eventNumber)) {
-                is ProbeResult.Found -> return result.info
-                ProbeResult.Missing -> return null
-                ProbeResult.Transient -> {
-                    if (attempt < maxProbeAttempts - 1 && retryBackoff > Duration.ZERO) {
-                        delay(retryBackoff)
-                    }
-                }
-            }
-        }
-        // Exhausted retries on repeated transient failures → exclude the tile.
-        return null
-    }
-
-    private suspend fun probeEventOnce(eventNumber: Int): ProbeResult {
-        val masterUrl = config.eventUrl(eventNumber)
-        println("probeEventOnce($eventNumber): fetching $masterUrl")
-        val response: HttpResponse = runCatching {
-            httpClient.get(masterUrl)
-        }.onFailure { println("probeEventOnce: master request failed: $it") }
-         .getOrElse { return ProbeResult.Transient }
-
-        // 4xx (incl. 404) = the event genuinely doesn't exist → no retry.
-        // 5xx = server-side hiccup → transient, worth a retry.
-        if (!response.status.isSuccess()) {
-            return if (response.status.value in 400..499) ProbeResult.Missing else ProbeResult.Transient
-        }
-
-        val masterText = runCatching { response.bodyAsText() }
-            .onFailure { println("probeEventOnce: master bodyAsText failed: $it") }
-            .getOrElse { return ProbeResult.Transient }
-            
-        val variants = runCatching { PlaylistInspector.parseMaster(masterText) }
-            .onFailure { println("probeEventOnce: parseMaster failed: $it") }
-            .getOrElse { return ProbeResult.Transient }
-            
-        val primary = variants.firstOrNull { !it.isIFrameOnly } ?: run {
-            println("probeEventOnce: no primary variant found in $variants")
-            return ProbeResult.Transient
-        }
-        val chunklistUrl = resolveUri(masterUrl, primary.uri)
-        println("probeEventOnce: resolved chunklist URL: $chunklistUrl")
-
-        val chunklistResponse: HttpResponse = runCatching {
-            httpClient.get(chunklistUrl)
-        }.onFailure { println("probeEventOnce: chunklist request failed: $it") }
-         .getOrElse { return ProbeResult.Transient }
-
-        if (!chunklistResponse.status.isSuccess()) {
-            println("probeEventOnce: chunklist response not success: ${chunklistResponse.status}")
-            return ProbeResult.Transient
-        }
-
-        val chunklistText = runCatching { chunklistResponse.bodyAsText() }
-            .onFailure { println("probeEventOnce: chunklist bodyAsText failed: $it") }
-            .getOrElse { return ProbeResult.Transient }
-
-        val media = runCatching { PlaylistInspector.parseMediaPlaylist(chunklistText) }
-            .onFailure { println("probeEventOnce: parseMediaPlaylist failed: $it") }
-            .getOrElse { return ProbeResult.Transient }
-            
-        println("probeEventOnce: success! isLive=${media.isLive}")
-        return ProbeResult.Found(
-            EventInfo(
-                eventNumber = eventNumber,
-                isLive = media.isLive,
-                durationMs = (media.durationSeconds * 1000).toLong(),
-            )
+        val outcome = probe.probeWithRetry(
+            masterUrl = config.eventUrl(eventNumber),
+            maxAttempts = maxProbeAttempts,
+            backoff = retryBackoff,
         )
+        return (outcome as? ProbeOutcome.Found)?.let { eventInfo(eventNumber, it) }
     }
 
-    private fun resolveUri(base: String, reference: String): String {
-        if (reference.startsWith("http://") || reference.startsWith("https://")) return reference
-        val baseDir = base.substringBeforeLast('/', "")
-        return "$baseDir/$reference"
-    }
-
-    private sealed interface ProbeResult {
-        data class Found(val info: EventInfo) : ProbeResult
-        data object Missing : ProbeResult
-        data object Transient : ProbeResult
-    }
+    private fun eventInfo(eventNumber: Int, found: ProbeOutcome.Found): EventInfo =
+        EventInfo(
+            eventNumber = eventNumber,
+            isLive = found.isLive,
+            durationMs = found.durationMs,
+            title = "Event $eventNumber",
+            streamUrl = config.eventUrl(eventNumber),
+        )
 
     public companion object {
         /** Bound parallelism to ~5 concurrent probes. */

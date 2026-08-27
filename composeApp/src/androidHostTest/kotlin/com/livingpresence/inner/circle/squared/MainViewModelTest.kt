@@ -58,7 +58,7 @@ class MainViewModelTest {
         val events = listOf(EventInfo(eventNumber = 1, isLive = false, durationMs = 1_000))
         var loadCount = 0
         val repo = object : VideoRepository(FakeHttpClient) {
-            override suspend fun loadEvents(): List<EventInfo> {
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> {
                 loadCount++
                 return events
             }
@@ -78,7 +78,7 @@ class MainViewModelTest {
         val events = listOf(EventInfo(eventNumber = 1, isLive = false, durationMs = 1_000))
         var loadCount = 0
         val repo = object : VideoRepository(FakeHttpClient) {
-            override suspend fun loadEvents(): List<EventInfo> {
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> {
                 loadCount++
                 return events
             }
@@ -93,7 +93,7 @@ class MainViewModelTest {
 
     private fun videoRepositoryWith(events: List<EventInfo>): VideoRepository =
         object : VideoRepository(FakeHttpClient) {
-            override suspend fun loadEvents(): List<EventInfo> = events
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> = events
         }
 }
 
