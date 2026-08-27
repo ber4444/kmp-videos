@@ -9,11 +9,11 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
-import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
 import com.livingpresence.mediakit.EventInfo
 import com.livingpresence.mediakit.MediaKitConfig
@@ -25,8 +25,7 @@ private const val DOWNLOAD_CONTENT_DIR = "media_downloads"
 
 /**
  * Offline downloads: a [DownloadManager] + [SimpleCache] backed by
- * [WorkManagerScheduler] (so unmet-requirement restarts go through WorkManager),
- * with [Requirements.NETWORK_UNMETERED] = wifi-only.
+ * [DownloadsService] (so unmet-requirement restarts go through WorkManager).
  *
  * Eligibility: only bounded (non-live) events are downloadable — a live window's
  * playlist has no `#EXT-X-ENDLIST`, so it isn't a finite download. Live events
@@ -39,6 +38,11 @@ private const val DOWNLOAD_CONTENT_DIR = "media_downloads"
  * The cache is shared with playback via [cacheDataSourceFactory], so a
  * downloaded event plays straight from disk (airplane-mode playback is the
  * acceptance test).
+ *
+ * Network policy: downloads only need *a* connected network by default, matching
+ * playback — the same 360p bytes cost the same whether streamed or stored. Call
+ * [setWifiOnly] to restrict them to unmetered networks; while a requirement is
+ * unmet the UI reports [DownloadState.WAITING] rather than a silent 0%.
  */
 @UnstableApi
 class DownloadCenter private constructor(
@@ -54,23 +58,61 @@ class DownloadCenter private constructor(
         val percent: Float,
     )
 
-    enum class DownloadState { QUEUED, DOWNLOADING, COMPLETED, FAILED, REMOVING }
+    enum class DownloadState { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING }
 
-    /** Snapshot of all known download states, keyed by event number. */
-    fun snapshot(): Map<Int, EventDownloadState> {
+    /** True while downloads are held back solely because a [Requirements] flag is unmet. */
+    val isWaitingForRequirements: Boolean
+        get() = downloadManager.notMetRequirements != 0
+
+    /**
+     * Restrict downloads to unmetered (Wi-Fi) networks, or allow any connected
+     * network. Applies to every queued and in-flight download immediately.
+     */
+    fun setWifiOnly(wifiOnly: Boolean) {
+        downloadManager.requirements = requirementsFor(wifiOnly)
+    }
+
+    /**
+     * Snapshot of all known download states, keyed by event number.
+     *
+     * Terminal states (completed / failed) live only in the persisted index;
+     * in-flight downloads come from [DownloadManager.getCurrentDownloads], whose
+     * `Download.progress` is the live object the download task mutates. Reading
+     * progress from the index alone would report whatever percentage was last
+     * flushed to SQLite — 0% for the first five seconds of every download, and
+     * 0% forever for anything that never leaves the queue.
+     */
+    fun snapshot(): Map<Int, EventDownloadState> = indexSnapshot() + activeSnapshot()
+
+    /** Persisted download index (SQLite). Includes terminal states; progress is stale. */
+    fun indexSnapshot(): Map<Int, EventDownloadState> {
         val result = mutableMapOf<Int, EventDownloadState>()
-        val cursor = downloadManager.downloadIndex.getDownloads()
-        while (cursor.moveToNext()) {
-            val download = cursor.download
-            val eventNumber = download.request.id.toIntOrNull() ?: continue
-            result[eventNumber] = EventDownloadState(
-                eventNumber = eventNumber,
-                state = download.toUiState(),
-                percent = download.percentDownloaded.coerceIn(0f, 100f),
-            )
-        }
-        cursor.close()
+        runCatching {
+            downloadManager.downloadIndex.getDownloads().use { cursor ->
+                while (cursor.moveToNext()) result.putState(cursor.download)
+            }
+        }.onFailure { Log.w(TAG, "Could not read the download index.", it) }
         return result
+    }
+
+    /** In-flight (non-terminal) downloads, held in memory with live progress. */
+    fun activeSnapshot(): Map<Int, EventDownloadState> {
+        val result = mutableMapOf<Int, EventDownloadState>()
+        downloadManager.currentDownloads.forEach { result.putState(it) }
+        return result
+    }
+
+    private fun MutableMap<Int, EventDownloadState>.putState(download: Download) {
+        val eventNumber = download.request.id.toIntOrNull() ?: return
+        put(
+            eventNumber,
+            EventDownloadState(
+                eventNumber = eventNumber,
+                state = downloadState(download.state, isWaitingForRequirements),
+                // HLS reports C.PERCENTAGE_UNSET (-1) until the segment count is known.
+                percent = download.percentDownloaded.coerceIn(0f, 100f),
+            ),
+        )
     }
 
     /** Enqueue a download for [event] at [tier] (default 360p for size). */
@@ -80,12 +122,33 @@ class DownloadCenter private constructor(
         val request = DownloadRequest.Builder(event.eventNumber.toString(), android.net.Uri.parse(url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .build()
-        downloadManager.addDownload(request)
+        // Go through the service so it comes up in the foreground: a plain
+        // addDownload() leaves the work in a background service the platform stops
+        // shortly after the app stops being visible, stranding the download.
+        val sent = runCatching {
+            DownloadService.sendAddDownload(
+                context,
+                DownloadsService::class.java,
+                request,
+                /* foreground= */ true,
+            )
+        }.onFailure { Log.w(TAG, "Foreground download start refused; enqueueing directly.", it) }
+            .isSuccess
+        if (!sent) downloadManager.addDownload(request)
     }
 
     /** Remove a downloaded event from the cache + index. */
     fun remove(eventNumber: Int) {
-        downloadManager.removeDownload(eventNumber.toString())
+        val sent = runCatching {
+            DownloadService.sendRemoveDownload(
+                context,
+                DownloadsService::class.java,
+                eventNumber.toString(),
+                /* foreground= */ false,
+            )
+        }.onFailure { Log.w(TAG, "Download removal via service refused; removing directly.", it) }
+            .isSuccess
+        if (!sent) downloadManager.removeDownload(eventNumber.toString())
     }
 
     /** A [CacheDataSource.Factory] that prefers the download cache, then HTTP. */
@@ -104,6 +167,30 @@ class DownloadCenter private constructor(
             instance ?: synchronized(this) {
                 instance ?: create(context, config).also { instance = it }
             }
+
+        /**
+         * Maps a media3 [Download.STATE_*] to the UI-facing [DownloadState].
+         *
+         * A queued download whose [Requirements] are unmet is reported as
+         * [DownloadState.WAITING]: it will not make progress until the device is
+         * back on an acceptable network, and rendering it as "0%" is
+         * indistinguishable from a download that has stalled.
+         */
+        internal fun downloadState(
+            state: Int,
+            isWaitingForRequirements: Boolean,
+        ): DownloadState = when (state) {
+            Download.STATE_DOWNLOADING -> DownloadState.DOWNLOADING
+            Download.STATE_COMPLETED -> DownloadState.COMPLETED
+            Download.STATE_FAILED -> DownloadState.FAILED
+            Download.STATE_REMOVING -> DownloadState.REMOVING
+            // QUEUED / RESTARTING / STOPPED: nothing is being transferred yet.
+            else -> if (isWaitingForRequirements) DownloadState.WAITING else DownloadState.QUEUED
+        }
+
+        private fun requirementsFor(wifiOnly: Boolean) = Requirements(
+            if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK,
+        )
 
         @UnstableApi
         private fun create(context: Context, config: MediaKitConfig): DownloadCenter {
@@ -128,9 +215,13 @@ class DownloadCenter private constructor(
                 dataSourceFactory,
                 /* executor = */ java.util.concurrent.Executors.newSingleThreadExecutor(),
             ).apply {
-                // Wifi-only (unmetered); WorkManager restarts the service when the
-                // requirement is later met (after process death too).
-                requirements = Requirements(Requirements.NETWORK_UNMETERED)
+                requirements = requirementsFor(WIFI_ONLY_DEFAULT)
+                // DownloadManager is constructed paused and is normally resumed by
+                // DownloadService.onCreate. Resume it here too: if that service start
+                // is ever refused (a background start on API 26+, say), every
+                // download would otherwise sit in STATE_QUEUED at 0% for the life of
+                // the process. resumeDownloads() is idempotent.
+                resumeDownloads()
             }
 
             return DownloadCenter(
@@ -139,31 +230,17 @@ class DownloadCenter private constructor(
                 downloadManager = downloadManager,
                 cache = cache,
             ).also {
-                // Start the foreground service so pending downloads resume; it owns
-                // the WorkManagerScheduler so requirement-based restarts route
-                // through WorkManager (survives process death).
+                // Start the service so pending downloads resume and media3 registers
+                // its DownloadManagerHelper — the helper is what brings the service
+                // back to the foreground when a download later changes state.
                 runCatching {
-                    androidx.media3.exoplayer.offline.DownloadService.start(
-                        appContext,
-                        DownloadsService::class.java,
-                    )
-                }
+                    DownloadService.start(appContext, DownloadsService::class.java)
+                }.onFailure { t -> Log.w(TAG, "Could not start the download service.", t) }
             }
         }
 
-        private const val DOWNLOAD_WORK_ID = "ics-download-work"
+        /** Downloads cost the same bytes as streaming, so any connected network is fine. */
+        private const val WIFI_ONLY_DEFAULT = false
         private const val MAX_CACHE_BYTES = 1L * 1024 * 1024 * 1024 // 1 GB
     }
-}
-
-/** Maps a media3 [Download.STATE_*] to the UI-facing [DownloadCenter.DownloadState]. */
-@UnstableApi
-private fun Download.toUiState(): DownloadCenter.DownloadState = when (state) {
-    Download.STATE_QUEUED -> DownloadCenter.DownloadState.QUEUED
-    Download.STATE_DOWNLOADING -> DownloadCenter.DownloadState.DOWNLOADING
-    Download.STATE_COMPLETED -> DownloadCenter.DownloadState.COMPLETED
-    Download.STATE_FAILED -> DownloadCenter.DownloadState.FAILED
-    Download.STATE_REMOVING -> DownloadCenter.DownloadState.REMOVING
-    Download.STATE_RESTARTING -> DownloadCenter.DownloadState.QUEUED
-    else -> DownloadCenter.DownloadState.QUEUED
 }

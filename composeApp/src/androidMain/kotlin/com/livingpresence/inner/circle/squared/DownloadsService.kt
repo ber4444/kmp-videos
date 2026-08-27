@@ -8,6 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadService
+import androidx.media3.exoplayer.scheduler.Requirements
 import androidx.media3.exoplayer.scheduler.Scheduler
 import androidx.media3.exoplayer.workmanager.WorkManagerScheduler
 
@@ -37,13 +38,27 @@ class DownloadsService : DownloadService(FOREGROUND_NOTIFICATION_ID) {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Downloading events")
             .setOngoing(true)
-        if (downloads.isNotEmpty()) {
-            val active = downloads.count {
-                it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED
+        val running = downloads.filter { it.state == Download.STATE_DOWNLOADING }
+        when {
+            notMetRequirements != 0 -> builder.setContentText(
+                if (notMetRequirements and Requirements.NETWORK_UNMETERED != 0) {
+                    "Waiting for Wi-Fi"
+                } else {
+                    "Waiting for a network connection"
+                },
+            )
+            running.isNotEmpty() -> {
+                builder.setContentText("${running.size} event(s) downloading")
+                // A single download gets a real progress bar; several get an
+                // indeterminate one, since media3 reports progress per download.
+                val percent = running.singleOrNull()?.percentDownloaded
+                if (percent != null && percent >= 0f) {
+                    builder.setProgress(100, percent.toInt(), /* indeterminate= */ false)
+                } else {
+                    builder.setProgress(0, 0, /* indeterminate= */ true)
+                }
             }
-            builder.setContentText("$active event(s) downloading")
-        } else if (notMetRequirements != 0) {
-            builder.setContentText("Waiting for Wi-Fi")
+            downloads.isNotEmpty() -> builder.setContentText("${downloads.size} event(s) queued")
         }
         return builder.build()
     }
