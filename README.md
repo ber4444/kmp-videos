@@ -5,13 +5,10 @@ recorded HLS event streams, built on **Media3/ExoPlayer** (Android) and
 **AVPlayer** (iOS) with a standalone KMP playback SDK (`:mediakit`).
 
 **Live on Google Play:**
-[com.livingpresence.inner.circle.squared](https://play.google.com/store/apps/details?id=com.livingpresence.inner.circle.squared)
+[Apollo Videos](https://play.google.com/store/apps/details?id=com.livingpresence.inner.circle.squared)
 
 It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 *unadvertised* sibling renditions into a genuine client-side ABR ladder.
-
-> 📐 The full design — ground-truth server measurements and the rationale
-> behind each decision — lives in [`plan.md`](./plan.md).
 
 ## Features
 
