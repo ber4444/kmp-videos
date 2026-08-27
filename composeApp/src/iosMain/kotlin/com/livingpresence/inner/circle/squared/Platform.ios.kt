@@ -303,7 +303,6 @@ actual fun PlatformPlayerScreen(
                 // them across the middle of the picture.
                 val captionBottomDp = captionBottomInsetDp(
                     controlsBarHeightDp = with(LocalDensity.current) { bottomBarHeightPx.toDp() }.value,
-                    controlsVisible = true,
                 )
                 CaptionOverlay(
                     captions = captionController.captions,

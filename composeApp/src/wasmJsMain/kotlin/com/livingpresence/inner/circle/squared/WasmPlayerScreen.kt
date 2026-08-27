@@ -176,9 +176,9 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     var topBarBottomPx by remember { mutableStateOf(0f) }
     var bottomBarTopPx by remember { mutableStateOf(0f) }
     var bottomBarHeightPx by remember { mutableStateOf(0f) }
-    // Black strip (CSS px) reserved above the controls for captions when CC is on:
-    // three caption lines plus the strip's own padding and the gap above the controls.
-    val captionStripCss = 88.0
+    // Black strip (CSS px) reserved above the controls for captions when CC is on: the
+    // overlay's two caption rows plus its own padding and the gap above the controls.
+    val captionStripCss = 72.0
 
     // Scrub Preview State
     var isScrubbing by remember { mutableStateOf(false) }
@@ -410,10 +410,7 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
             // Sit the captions at the bottom of the player, in the reserved black strip
             // just above the control bar — lifted by the bar's own measured height so
             // they never overlap the controls or hide behind the video.
-            val captionBottomDp = captionBottomInsetDp(
-                controlsBarHeightDp = bottomBarHeightPx / density,
-                controlsVisible = true,
-            )
+            val captionBottomDp = captionBottomInsetDp(controlsBarHeightDp = bottomBarHeightPx / density)
             CaptionOverlay(
                 captions = captionController.captions,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = captionBottomDp.dp)

@@ -7,7 +7,6 @@ import com.livingpresence.inner.circle.squared.transcription.TranscriptionProvid
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -257,9 +256,6 @@ private fun ExoPlayerScreen(
     var thumbCenterRootX by remember { mutableFloatStateOf(0f) }
     var controlsBoxRootX by remember { mutableFloatStateOf(0f) }
     var controlsBoxWidthPx by remember { mutableFloatStateOf(0f) }
-    // Measured height of the bottom control bar, so captions can ride just above it
-    // while it is on screen instead of guessing a fixed lift (see [captionBottomInsetDp]).
-    var bottomBarHeightPx by remember { mutableFloatStateOf(0f) }
 
     val duration = state.duration
     val scrubTargetPositionMs by remember(state, isScrubbing, sliderFraction, duration) {
@@ -434,7 +430,6 @@ private fun ExoPlayerScreen(
                             },
                             onClose = closePlayer,
                             onThumbCenterXChanged = { thumbCenterRootX = it },
-                            onBottomBarHeightChanged = { bottomBarHeightPx = it },
                             topRightControls = {
                                 PlayerTopRightControls(
                                     captionController = captionController,
@@ -495,23 +490,19 @@ private fun ExoPlayerScreen(
                     )
                 }
 
-                // Phase 8: rolling transcription captions along the bottom of the video.
-                // The lift tracks the control bar's measured height so the text stays at
-                // the bottom edge once the controls fade out — a fixed lift landed
-                // mid-picture in landscape, where the player is only a few hundred dp tall.
-                if (captionController.enabled) {
-                    val captionBottomDp by animateDpAsState(
-                        targetValue = captionBottomInsetDp(
-                            controlsBarHeightDp = with(LocalDensity.current) { bottomBarHeightPx.toDp() }.value,
-                            controlsVisible = showVideoControls,
-                        ).dp,
-                        label = "captionBottomInset",
-                    )
+                // Phase 8: rolling transcription captions along the bottom edge of the video.
+                // They yield the bottom of the frame to the controls: while those are up the
+                // captions cross-fade out entirely rather than fighting them for the space,
+                // and they come back at the edge as soon as the controls hide again.
+                AnimatedVisibility(
+                    visible = captionController.enabled && !showVideoControls,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
                     CaptionOverlay(
                         captions = captionController.captions,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = captionBottomDp),
+                        modifier = Modifier.padding(bottom = CAPTION_EDGE_INSET_DP.dp),
                     )
                 }
             }
