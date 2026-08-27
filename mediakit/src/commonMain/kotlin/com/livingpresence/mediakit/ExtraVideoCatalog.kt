@@ -63,7 +63,7 @@ public class InMemoryManifestStore : ManifestStore {
  * One video per line, URL first, with an optional title after it:
  * ```
  * # comments and blank lines are ignored
- * https://host/vod/thudin-8-20-26/playlist.m3u8?DVR   Thudin, Aug 20
+ * https://host/vod/a-recording-8-20-26/playlist.m3u8?DVR   A Recording, Aug 20
  * https://host/vod/some-other-talk/playlist.m3u8?DVR
  * ```
  * A line with no title gets one derived from its URL path. Duplicate URLs are
@@ -226,7 +226,7 @@ public class ExtraVideoCatalog(
 
         /**
          * A readable label for a URL with no title in the manifest:
-         * `…/vod/thudin-8-20-26/playlist.m3u8?DVR` → `Thudin 8 20 26`.
+         * `…/vod/a-recording-8-20-26/playlist.m3u8?DVR` → `A recording 8 20 26`.
          */
         public fun titleFromUrl(url: String): String {
             val path = url.substringBefore('?').substringBefore('#')

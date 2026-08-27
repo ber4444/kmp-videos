@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.hours
 class ExtraVideoCatalogTest {
 
     private val manifestUrl = "https://gist.test/raw/extras.txt"
-    private val videoUrl = "https://test.local/vod/thudin-8-20-26/playlist.m3u8?DVR"
+    private val videoUrl = "https://test.local/vod/a-recording-8-20-26/playlist.m3u8?DVR"
 
     // ---- Manifest parsing ---------------------------------------------------
 
@@ -47,18 +47,18 @@ class ExtraVideoCatalogTest {
     fun parseManifest_takesTitleAfterTheUrl() {
         val videos = ExtraVideoCatalog.parseManifest(
             """
-            $videoUrl   Thudin, Aug 20
+            $videoUrl   A Recording, Aug 20
             https://test.local/vod/two/playlist.m3u8?DVR | Piped Title
             """.trimIndent()
         )
 
-        assertEquals(listOf("Thudin, Aug 20", "Piped Title"), videos.map { it.title })
+        assertEquals(listOf("A Recording, Aug 20", "Piped Title"), videos.map { it.title })
     }
 
     @Test
     fun parseManifest_derivesTitleFromUrlWhenAbsent() {
         val videos = ExtraVideoCatalog.parseManifest(videoUrl)
-        assertEquals("Thudin 8 20 26", videos.single().title)
+        assertEquals("A recording 8 20 26", videos.single().title)
     }
 
     @Test

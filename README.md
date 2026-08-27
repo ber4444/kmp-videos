@@ -233,8 +233,8 @@ it; `#` comments and blank lines are ignored. `docs/extra-videos.example.txt` is
 a copyable starting point:
 
 ```
-https://stream-host.example:443/vod/thudin-8-20-26/playlist.m3u8?DVR   Thudin, Aug 20
-https://stream-host.example:443/vod/another-recording/playlist.m3u8?DVR
+https://your-stream-host.example/vod/a-recording-8-20-26/playlist.m3u8?DVR   A Recording, Aug 20
+https://your-stream-host.example/vod/another-recording/playlist.m3u8?DVR
 ```
 
 Each URL is probed exactly like an event, so extras get the same LIVE badge,

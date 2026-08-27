@@ -13,9 +13,12 @@
 # Editing the gist is enough — no app release is needed. A change reaches a
 # device within a day, or immediately on pull-to-refresh.
 #
+# The URLs above are placeholders on purpose: the real list belongs in the gist,
+# not in this repository.
+#
 # NOTE: a secret gist is unlisted, not private. Anyone with the raw URL can read
 # it, and that URL ships inside the app. Keep genuinely private recordings behind
 # signed URLs or a backend that authorizes each viewer.
 
-https://stream-host.example:443/vod/thudin-8-20-26/playlist.m3u8?DVR   Thudin, Aug 20
-https://stream-host.example:443/vod/another-recording/playlist.m3u8?DVR
+https://your-stream-host.example/vod/a-recording-8-20-26/playlist.m3u8?DVR   A Recording, Aug 20
+https://your-stream-host.example/vod/another-recording/playlist.m3u8?DVR
