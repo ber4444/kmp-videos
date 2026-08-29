@@ -51,7 +51,14 @@ class MainActivity : ComponentActivity() {
 
     private val trimCallback = object : ComponentCallbacks2 {
         override fun onConfigurationChanged(newConfig: Configuration) {}
+
+        // `onLowMemory` and TRIM_MEMORY_COMPLETE were both deprecated in API 35,
+        // where the platform stopped raising them — but minSdk is 23 and the
+        // override is abstract, so this stays as the pre-35 signal. See the level
+        // mapping in MemoryGovernor for the whole story.
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
         override fun onLowMemory() = HostBridge.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+
         override fun onTrimMemory(level: Int) = HostBridge.onTrimMemory(level)
     }
 
