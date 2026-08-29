@@ -55,6 +55,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 | Feature | Android | iOS | Web (Wasm) |
 | :--- | :---: | :---: | :---: |
 | **Live STT Captions** (Deepgram/Soniox WebSockets) | ✅ | ✅ | ✅ |
+| **Device-Language Captions** (Soniox in-band translation) | ✅ | ✅ | ✅ |
 | **ABR Ladder Synthesis** (from sibling renditions) | ✅ | ✅ | ✅ |
 | **Viewport-Aware ABR** (auto-caps to screen size) | ✅ | ✅ | ✅ |
 | **Manual Quality Override** (Auto, 720p, audio, etc) | ✅ | ✅ | ✅ |
@@ -79,6 +80,14 @@ normalized WER; 0.77 vs 0.49 Entity F1), which is why the app ships Soniox as it
 preferred provider. Run [`eval/run_eval.sh`](./eval/run_eval.sh) to regenerate the scorecard at
 `eval/reports/scorecard.md` (generated output, not checked in); see
 [`eval/README.md`](./eval/README.md) for the methodology.
+
+Soniox also decides the caption *language*. The events are spoken in English, but Soniox
+translates in-band — translated tokens arrive on the same websocket, chunk by chunk, at no
+extra cost — so the captions are written in whatever language the device is set to: a
+Russian phone reads Russian off the same English audio, with no second service in the path.
+The locale is resolved per session and falls back to untranslated English when the device
+already speaks English or is set to one of the few languages Soniox does not cover.
+Deepgram's streaming API has no translation, so it stays English-only.
 
 ## Architecture
 

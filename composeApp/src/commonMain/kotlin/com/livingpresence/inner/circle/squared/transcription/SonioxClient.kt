@@ -19,6 +19,14 @@ import kotlinx.serialization.json.Json
  * the config handshake, the keepalive, the `finalize` on end-of-stream, and Soniox's
  * token protocol.
  *
+ * **Translation.** Given a [translateTo] language, the config frame asks for one-way
+ * translation and the captions arrive in that language instead of the spoken one — the
+ * streams are in English, so a Russian device reads Russian off the same English audio.
+ * It costs nothing extra and adds no service to the path: Soniox emits translated tokens
+ * on this same socket, chunk by chunk, without waiting for a sentence to end. The catch is
+ * that it emits the *originals* too — see [selectCaptionText]. [CaptionLanguage] picks the
+ * language; null leaves the stream untranslated.
+ *
  * **Idle timeouts.** Soniox closes a stream that receives neither audio nor a keepalive
  * for more than ~20 s, reporting `error_message: "Request timeout"` — which a paused video,
  * or any gap in the platform audio tap, reaches easily. [idleFrame] sends the documented
@@ -34,7 +42,14 @@ class SonioxClient(
     apiKey: () -> String,
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),
-) : WebSocketTranscriber(apiKey, json = Json { ignoreUnknownKeys = true; encodeDefaults = true }) {
+    private val translateTo: String? = null,
+) : WebSocketTranscriber(
+    apiKey,
+    // encodeDefaults so the config frame carries the model/format fields Soniox needs;
+    // explicitNulls=false so the optional `translation` block is *absent* rather than
+    // null when captions aren't being translated.
+    json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false },
+) {
 
     override val providerName = "Soniox"
 
@@ -57,6 +72,7 @@ class SonioxClient(
             apiKey = apiKey,
             sampleRate = sampleRate,
             languageHints = languageHints,
+            translation = translateTo?.let { SonioxTranslation(targetLanguage = it) },
         )
         ws.sendText(json.encodeToString(config))
     }
@@ -89,18 +105,16 @@ class SonioxClient(
             failSession("Soniox: ${resp.errorMessage}")
             return
         }
-        val partial = StringBuilder()
-        for (token in resp.tokens) {
-            if (token.isFinal) lineBuffer.append(token.text) else partial.append(token.text)
-        }
+        val caption = selectCaptionText(resp.tokens, translating = translateTo != null)
+        lineBuffer.append(caption.finalized)
         val line = lineBuffer.toString()
         val committed = line.isNotBlank() &&
-            (line.trimEnd().let { it.endsWith(".") || it.endsWith("?") || it.endsWith("!") } || line.length > 80)
+            (line.trimEnd().lastOrNull() in SENTENCE_ENDINGS || line.length > MAX_LINE_CHARS)
         if (committed) {
             accumulator.appendFinal(line)
             lineBuffer.clear()
         } else {
-            accumulator.setPartial(line + partial.toString())
+            accumulator.setPartial(line + caption.partial)
         }
     }
 
@@ -112,6 +126,18 @@ class SonioxClient(
         @SerialName("sample_rate") val sampleRate: Int,
         @SerialName("num_channels") val numChannels: Int = 1,
         @SerialName("language_hints") val languageHints: List<String> = listOf("en"),
+        val translation: SonioxTranslation? = null,
+    )
+
+    /**
+     * One-way translation: everything Soniox hears is rendered into [targetLanguage],
+     * whatever language it was spoken in. (The two-way mode is for conversations, where
+     * each side is translated into the other's language.)
+     */
+    @Serializable
+    private data class SonioxTranslation(
+        val type: String = "one_way",
+        @SerialName("target_language") val targetLanguage: String,
     )
 
     @Serializable
@@ -122,9 +148,49 @@ class SonioxClient(
         @SerialName("error_message") val errorMessage: String? = null,
     )
 
-    @Serializable
-    private data class SonioxToken(
-        val text: String = "",
-        @SerialName("is_final") val isFinal: Boolean = false,
-    )
+    private companion object {
+        /**
+         * Sentence terminators across the languages captions can now be written in: the
+         * Latin trio, their full-width CJK forms, the Arabic question mark and the Urdu
+         * full stop, and the Devanagari danda. Without these a Japanese or Hindi caption
+         * would never hit a boundary and would only commit on [MAX_LINE_CHARS].
+         */
+        val SENTENCE_ENDINGS = setOf('.', '?', '!', '。', '？', '！', '؟', '۔', '।')
+
+        /** Hard cap so a speaker who never pauses still gets committed lines. */
+        const val MAX_LINE_CHARS = 80
+    }
 }
+
+/** One result frame's text, split into what can be committed and the tail still being revised. */
+internal data class SonioxCaption(val finalized: String, val partial: String)
+
+@Serializable
+internal data class SonioxToken(
+    val text: String = "",
+    @SerialName("is_final") val isFinal: Boolean = false,
+    /** `"original"` or `"translation"`; absent when the session isn't translating. */
+    @SerialName("translation_status") val translationStatus: String? = null,
+)
+
+/**
+ * Picks the tokens that belong in the caption and splits them into finalized text and the
+ * still-changing tail.
+ *
+ * With translation on, Soniox sends the original *and* the translation over the same socket,
+ * interleaved and distinguished only by `translation_status` — so treating every token as
+ * caption text would splice English and Russian into a single line. When [translating],
+ * only translated tokens are captions; otherwise no token carries the field and all of them
+ * are.
+ */
+internal fun selectCaptionText(tokens: List<SonioxToken>, translating: Boolean): SonioxCaption {
+    val finalized = StringBuilder()
+    val partial = StringBuilder()
+    for (token in tokens) {
+        if (translating && token.translationStatus != TRANSLATION_STATUS_TRANSLATION) continue
+        if (token.isFinal) finalized.append(token.text) else partial.append(token.text)
+    }
+    return SonioxCaption(finalized.toString(), partial.toString())
+}
+
+private const val TRANSLATION_STATUS_TRANSLATION = "translation"
