@@ -143,7 +143,11 @@ fun PlayerControlsOverlay(
                     FilledTonalButton(
                         onClick = onJumpToLive,
                         colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.22f)
+                            containerColor = Color.White.copy(alpha = 0.22f),
+                            // Without this the label keeps the theme's
+                            // onSecondaryContainer, which over a translucent white
+                            // pill on video reads as a disabled button.
+                            contentColor = Color.White,
                         )
                     ) {
                         Text("Jump to live")

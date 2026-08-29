@@ -39,6 +39,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +63,7 @@ import androidx.compose.ui.res.painterResource as androidPainterResource
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.hls.playlist.HlsPlaylistTracker
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
@@ -132,7 +134,14 @@ actual fun PlatformPlayerScreen(
     val ladderResolver = remember(httpClient) { LadderResolver(httpClient, MediaKitConfig.Default) }
     var itemResult by remember(url) { mutableStateOf<LadderMediaSourceBuilder.ItemResult?>(null) }
 
-    LaunchedEffect(url) {
+    // Bumped to resolve the ladder again from scratch. Re-resolving is what
+    // recovery actually requires: the synthesized playlist pins Wowza's
+    // per-session `w` chunklist token, so once an event's session ends that URL
+    // is dead for good and re-preparing the same media item just replays the
+    // failure. Re-reading the master playlist picks up the current token.
+    var reloadToken by remember(url) { mutableIntStateOf(0) }
+
+    LaunchedEffect(url, reloadToken) {
         itemResult = if (eventNumber != null) {
             runCatching { mediaSourceBuilder.resolveForEvent(eventNumber, ladderResolver) }
                 .getOrNull()
@@ -154,6 +163,8 @@ actual fun PlatformPlayerScreen(
         resolvedMediaItemUri = resolvedItem.mediaItemUri,
         url = url,
         eventNumber = eventNumber,
+        reloadToken = reloadToken,
+        onReload = { reloadToken += 1 },
         onClose = onClose,
     )
 }
@@ -165,6 +176,8 @@ private fun ExoPlayerScreen(
     resolvedMediaItemUri: String,
     url: String,
     eventNumber: Int?,
+    reloadToken: Int,
+    onReload: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -200,7 +213,9 @@ private fun ExoPlayerScreen(
     // directly and never reaches [closePlayer], leaving audio running.
     androidx.activity.compose.BackHandler(onBack = closePlayer)
 
-    LaunchedEffect(player, resolvedMediaItemUri) {
+    // [reloadToken] is a key so a reload re-prepares even when re-resolving
+    // handed back the same URI (a probe failure falls back to the plain URL).
+    LaunchedEffect(player, resolvedMediaItemUri, reloadToken) {
         val item = playbackMediaItem(resolvedMediaItemUri)
         player.setMediaItem(item)
         player.prepare()
@@ -534,7 +549,7 @@ private fun ExoPlayerScreen(
         if (playbackError != null) {
             PlayerErrorOverlay(
                 error = playbackError,
-                onRetry = { player.prepare(); player.play() },
+                onRetry = onReload,
                 onClose = closePlayer,
             )
         }
@@ -631,13 +646,36 @@ private fun PlayerLoadingState(onClose: () -> Unit) {
 
 
 
+/**
+ * True when the HLS playlist tracker gave up on a live playlist rather than
+ * hitting a genuine failure.
+ *
+ * A finished live event is the ordinary cause: the encoder stops, Wowza leaves
+ * the last chunklist in place without an `#EXT-X-ENDLIST`, and the tracker —
+ * which must keep reloading a playlist that has no end tag — raises
+ * `PlaylistStuckException` once the snapshot has been unchanged for 3.5x the
+ * target duration. `PlaylistResetException` is the same story with the media
+ * sequence restarting underneath us. Neither is broken playback, so neither
+ * should be reported as one.
+ */
+private val PlaybackException.isLiveStreamOver: Boolean
+    get() = generateSequence(cause) { it.cause }.any {
+        it is HlsPlaylistTracker.PlaylistStuckException ||
+            it is HlsPlaylistTracker.PlaylistResetException
+    }
+
 @Composable
 private fun PlayerErrorOverlay(
     error: PlaybackException,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Log.e(APP_TAG, "Playback error", error)
+    val liveStreamOver = error.isLiveStreamOver
+    if (liveStreamOver) {
+        Log.i(APP_TAG, "Live playlist stopped updating; the event has most likely ended.")
+    } else {
+        Log.e(APP_TAG, "Playback error", error)
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -647,17 +685,24 @@ private fun PlayerErrorOverlay(
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
         Text(
-            text = "Playback error",
+            text = if (liveStreamOver) "This live event has ended" else "Playback error",
             color = Color.White,
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = error.errorCodeName + ": " + (error.message ?: ""),
+            text = if (liveStreamOver) {
+                "The stream stopped publishing new video."
+            } else {
+                error.errorCodeName + ": " + (error.message ?: "")
+            },
             color = Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onRetry) { Text("Retry") }
+            Button(onClick = onRetry) {
+                Text(if (liveStreamOver) "Reload" else "Retry")
+            }
+            TextButton(onClick = onClose) { Text("Close") }
         }
     }
 }

@@ -160,12 +160,31 @@ class DownloadCenter private constructor(
         if (!sent) downloadManager.removeDownload(eventNumber.toString())
     }
 
-    /** A [CacheDataSource.Factory] that prefers the download cache, then HTTP. */
+    /**
+     * A read-only [CacheDataSource.Factory] that prefers the download cache,
+     * then HTTP.
+     *
+     * Read-only is load-bearing, not an optimization. A live event's chunklist
+     * has no `#EXT-X-ENDLIST`, so [androidx.media3.exoplayer.hls.playlist.DefaultHlsPlaylistTracker]
+     * reloads it every target duration to discover new segments. If playback is
+     * allowed to write, the first reload caches the chunklist under its URL and
+     * every reload after that replays those same bytes — the snapshot never
+     * changes, and once it has been unchanged for 3.5x the target duration the
+     * tracker fails the source with `PlaylistStuckException`. The stale entry
+     * outlives the player, so retrying just reproduces it.
+     *
+     * Writing is therefore left to [DownloadManager], which is the only thing
+     * that should be populating this cache: downloaded events still play from
+     * disk (airplane-mode playback is the acceptance test), while streamed ones
+     * always go upstream. This also stops a streamed event from evicting
+     * downloaded content through the [LeastRecentlyUsedCacheEvictor].
+     */
     fun cacheDataSourceFactory(): CacheDataSource.Factory = CacheDataSource.Factory()
         .setCache(cache)
         .setUpstreamDataSourceFactory(
             DefaultDataSource.Factory(context, DefaultHttpDataSource.Factory()),
         )
+        .setCacheWriteDataSinkFactory(null)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     companion object {
@@ -201,6 +220,51 @@ class DownloadCenter private constructor(
             if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK,
         )
 
+        /**
+         * Drops every cached resource that no [Download] owns.
+         *
+         * Playback used to share write access to this cache, which left live
+         * chunklists in it — permanently fatal entries, because the HLS tracker
+         * reads back an unchanging playlist and gives up with
+         * `PlaylistStuckException` (see [cacheDataSourceFactory]). Making
+         * playback read-only stops new ones being written but cannot clear the
+         * ones already on disk, and a user has no way to reach them short of
+         * clearing app storage. So they are swept once here.
+         *
+         * A download's resources are the ones under its request URL's directory
+         * (the master playlist, the chunklist and the segments all share it),
+         * and downloads in flight are kept along with completed ones so a
+         * partial transfer is not thrown away. Anything else was written by
+         * streaming and is safe to lose: it is re-fetched on demand.
+         */
+        @UnstableApi
+        private fun purgeEntriesNotOwnedByADownload(
+            cache: SimpleCache,
+            downloadManager: DownloadManager,
+        ) {
+            val downloadDirectories = runCatching {
+                buildSet {
+                    downloadManager.downloadIndex.getDownloads().use { cursor ->
+                        while (cursor.moveToNext()) {
+                            add(cursor.download.request.uri.toString().substringBeforeLast('/') + "/")
+                        }
+                    }
+                }
+            }.getOrElse {
+                // Without the index we cannot tell downloads from streamed
+                // leftovers; keeping everything is the safe direction to err in.
+                Log.w(TAG, "Could not read the download index; leaving the cache as-is.", it)
+                return
+            }
+
+            cache.keys
+                .filterNot { key -> downloadDirectories.any(key::startsWith) }
+                .forEach { key ->
+                    runCatching { cache.removeResource(key) }
+                        .onFailure { Log.w(TAG, "Could not evict a stale cache entry.", it) }
+                }
+        }
+
         @UnstableApi
         private fun create(context: Context, config: MediaKitConfig): DownloadCenter {
             val appContext = context.applicationContext
@@ -225,13 +289,19 @@ class DownloadCenter private constructor(
                 /* executor = */ java.util.concurrent.Executors.newSingleThreadExecutor(),
             ).apply {
                 requirements = requirementsFor(WIFI_ONLY_DEFAULT)
-                // DownloadManager is constructed paused and is normally resumed by
-                // DownloadService.onCreate. Resume it here too: if that service start
-                // is ever refused (a background start on API 26+, say), every
-                // download would otherwise sit in STATE_QUEUED at 0% for the life of
-                // the process. resumeDownloads() is idempotent.
-                resumeDownloads()
             }
+
+            // Before anything can touch the cache: DownloadManager is constructed
+            // paused, so this is the one point in the process where no download is
+            // writing and no player is reading.
+            purgeEntriesNotOwnedByADownload(cache, downloadManager)
+
+            // DownloadManager is normally resumed by DownloadService.onCreate.
+            // Resume it here too: if that service start is ever refused (a
+            // background start on API 26+, say), every download would otherwise sit
+            // in STATE_QUEUED at 0% for the life of the process. resumeDownloads()
+            // is idempotent.
+            downloadManager.resumeDownloads()
 
             return DownloadCenter(
                 context = appContext,
