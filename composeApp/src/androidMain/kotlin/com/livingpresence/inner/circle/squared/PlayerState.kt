@@ -76,6 +76,16 @@ class PlayerState(initial: Player? = null) {
             override fun onPlayerError(error: PlaybackException) {
                 playbackError = error
             }
+
+            /**
+             * Also observed so the error *clears*: `onPlayerError` only ever
+             * fires with a failure, so without this the error overlay would
+             * outlive the failure it describes and a successful retry would
+             * leave the user staring at it.
+             */
+            override fun onPlayerErrorChanged(error: PlaybackException?) {
+                playbackError = error
+            }
         })
     }
 }
