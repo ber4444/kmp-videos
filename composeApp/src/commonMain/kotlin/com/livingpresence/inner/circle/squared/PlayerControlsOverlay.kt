@@ -46,6 +46,14 @@ fun PlayerControlsOverlay(
                 .fillMaxWidth()
                 .onGloballyPositioned { onTopBarBottomChanged(it.boundsInWindow().bottom) }
                 .background(Color.Black.copy(alpha = 0.55f))
+                // Inset *inside* the scrim: the translucent black still runs to
+                // the top edge, but Close and the caption toggle sit below the
+                // status bar / Dynamic Island instead of under it. Android hides
+                // the system bars here (ImmersiveSystemBars), so this collapses to
+                // the display cutout there and to zero on web.
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                )
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

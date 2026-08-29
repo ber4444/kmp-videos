@@ -4,6 +4,7 @@
 #import <UIKit/UIKit.h>
 
 typedef void (^AudioTapCallback)(const float *pcmData, int numFrames, int numChannels, int sampleRate);
+typedef void (^PreviewFrameCallback)(UIImage * _Nullable image, NSError * _Nullable error);
 
 /**
  * Thin Objective-C bridge over AVPlayer and AVPlayerLayer.
@@ -27,6 +28,13 @@ typedef void (^AudioTapCallback)(const float *pcmData, int numFrames, int numCha
 // rest of this class: AVAudioSession's setCategory/setActive are declared in
 // AVFAudio categories that cinterop fails to merge onto the generated class.
 + (BOOL)configurePlaybackSession;
+
+// Decodes one frame from any stream AVPlayer can play, including ordinary HLS
+// playlists (which AVAssetImageGenerator cannot thumbnail unless they expose an
+// I-frame-only rendition). The callback always runs on the main queue.
++ (void)capturePreviewFrameForURL:(NSURL *)url
+                            atTime:(CMTime)time
+                        completion:(PreviewFrameCallback)completion;
 
 - (instancetype)initWithURL:(NSURL *)url;
 

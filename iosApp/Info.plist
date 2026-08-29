@@ -2,10 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>APOLLO_GUILD_ID</key>
+	<string>$(APOLLO_GUILD_ID)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Apollo Videos</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -18,9 +22,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
-	<!-- Discord OAuth2 redirect: discord-<APP_ID>:/authorize/callback, the only
-	     mobile shape Discord's portal accepts. DISCORD_REDIRECT_SCHEME must be
-	     set to discord-$(DISCORD_CLIENT_ID) in the Xcode build settings. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -34,16 +35,18 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>APOLLO_GUILD_ID</key>
-	<string>$(APOLLO_GUILD_ID)</string>
 	<key>DEEPGRAM_API_KEY</key>
 	<string>$(DEEPGRAM_API_KEY)</string>
 	<key>DISCORD_CLIENT_ID</key>
 	<string>$(DISCORD_CLIENT_ID)</string>
+	<key>EXTRA_VIDEOS_URL</key>
+	<string>$(EXTRA_VIDEOS_URL)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>SONIOX_API_KEY</key>
 	<string>$(SONIOX_API_KEY)</string>
+	<key>STREAM_HOST</key>
+	<string>$(STREAM_HOST)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

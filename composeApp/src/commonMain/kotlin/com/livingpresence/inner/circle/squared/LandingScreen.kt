@@ -138,19 +138,10 @@ fun LandingScreen(
             verticalArrangement = Arrangement.Bottom,
         ) {
             Text(
-                text = "Inner Circle Squared",
+                text = "Apollo Videos",
                 color = Color.White,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Live events for the Apollo community",
-                color = Color.White.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
 

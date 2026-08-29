@@ -2,28 +2,20 @@ package com.livingpresence.inner.circle.squared
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import cnames.supported.AVPlayerBridge
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.RenditionTier
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
-import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
-import platform.AVFoundation.AVAssetImageGenerator
-import platform.AVFoundation.AVURLAsset
-import platform.CoreGraphics.CGImageRelease
-import platform.CoreGraphics.CGSizeMake
-import platform.CoreMedia.CMTime
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSData
-import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSURL
 import platform.Foundation.NSUserDomainMask
@@ -32,8 +24,17 @@ import platform.Foundation.writeToURL
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.posix.memcpy
-import kotlinx.cinterop.ObjCObjectVar
+import kotlin.coroutines.resume
 
+/**
+ * Extracts gallery and scrub-preview frames through AVPlayer.
+ *
+ * AVAssetImageGenerator supports HLS only for I-frame-only playlists. Our
+ * ordinary media playlists do not provide one, so feeding the generator either
+ * the playlist or a hand-picked segment reliably produces no image. AVPlayer
+ * owns HLS loading and decoding, and the native bridge returns its first
+ * decoded frame at the requested position.
+ */
 @OptIn(ExperimentalForeignApi::class)
 class PreviewFrameEngine {
 
@@ -45,80 +46,66 @@ class PreviewFrameEngine {
             url = dir,
             withIntermediateDirectories = true,
             attributes = null,
-            error = null
+            error = null,
         )
         dir
     }
 
-    /**
-     * Synchronously fetches the frame from disk cache or AVAssetImageGenerator.
-     * Must be called off the main thread.
-     */
     suspend fun getFrame(
         eventNumber: Int,
         timeMs: Long,
         streamUrl: String = MediaKitConfig.Default.eventUrl(eventNumber),
     ): ImageBitmap? = withContext(Dispatchers.IO) {
-        val fileName = "${eventNumber}_${timeMs}.jpg"
-        val fileUrl = cacheDir.URLByAppendingPathComponent(fileName)!!
+        val fileUrl = cacheDir.URLByAppendingPathComponent("${eventNumber}_${timeMs}.jpg")!!
 
-        // 1. Check disk cache
         if (NSFileManager.defaultManager.fileExistsAtPath(fileUrl.path!!)) {
-            val nsData = NSData.dataWithContentsOfURL(fileUrl)
-            if (nsData != null) {
-                return@withContext nsData.toImageBitmap()
-            }
+            NSData.dataWithContentsOfURL(fileUrl)?.toImageBitmap()?.let { return@withContext it }
         }
 
-        // 2. Fetch from AVAssetImageGenerator (the 160p stream where there is
-        // one; a feed extra has only its own playlist).
-        val urlString = MediaKitConfig.eventNumberIn(streamUrl)
-            ?.let { MediaKitConfig.Default.renditionUrl(it, RenditionTier.P160) }
-            ?: streamUrl
-        val asset = AVURLAsset(uRL = NSURL.URLWithString(urlString)!!, options = null)
-        val generator = AVAssetImageGenerator(asset).apply {
-            appliesPreferredTrackTransform = true
-            maximumSize = CGSizeMake(320.0, 180.0)
+        for (url in frameCandidates(streamUrl)) {
+            val image = captureFrame(url, timeMs) ?: continue
+            val data = UIImageJPEGRepresentation(image, 0.7) ?: continue
+            data.writeToURL(fileUrl, atomically = true)
+            data.toImageBitmap()?.let { return@withContext it }
         }
-
-        var resultBitmap: ImageBitmap? = null
-
-        memScoped {
-            val errorPtr = alloc<ObjCObjectVar<NSError?>>()
-            val actualTime = alloc<CMTime>()
-            val cgImage = generator.copyCGImageAtTime(
-                requestedTime = CMTimeMakeWithSeconds(timeMs / 1000.0, 600),
-                actualTime = actualTime.ptr,
-                error = errorPtr.ptr
-            )
-
-            if (cgImage != null) {
-                val uiImage = UIImage.imageWithCGImage(cgImage)
-                val nsData = UIImageJPEGRepresentation(uiImage, 0.7)
-                
-                // Write to disk
-                nsData?.writeToURL(fileUrl, atomically = true)
-                
-                resultBitmap = nsData?.toImageBitmap()
-                CGImageRelease(cgImage)
-            }
-        }
-
-        resultBitmap
+        null
     }
+
+    /** Mirrors Android: try the cheapest rendition but do not require it. */
+    private fun frameCandidates(streamUrl: String): List<String> {
+        val eventNumber = MediaKitConfig.eventNumberIn(streamUrl) ?: return listOf(streamUrl)
+        return listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
+            .map { MediaKitConfig.Default.renditionUrl(eventNumber, it) }
+    }
+
+    private suspend fun captureFrame(url: String, timeMs: Long): UIImage? =
+        suspendCancellableCoroutine { continuation ->
+            val nsUrl = NSURL.URLWithString(url)
+            if (nsUrl == null) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+            AVPlayerBridge.capturePreviewFrameForURL(
+                url = nsUrl,
+                atTime = CMTimeMakeWithSeconds(timeMs / 1000.0, 600),
+            ) { image, error ->
+                if (continuation.isActive) {
+                    if (image == null) {
+                        println("PreviewFrameEngine: $url failed — ${error?.localizedDescription}")
+                    }
+                    continuation.resume(image)
+                }
+            }
+        }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun NSData.toImageBitmap(): ImageBitmap? {
-        val size = this.length.toInt()
-        if (size == 0) return null
-        val bytes = ByteArray(size)
-        bytes.usePinned { pinned ->
-            memcpy(pinned.addressOf(0), this.bytes, this.length)
-        }
-        return try {
-            Image.makeFromEncoded(bytes).toComposeImageBitmap()
-        } catch (e: Exception) {
-            null
-        }
+    val size = length.toInt()
+    if (size == 0) return null
+    val bytes = ByteArray(size)
+    bytes.usePinned { pinned ->
+        memcpy(pinned.addressOf(0), this.bytes, length)
     }
+    return runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+}
