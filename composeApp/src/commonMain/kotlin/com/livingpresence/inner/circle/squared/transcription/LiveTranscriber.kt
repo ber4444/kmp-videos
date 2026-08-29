@@ -18,6 +18,11 @@ import kotlinx.coroutines.launch
  * to: capture audio, resample it to 16 kHz mono s16le, and call [feedPcm]; then
  * observe [captions]/[status]/[error] for the overlay/UI.
  *
+ * The events are spoken in English, but the captions follow the *device* language: on
+ * Soniox they come back already translated, so a Russian phone reads Russian. See
+ * [CaptionLanguage] for how the locale is resolved and when translation is skipped.
+ * Deepgram has no translation on its streaming API, so it stays English-only.
+ *
  * This is the piece the Android `CaptionAudioRouter` and the iOS/web taps all reuse —
  * only the audio capture differs per platform.
  */
@@ -75,6 +80,17 @@ class LiveTranscriber {
 
     private fun createClient(provider: TranscriptionProvider): StreamingTranscriber = when (provider) {
         TranscriptionProvider.DEEPGRAM -> DeepgramClient(apiKey = { TranscriptionSecrets.deepgramApiKey })
-        TranscriptionProvider.SONIOX -> SonioxClient(apiKey = { TranscriptionSecrets.sonioxApiKey })
+        // Resolved per session rather than once per process, so a language changed in
+        // system settings takes effect the next time captions are switched on.
+        TranscriptionProvider.SONIOX -> SonioxClient(
+            apiKey = { TranscriptionSecrets.sonioxApiKey },
+            languageHints = SPOKEN_LANGUAGES,
+            translateTo = CaptionLanguage.deviceTarget(SPOKEN_LANGUAGES),
+        )
+    }
+
+    private companion object {
+        /** What the events are spoken in — the ASR hint, and the languages needing no translation. */
+        val SPOKEN_LANGUAGES = listOf("en")
     }
 }
