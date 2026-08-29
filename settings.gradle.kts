@@ -15,6 +15,14 @@ pluginManagement {
     }
 }
 
+// `jvmToolchain(17)` needs a JDK 17 that no machine here ships (the daemon itself
+// runs on 25), so Gradle auto-provisions one. Doing that without a declared
+// toolchain repository is deprecated and becomes an error in Gradle 10 — this
+// resolver is the repository.
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 buildscript {
     configurations.all {
         resolutionStrategy.eachDependency {
