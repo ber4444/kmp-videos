@@ -1,10 +1,13 @@
 #import "AVPlayerBridge.h"
 #import <AVFAudio/AVFAudio.h>
 #import <CoreMedia/CoreMedia.h>
+#import <CoreImage/CoreImage.h>
+#import <CoreVideo/CoreVideo.h>
 #import <MediaToolbox/MediaToolbox.h>
 
 @interface AVPlayerBridge ()
 @property (nonatomic, copy) AudioTapCallback tapCallback;
+@property (nonatomic, assign) BOOL audioTapInstalled;
 @end
 
 typedef struct {
@@ -81,6 +84,85 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
     return error == nil;
 }
 
++ (void)capturePreviewFrameForURL:(NSURL *)url
+                            atTime:(CMTime)time
+                        completion:(PreviewFrameCallback)completion {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        AVPlayerItem *item = [AVPlayerItem playerItemWithURL:url];
+        NSDictionary *settings = @{
+            (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
+        };
+        AVPlayerItemVideoOutput *output = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:settings];
+        [item addOutput:output];
+
+        AVPlayer *player = [AVPlayer playerWithPlayerItem:item];
+        CIContext *context = [CIContext contextWithOptions:nil];
+        __block BOOL didComplete = NO;
+        __block NSUInteger attempts = 0;
+        __block void (^copyFrame)(void);
+
+        void (^finish)(UIImage *, NSError *) = ^(UIImage *image, NSError *error) {
+            if (didComplete) return;
+            didComplete = YES;
+            copyFrame = nil;
+            [player pause];
+            completion(image, error);
+        };
+
+        copyFrame = ^{
+            CMTime itemTime = item.currentTime;
+            if ([output hasNewPixelBufferForItemTime:itemTime]) {
+                CVPixelBufferRef pixelBuffer = [output copyPixelBufferForItemTime:itemTime itemTimeForDisplay:nil];
+                if (pixelBuffer != NULL) {
+                    CIImage *ciImage = [CIImage imageWithCVPixelBuffer:pixelBuffer];
+                    CGImageRef cgImage = [context createCGImage:ciImage fromRect:ciImage.extent];
+                    CVPixelBufferRelease(pixelBuffer);
+                    if (cgImage != NULL) {
+                        UIImage *image = [UIImage imageWithCGImage:cgImage];
+                        CGImageRelease(cgImage);
+                        finish(image, nil);
+                        return;
+                    }
+                }
+            }
+
+            attempts += 1;
+            if (attempts >= 40) {
+                NSError *error = [NSError errorWithDomain:@"PreviewFrameEngine"
+                                                     code:1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Timed out waiting for a decoded video frame."}];
+                finish(nil, error);
+                return;
+            }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), copyFrame);
+        };
+
+        [player seekToTime:time
+            toleranceBefore:kCMTimeZero
+             toleranceAfter:kCMTimeZero
+          completionHandler:^(BOOL finished) {
+            if (!finished) {
+                NSError *error = [NSError errorWithDomain:@"PreviewFrameEngine"
+                                                     code:2
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"AVPlayer could not seek to the preview position."}];
+                finish(nil, error);
+                return;
+            }
+            [player play];
+            copyFrame();
+        }];
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!didComplete) {
+                NSError *error = [NSError errorWithDomain:@"PreviewFrameEngine"
+                                                     code:3
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Timed out preparing the video preview."}];
+                finish(nil, error);
+            }
+        });
+    });
+}
+
 - (instancetype)initWithURL:(NSURL *)url {
     self = [super init];
     if (self) {
@@ -129,6 +211,14 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
     self.tapCallback = callback;
     AVPlayerItem *item = self.player.currentItem;
     if (!item) return;
+    [self installAudioTapForItem:item remainingAttempts:300];
+}
+
+// AVPlayerItem.tracks is empty until AVPlayer has loaded the HLS item's tracks.
+// Installing the tap during screen composition therefore used to return before
+// any audio existed and was never retried, leaving the caption router silent.
+- (void)installAudioTapForItem:(AVPlayerItem *)item remainingAttempts:(NSUInteger)remainingAttempts {
+    if (self.audioTapInstalled || item != self.player.currentItem || !self.tapCallback) return;
 
     AVPlayerItemTrack *audioTrack = nil;
     for (AVPlayerItemTrack *track in item.tracks) {
@@ -137,7 +227,17 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
             break;
         }
     }
-    if (!audioTrack) return;
+    if (!audioTrack) {
+        if (remainingAttempts > 0) {
+            __weak AVPlayerBridge *weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf installAudioTapForItem:item remainingAttempts:remainingAttempts - 1];
+            });
+        } else {
+            NSLog(@"AVPlayerBridge: audio track did not load; captions are unavailable for this item.");
+        }
+        return;
+    }
 
     MTAudioProcessingTapCallbacks callbacks;
     callbacks.version = kMTAudioProcessingTapCallbacksVersion_0;
@@ -150,7 +250,10 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
 
     MTAudioProcessingTapRef tap;
     OSStatus status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap);
-    if (status != noErr) return;
+    if (status != noErr) {
+        NSLog(@"AVPlayerBridge: could not create audio tap (%d).", (int)status);
+        return;
+    }
 
     AVMutableAudioMixInputParameters *params = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:audioTrack.assetTrack];
     params.audioTapProcessor = tap;
@@ -158,6 +261,7 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
     AVMutableAudioMix *audioMix = [AVMutableAudioMix audioMix];
     audioMix.inputParameters = @[params];
     item.audioMix = audioMix;
+    self.audioTapInstalled = YES;
 
     CFRelease(tap);
 }

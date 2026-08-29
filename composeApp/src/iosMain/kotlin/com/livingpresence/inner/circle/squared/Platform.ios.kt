@@ -5,6 +5,9 @@ package com.livingpresence.inner.circle.squared
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -95,6 +98,7 @@ actual fun PlatformPlayerScreen(
     var durationMs by remember(url) { mutableStateOf(0L) }
     var scrubFraction by remember(url) { mutableStateOf(0f) }
     var isScrubbing by remember(url) { mutableStateOf(false) }
+    var showVideoControls by remember(url) { mutableStateOf(true) }
 
     val captionController = rememberCaptionController()
     var showStats by remember(url) { mutableStateOf(false) }
@@ -196,9 +200,8 @@ actual fun PlatformPlayerScreen(
                 }
             }
     
-            // Tap toggles play/pause. A plain Box (no background) sits above the
-            // video surface for input while letting the video show through; the
-            // control overlays are children so they receive their own taps.
+            // Match Android: tapping the video only shows or hides controls.
+            // Playback remains under the dedicated play/pause control.
             val tapSource = remember { MutableInteractionSource() }
             var thumbCenterRootX by remember { mutableStateOf(0f) }
             var controlsBoxRootX by remember { mutableStateOf(0f) }
@@ -211,79 +214,88 @@ actual fun PlatformPlayerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .clickable(interactionSource = tapSource, indication = null) {
-                        if (isPlaying) bridge.pause() else bridge.play()
+                        showVideoControls = !showVideoControls
                     }
             ) {
-                PlayerControlsOverlay(
-                    modifier = Modifier.fillMaxSize().onGloballyPositioned {
-                        val bounds = it.boundsInWindow()
-                        controlsBoxRootX = bounds.left
-                        controlsBoxWidthPx = bounds.width
-                    },
-                    isPlaying = isPlaying,
-                    durationMs = durationMs,
-                    positionMs = positionMs,
-                    isLive = durationMs == 0L, // approximate
-                    isSeekable = durationMs > 0L,
-                    isScrubbing = isScrubbing,
-                    sliderFraction = scrubFraction,
-                    onSliderValueChange = {
-                        isScrubbing = true
-                        scrubFraction = it
-                    },
-                    onSliderValueChangeFinished = {
-                        val target = (durationMs * scrubFraction)
-                            .toLong()
-                            .coerceIn(0L, durationMs)
-                        bridge.seekToTime(CMTimeMakeWithSeconds(target / 1000.0, 600))
-                        isScrubbing = false
-                    },
-                    onPlayPauseToggle = {
-                        if (isPlaying) bridge.pause() else bridge.play()
-                    },
-                    onJumpToLive = {
-                        bridge.seekToTime(CMTimeMakeWithSeconds(durationMs / 1000.0, 600))
-                        bridge.play()
-                    },
-                    onThumbCenterXChanged = { thumbCenterRootX = it },
-                    onBottomBarHeightChanged = { bottomBarHeightPx = it },
-                    onClose = onClose,
-                    topRightControls = {
-                        PlayerTopRightControls(
-                            captionController = captionController,
-                            onToggleStats = { showStats = !showStats },
-                            qualityMenu = {
-                                QualityMenu(
-                                    renditions = renditions,
-                                    onSetAuto = {},
-                                    onPinToRendition = {},
-                                    onDisableVideo = {}
-                                )
+                AnimatedVisibility(
+                    visible = showVideoControls,
+                    modifier = Modifier.fillMaxSize(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        PlayerControlsOverlay(
+                            modifier = Modifier.fillMaxSize().onGloballyPositioned {
+                                val bounds = it.boundsInWindow()
+                                controlsBoxRootX = bounds.left
+                                controlsBoxWidthPx = bounds.width
                             },
-                            trailingControls = {
-                                if (pipController != null) {
-                                    TextButton(onClick = {
-                                        if (pipController.isPictureInPictureActive()) {
-                                            pipController.stopPictureInPicture()
-                                        } else {
-                                            pipController.startPictureInPicture()
+                            isPlaying = isPlaying,
+                            durationMs = durationMs,
+                            positionMs = positionMs,
+                            isLive = durationMs == 0L, // approximate
+                            isSeekable = durationMs > 0L,
+                            isScrubbing = isScrubbing,
+                            sliderFraction = scrubFraction,
+                            onSliderValueChange = {
+                                isScrubbing = true
+                                scrubFraction = it
+                            },
+                            onSliderValueChangeFinished = {
+                                val target = (durationMs * scrubFraction)
+                                    .toLong()
+                                    .coerceIn(0L, durationMs)
+                                bridge.seekToTime(CMTimeMakeWithSeconds(target / 1000.0, 600))
+                                isScrubbing = false
+                            },
+                            onPlayPauseToggle = {
+                                if (isPlaying) bridge.pause() else bridge.play()
+                            },
+                            onJumpToLive = {
+                                bridge.seekToTime(CMTimeMakeWithSeconds(durationMs / 1000.0, 600))
+                                bridge.play()
+                            },
+                            onThumbCenterXChanged = { thumbCenterRootX = it },
+                            onBottomBarHeightChanged = { bottomBarHeightPx = it },
+                            onClose = onClose,
+                            topRightControls = {
+                                PlayerTopRightControls(
+                                    captionController = captionController,
+                                    onToggleStats = { showStats = !showStats },
+                                    qualityMenu = {
+                                        QualityMenu(
+                                            renditions = renditions,
+                                            onSetAuto = {},
+                                            onPinToRendition = {},
+                                            onDisableVideo = {}
+                                        )
+                                    },
+                                    trailingControls = {
+                                        if (pipController != null) {
+                                            TextButton(onClick = {
+                                                if (pipController.isPictureInPictureActive()) {
+                                                    pipController.stopPictureInPicture()
+                                                } else {
+                                                    pipController.startPictureInPicture()
+                                                }
+                                            }) { Text("PiP", color = Color.White) }
                                         }
-                                    }) { Text("PiP", color = Color.White) }
-                                }
-                            },
+                                    },
+                                )
+                            }
                         )
-                    }
-                )
 
-                if (isScrubbing && durationMs > 0L) {
-                    Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                        ScrubPreviewBubble(
-                            bitmap = previewBitmap,
-                            positionLabel = formatPlaybackTime(scrubTargetPositionMs),
-                            thumbCenterRootX = thumbCenterRootX,
-                            boxRootX = controlsBoxRootX,
-                            boxWidthPx = controlsBoxWidthPx,
-                        )
+                        if (isScrubbing && durationMs > 0L) {
+                            Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                                ScrubPreviewBubble(
+                                    bitmap = previewBitmap,
+                                    positionLabel = formatPlaybackTime(scrubTargetPositionMs),
+                                    thumbCenterRootX = thumbCenterRootX,
+                                    boxRootX = controlsBoxRootX,
+                                    boxWidthPx = controlsBoxWidthPx,
+                                )
+                            }
+                        }
                     }
                 }
 

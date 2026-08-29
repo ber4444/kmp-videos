@@ -142,6 +142,21 @@ kotlin {
         tasks.matching { it.name == "commonizeCInterop" || it.name.endsWith("Cinterop-avplayerKlib") }.configureEach {
             dependsOn(injectTask)
         }
+        // Compose resources are assembled into build/generated/compose/
+        // resourceGenerator/assembledResources/<target>Main/, but nothing in the
+        // link graph produces them: CMP's own syncComposeResourcesForIos only
+        // runs when Xcode drives Gradle, and iosApp/ links a *prebuilt*
+        // framework instead. Left unwired, `linkDebugFrameworkIosSimulatorArm64`
+        // succeeds while the resource dir is stale or absent, and every
+        // Res.drawable.* lookup throws MissingResourceException at runtime.
+        // Tying assembly to the link keeps the one documented iOS command
+        // sufficient; iosApp/project.yml's "Copy Compose resources" phase then
+        // copies the result into the app bundle.
+        val targetCap = iosTarget.targetName.replaceFirstChar { it.uppercase() }
+        tasks.matching { it.name.startsWith("link") && it.name.endsWith("Framework$targetCap") }
+            .configureEach {
+                dependsOn("assemble${targetCap}MainResources")
+            }
     }
 
     @OptIn(ExperimentalWasmDsl::class)
@@ -283,6 +298,49 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
             """.trimIndent() + "\n"
         )
     }
+}
+
+// iOS reads the same secrets.properties through an xcconfig the Xcode target
+// includes. Generated from Gradle rather than an Xcode build phase because Xcode
+// parses xcconfig files *before* any build phase runs: a script phase writing
+// this file is always one build behind, so an edited key silently ships stale
+// until you build twice. Gradle runs first in the documented iOS flow (link the
+// framework, then xcodebuild), which puts the values on disk in time.
+val iosSecretKeys = listOf(
+    "DEEPGRAM_API_KEY",
+    "SONIOX_API_KEY",
+    "DISCORD_CLIENT_ID",
+    "APOLLO_GUILD_ID",
+    "STREAM_HOST",
+    "EXTRA_VIDEOS_URL",
+)
+val generateIosSecretsXcconfig = tasks.register("generateIosSecretsXcconfig") {
+    description = "Writes iosApp/Secrets.xcconfig from the gitignored secrets.properties."
+    val outputFile = rootProject.file("iosApp/Secrets.xcconfig")
+    outputs.file(outputFile)
+    val values = iosSecretKeys.associateWith { transcriptionSecrets.getProperty(it, "") }
+    // Track the values so the task re-runs when secrets.properties changes.
+    values.forEach { (key, value) -> inputs.property(key, value) }
+    doLast {
+        // `//` opens a comment in an xcconfig, which would truncate every URL
+        // value to its scheme ("https:"). Xcode evaluates build settings
+        // recursively, so routing each slash through SLASH round-trips intact.
+        fun esc(s: String) = s.replace("/", "\$(SLASH)")
+        outputFile.writeText(
+            buildString {
+                appendLine("// Generated from secrets.properties at build time — do not edit or commit.")
+                appendLine("SLASH = /")
+                iosSecretKeys.forEach { appendLine("$it = ${esc(values.getValue(it))}") }
+                // Mirrors androidApp/build.gradle.kts: an unconfigured build still
+                // has to register some scheme, and "discord-unset" never matches.
+                val clientId = values.getValue("DISCORD_CLIENT_ID").ifBlank { "unset" }
+                appendLine("DISCORD_REDIRECT_SCHEME = discord-$clientId")
+            }
+        )
+    }
+}
+tasks.matching { it.name.startsWith("link") && it.name.contains("FrameworkIos") }.configureEach {
+    dependsOn(generateIosSecretsXcconfig)
 }
 kotlin.sourceSets.named("wasmJsMain") {
     kotlin.srcDir(generateWebTranscriptionKeys)

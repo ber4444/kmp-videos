@@ -25,7 +25,7 @@
 
     <application
         android:name=".IcsApplication"
-        android:label="Inner Circle Squared"
+        android:label="Apollo Videos"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="true">

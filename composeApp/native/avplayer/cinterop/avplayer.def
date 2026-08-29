@@ -6,5 +6,5 @@ headerFilter = AVPlayerBridge.h
 
 sources = AVPlayerBridge.m
 
-compilerOpts = -framework AVFAudio -framework AVFoundation -framework CoreMedia -framework Foundation -framework UIKit -framework MediaToolbox
-linkerOpts = -framework AVFAudio -framework AVFoundation -framework CoreMedia -framework Foundation -framework UIKit -framework MediaToolbox
+compilerOpts = -framework AVFAudio -framework AVFoundation -framework CoreImage -framework CoreMedia -framework CoreVideo -framework Foundation -framework UIKit -framework MediaToolbox
+linkerOpts = -framework AVFAudio -framework AVFoundation -framework CoreImage -framework CoreMedia -framework CoreVideo -framework Foundation -framework UIKit -framework MediaToolbox
