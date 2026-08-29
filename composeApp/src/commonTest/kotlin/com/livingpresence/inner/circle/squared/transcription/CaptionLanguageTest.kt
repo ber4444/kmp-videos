@@ -2,6 +2,7 @@ package com.livingpresence.inner.circle.squared.transcription
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
@@ -71,8 +72,29 @@ class CaptionLanguageTest {
         assertEquals(60, CaptionLanguage.SUPPORTED.size, "Soniox's table lists 60 languages")
         assertEquals(
             emptySet(),
-            CaptionLanguage.SUPPORTED.filterNot { it.length == 2 }.toSet(),
+            CaptionLanguage.SUPPORTED.keys.filterNot { it.length == 2 }.toSet(),
             "Soniox addresses every language by its two-letter code",
         )
+        assertEquals(
+            emptyList(),
+            CaptionLanguage.SUPPORTED.filterValues { it.isBlank() }.keys.toList(),
+            "every code needs a name for the provider button",
+        )
+    }
+
+    @Test
+    fun everyAliasResolvesToASupportedLanguage() {
+        // An alias pointing at a code that isn't in the table would silently disable
+        // translation for that locale instead of mapping it.
+        for (tag in listOf("nb", "nn", "fil", "iw", "in", "cmn", "yue")) {
+            assertNotNull(CaptionLanguage.normalize(tag), "$tag should map to a supported language")
+        }
+    }
+
+    @Test
+    fun theProviderButtonNamesTheTargetLanguage() {
+        assertEquals("Russian", CaptionLanguage.displayName("ru"))
+        assertEquals("Japanese", CaptionLanguage.displayName("ja"))
+        assertNull(CaptionLanguage.displayName("xx"))
     }
 }

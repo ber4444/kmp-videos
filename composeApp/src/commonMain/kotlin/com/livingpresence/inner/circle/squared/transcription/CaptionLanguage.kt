@@ -28,23 +28,44 @@ internal expect fun deviceLanguageTag(): String
 internal object CaptionLanguage {
 
     /**
-     * Every language in Soniox's supported-languages table. Transcription and translation
-     * share the list, and translation works between any pair of them.
+     * Every language in Soniox's supported-languages table, mapped to its English name.
+     * Transcription and translation share the list, and translation works between any pair
+     * of them.
+     *
+     * The names are carried here rather than read from a platform locale API so the caption
+     * label reads the same on all three targets, matches the English UI around it, and can
+     * be asserted in a common test with no runtime.
      */
-    val SUPPORTED = setOf(
-        "af", "sq", "ar", "az", "eu", "be", "bn", "bs", "bg", "ca", "zh", "hr", "cs", "da",
-        "nl", "en", "et", "fi", "fr", "gl", "de", "el", "gu", "he", "hi", "hu", "id", "it",
-        "ja", "kn", "kk", "ko", "lv", "lt", "mk", "ms", "ml", "mr", "no", "fa", "pl", "pt",
-        "pa", "ro", "ru", "sr", "sk", "sl", "es", "sw", "sv", "tl", "ta", "te", "th", "tr",
-        "uk", "ur", "vi", "cy",
+    val SUPPORTED = mapOf(
+        "af" to "Afrikaans", "sq" to "Albanian", "ar" to "Arabic", "az" to "Azerbaijani",
+        "eu" to "Basque", "be" to "Belarusian", "bn" to "Bengali", "bs" to "Bosnian",
+        "bg" to "Bulgarian", "ca" to "Catalan", "zh" to "Chinese", "hr" to "Croatian",
+        "cs" to "Czech", "da" to "Danish", "nl" to "Dutch", "en" to "English",
+        "et" to "Estonian", "fi" to "Finnish", "fr" to "French", "gl" to "Galician",
+        "de" to "German", "el" to "Greek", "gu" to "Gujarati", "he" to "Hebrew",
+        "hi" to "Hindi", "hu" to "Hungarian", "id" to "Indonesian", "it" to "Italian",
+        "ja" to "Japanese", "kn" to "Kannada", "kk" to "Kazakh", "ko" to "Korean",
+        "lv" to "Latvian", "lt" to "Lithuanian", "mk" to "Macedonian", "ms" to "Malay",
+        "ml" to "Malayalam", "mr" to "Marathi", "no" to "Norwegian", "fa" to "Persian",
+        "pl" to "Polish", "pt" to "Portuguese", "pa" to "Punjabi", "ro" to "Romanian",
+        "ru" to "Russian", "sr" to "Serbian", "sk" to "Slovak", "sl" to "Slovenian",
+        "es" to "Spanish", "sw" to "Swahili", "sv" to "Swedish", "tl" to "Tagalog",
+        "ta" to "Tamil", "te" to "Telugu", "th" to "Thai", "tr" to "Turkish",
+        "uk" to "Ukrainian", "ur" to "Urdu", "vi" to "Vietnamese", "cy" to "Welsh",
     )
+
+    /** What the events are spoken in: the ASR hint, and the languages needing no translation. */
+    val SPOKEN_LANGUAGES = listOf("en")
+
+    /** The English name of a normalized code, for the caption provider button. */
+    fun displayName(code: String): String? = SUPPORTED[code]
 
     /**
      * The language to translate captions into for this device, or null to leave them in the
      * source language. [sourceLanguages] is what the audio is expected to be — the same
      * `language_hints` sent in the Soniox config frame.
      */
-    fun deviceTarget(sourceLanguages: List<String>): String? =
+    fun deviceTarget(sourceLanguages: List<String> = SPOKEN_LANGUAGES): String? =
         targetFor(deviceLanguageTag(), sourceLanguages)
 
     /** [deviceTarget] with the locale supplied rather than read from the platform. */

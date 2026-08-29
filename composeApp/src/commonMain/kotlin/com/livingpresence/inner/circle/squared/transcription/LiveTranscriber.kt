@@ -84,13 +84,8 @@ class LiveTranscriber {
         // system settings takes effect the next time captions are switched on.
         TranscriptionProvider.SONIOX -> SonioxClient(
             apiKey = { TranscriptionSecrets.sonioxApiKey },
-            languageHints = SPOKEN_LANGUAGES,
-            translateTo = CaptionLanguage.deviceTarget(SPOKEN_LANGUAGES),
+            languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
+            translateTo = CaptionLanguage.deviceTarget(),
         )
-    }
-
-    private companion object {
-        /** What the events are spoken in — the ASR hint, and the languages needing no translation. */
-        val SPOKEN_LANGUAGES = listOf("en")
     }
 }

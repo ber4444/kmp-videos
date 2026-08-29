@@ -16,3 +16,4 @@ enum class TranscriptionProvider(val label: String) {
     DEEPGRAM("Deepgram"),
     SONIOX("Soniox");
 }
+
