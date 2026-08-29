@@ -8,9 +8,14 @@ import kotlinx.cinterop.get
 import kotlin.math.roundToInt
 
 /**
- * iOS PCM ingestion for [CaptionAudioRouter]: the player's MTAudioProcessingTap
- * delivers interleaved float samples; downmix to mono 16-bit and hand off to the
- * shared [CaptionAudioRouter.feedMono] (which resamples + streams to the provider).
+ * iOS PCM ingestion for [CaptionAudioRouter]: [CaptionSegmentFeeder] decodes the
+ * audio-only rendition's AAC segments to interleaved float samples; downmix to
+ * mono 16-bit and hand off to the shared [CaptionAudioRouter.feedMono] (which
+ * resamples + streams to the provider).
+ *
+ * The samples arrive already downmixed (`channels == 1`), so the mix below is a
+ * pass-through today; it stays general because the contract is interleaved PCM,
+ * not mono PCM.
  */
 internal fun CaptionAudioRouter.onPcm(pcmData: CPointer<FloatVar>?, numFrames: Int, channels: Int, sampleRate: Int) {
     if (pcmData == null || numFrames <= 0 || channels <= 0) return
