@@ -205,8 +205,14 @@ kotlin {
         wasmJsMain.dependencies {
             implementation(libs.ktor.client.js)
         }
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
+        // Guarded because `iosTargets` above is empty off macOS. Touching the
+        // `iosMain` accessor there materialises a source set that no compilation
+        // owns, which KGP reports twice per build ("iOS Source Set Used Without
+        // an iOS Target" + "Unused Kotlin Source Sets").
+        if (iosTargets.isNotEmpty()) {
+            iosMain.dependencies {
+                implementation(libs.ktor.client.darwin)
+            }
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -214,7 +220,7 @@ kotlin {
             implementation(compose.uiTest)
         }
         // Robolectric unit tests for Android player/resize logic.
-        val androidHostTest by getting {
+        getByName("androidHostTest") {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.media3.test.utils.robolectric)
@@ -237,7 +243,7 @@ val transcriptionSecrets = Properties().apply {
     val f = rootProject.file("secrets.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-val generateWebTranscriptionKeys by tasks.registering {
+val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys") {
     val outputDir = layout.buildDirectory.dir("generated/transcriptionKeys/wasmJsMain")
     outputs.dir(outputDir)
     val deepgram = transcriptionSecrets.getProperty("DEEPGRAM_API_KEY", "")

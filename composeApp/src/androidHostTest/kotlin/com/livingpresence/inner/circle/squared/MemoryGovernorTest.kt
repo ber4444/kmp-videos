@@ -8,7 +8,11 @@ import kotlin.test.assertNull
 /**
  * Tests the trim-tier logic (plan.md Phase 4): MODERATE → SHRINK, LOW → RELEASE,
  * other → no-op. Pure logic, no Android runtime needed.
+ *
+ * The trim-level constants below were deprecated in API 35 and are kept
+ * deliberately — see the mapping comment in [MemoryGovernor].
  */
+@Suppress("DEPRECATION")
 class MemoryGovernorTest {
 
     @Test

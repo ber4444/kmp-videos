@@ -53,17 +53,15 @@ class PlaybackService : MediaSessionService() {
         // physical display can actually show, so the player never decodes a
         // rendition larger than the screen (saves bandwidth + decode on the
         // synthesized ladder and demo streams). `setViewportSizeToPhysicalDisplaySize`
-        // is the media3 1.10 Builder API that reads the display size from the
-        // service Context across all API levels (no manual WindowMetrics wiring).
+        // resolves the physical display size itself, so no Context and no manual
+        // WindowMetrics wiring is needed (the Context-taking overload is deprecated
+        // as of media3 1.11).
         // No-op when a master advertises a single variant ≤ display (this server's
         // one-720p master), correct on multi-rung ladders. `orientationMayChange`
         // keeps the constraint valid after rotation by taking the max orientation.
         trackSelector.setParameters(
             trackSelector.buildUponParameters()
-                .setViewportSizeToPhysicalDisplaySize(
-                    /* context = */ this,
-                    /* orientationMayChange = */ true,
-                )
+                .setViewportSizeToPhysicalDisplaySize(/* orientationMayChange = */ true)
                 .build(),
         )
         val player = ExoPlayer.Builder(this)

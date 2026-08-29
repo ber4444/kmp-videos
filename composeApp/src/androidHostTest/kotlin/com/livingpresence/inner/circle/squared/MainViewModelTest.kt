@@ -2,6 +2,7 @@ package com.livingpresence.inner.circle.squared
 
 import com.livingpresence.mediakit.EventInfo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -18,6 +19,7 @@ import kotlin.test.assertTrue
  * Tests [MainViewModel] state transitions: gallery visibility,
  * video loading + error paths.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain / UnconfinedTestDispatcher
 class MainViewModelTest {
 
     @BeforeTest

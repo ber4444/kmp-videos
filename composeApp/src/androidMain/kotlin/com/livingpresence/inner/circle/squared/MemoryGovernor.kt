@@ -71,10 +71,20 @@ internal object MemoryGovernor {
     //   COMPLETE=80, UI_HIDDEN=20                    → RELEASE the frame engine
     //   BACKGROUND=40 (process in background, not a
     //   memory-pressure signal we act on here)       → no-op
+    //
+    // Every level except UI_HIDDEN was deprecated in API 35: the platform stopped
+    // *delivering* them there, and `onTrimMemory` now only ever reports UI_HIDDEN.
+    // They are kept, not replaced, because minSdk is 23 — on API 23..34 (still the
+    // bulk of installs) these are the only memory-pressure signal the app gets, and
+    // on API 35+ the constants simply never match. There is no newer API to move to;
+    // the platform's answer is UI_HIDDEN, which the RELEASE tier already handles.
+    @Suppress("DEPRECATION")
     private val MODERATE_RANGE = setOf(
         ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE,
         ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
     )
+
+    @Suppress("DEPRECATION")
     private val LOW_RANGE = setOf(
         ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
         ComponentCallbacks2.TRIM_MEMORY_MODERATE,
