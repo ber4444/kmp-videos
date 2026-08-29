@@ -8,9 +8,9 @@ internal const val CAPTION_CONTROLS_GAP_DP = 8f
 
 /**
  * How far above the player's bottom edge the caption strip sits where the bottom control
- * bar shares the screen with it — iOS and web, whose controls never hide: the bar's
- * measured height plus a small gap, falling back to the plain edge inset until the bar
- * has been measured. Android hides its captions while the controls are up, so it pins
+ * bar shares the screen with it — web, whose controls never hide: the bar's measured
+ * height plus a small gap, falling back to the plain edge inset until the bar has been
+ * measured. Android and iOS hide their captions while the controls are up, so they pin
  * them at [CAPTION_EDGE_INSET_DP] instead.
  *
  * Captions belong at the bottom of the screen; a fixed lift (the previous 120.dp) is what

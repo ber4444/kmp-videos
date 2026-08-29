@@ -3,52 +3,21 @@
 #import <CoreMedia/CoreMedia.h>
 #import <CoreImage/CoreImage.h>
 #import <CoreVideo/CoreVideo.h>
-#import <MediaToolbox/MediaToolbox.h>
 
-@interface AVPlayerBridge ()
-@property (nonatomic, copy) AudioTapCallback tapCallback;
-@property (nonatomic, assign) BOOL audioTapInstalled;
-@end
-
-typedef struct {
-    __unsafe_unretained AVPlayerBridge *bridge;
-    Float64 sampleRate;
-    int channels;
-} TapContext;
-
-static void tapInit(MTAudioProcessingTapRef tap, void *clientInfo, void **tapStorageOut) {
-    TapContext *context = calloc(1, sizeof(TapContext));
-    context->bridge = (__bridge AVPlayerBridge *)clientInfo;
-    *tapStorageOut = context;
-}
-
-static void tapFinalize(MTAudioProcessingTapRef tap) {
-    TapContext *context = (TapContext *)MTAudioProcessingTapGetStorage(tap);
-    free(context);
-}
-
-static void tapPrepare(MTAudioProcessingTapRef tap, CMItemCount maxFrames, const AudioStreamBasicDescription *processingFormat) {
-    TapContext *context = (TapContext *)MTAudioProcessingTapGetStorage(tap);
-    context->sampleRate = processingFormat->mSampleRate;
-    context->channels = processingFormat->mChannelsPerFrame;
-}
-
-static void tapUnprepare(MTAudioProcessingTapRef tap) {
-}
-
-static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MTAudioProcessingTapFlags flags, AudioBufferList *bufferListInOut, CMItemCount *numberFramesOut, MTAudioProcessingTapFlags *flagsOut) {
-    TapContext *context = (TapContext *)MTAudioProcessingTapGetStorage(tap);
-    
-    OSStatus status = MTAudioProcessingTapGetSourceAudio(tap, numberFrames, bufferListInOut, flagsOut, NULL, numberFramesOut);
-    if (status != noErr) return;
-    
-    if (context->bridge.tapCallback && bufferListInOut->mNumberBuffers > 0) {
-        AudioBuffer *buffer = &bufferListInOut->mBuffers[0];
-        const float *pcmData = (const float *)buffer->mData;
-        if (pcmData) {
-            context->bridge.tapCallback(pcmData, (int)*numberFramesOut, context->channels, (int)context->sampleRate);
-        }
-    }
+// Length of an ID3v2 tag at the head of [data], or 0 if there is none. HLS
+// packed-audio segments carry one (it holds the PTS as a PRIV frame); the ADTS
+// parser wants the raw frames, so it has to come off first.
+static NSUInteger ICSID3TagLength(NSData *data) {
+    if (data.length < 10) return 0;
+    const uint8_t *bytes = (const uint8_t *)data.bytes;
+    if (memcmp(bytes, "ID3", 3) != 0) return 0;
+    // Bytes 6..9 are a "syncsafe" integer: 7 significant bits each.
+    NSUInteger size = ((NSUInteger)(bytes[6] & 0x7F) << 21)
+                    | ((NSUInteger)(bytes[7] & 0x7F) << 14)
+                    | ((NSUInteger)(bytes[8] & 0x7F) << 7)
+                    | ((NSUInteger)(bytes[9] & 0x7F));
+    NSUInteger total = 10 + size;
+    return total <= data.length ? total : 0;
 }
 
 @interface AVPlayerBridgeView : UIView
@@ -163,6 +132,60 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
     });
 }
 
++ (BOOL)decodeAudioSegment:(NSData *)data callback:(AudioSegmentCallback)callback {
+    if (data.length == 0 || callback == nil) return NO;
+
+    NSUInteger offset = ICSID3TagLength(data);
+    if (offset >= data.length) return NO;
+    NSData *adts = offset > 0 ? [data subdataWithRange:NSMakeRange(offset, data.length - offset)]
+                              : data;
+
+    // AVAudioFile reads from a URL, not memory, so the frames go to a temp file.
+    // The extension matters: it is how AudioFile picks the ADTS parser.
+    NSString *name = [NSString stringWithFormat:@"ics-caption-%@.aac", [[NSUUID UUID] UUIDString]];
+    NSURL *tmp = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
+    if (![adts writeToURL:tmp atomically:YES]) return NO;
+
+    BOOL ok = NO;
+    @try {
+        NSError *error = nil;
+        AVAudioFile *file = [[AVAudioFile alloc] initForReading:tmp error:&error];
+        if (file == nil || error != nil) return NO;
+
+        AVAudioFormat *format = file.processingFormat;
+        AVAudioFrameCount frames = (AVAudioFrameCount)file.length;
+        if (frames == 0 || format.channelCount == 0) return NO;
+
+        AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:format
+                                                                 frameCapacity:frames];
+        if (buffer == nil || ![file readIntoBuffer:buffer error:&error] || error != nil) return NO;
+
+        AVAudioFrameCount decoded = buffer.frameLength;
+        if (decoded == 0 || buffer.floatChannelData == NULL) return NO;
+
+        // processingFormat is always deinterleaved float32, so downmix here and
+        // hand back a single channel — the Kotlin side then treats it exactly
+        // like any other mono PCM source.
+        AVAudioChannelCount channels = format.channelCount;
+        float *mono = (float *)malloc(sizeof(float) * decoded);
+        if (mono == NULL) return NO;
+        for (AVAudioFrameCount i = 0; i < decoded; i++) {
+            float sum = 0.0f;
+            for (AVAudioChannelCount c = 0; c < channels; c++) {
+                sum += buffer.floatChannelData[c][i];
+            }
+            mono[i] = sum / (float)channels;
+        }
+
+        callback(mono, (int)decoded, 1, (int)format.sampleRate);
+        free(mono);
+        ok = YES;
+    } @finally {
+        [[NSFileManager defaultManager] removeItemAtURL:tmp error:nil];
+    }
+    return ok;
+}
+
 - (instancetype)initWithURL:(NSURL *)url {
     self = [super init];
     if (self) {
@@ -205,65 +228,6 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
     AVPlayerBridgeView *view = [[AVPlayerBridgeView alloc] initWithFrame:CGRectZero];
     view.player = self.player;
     return view;
-}
-
-- (void)installAudioTapWithCallback:(AudioTapCallback)callback {
-    self.tapCallback = callback;
-    AVPlayerItem *item = self.player.currentItem;
-    if (!item) return;
-    [self installAudioTapForItem:item remainingAttempts:300];
-}
-
-// AVPlayerItem.tracks is empty until AVPlayer has loaded the HLS item's tracks.
-// Installing the tap during screen composition therefore used to return before
-// any audio existed and was never retried, leaving the caption router silent.
-- (void)installAudioTapForItem:(AVPlayerItem *)item remainingAttempts:(NSUInteger)remainingAttempts {
-    if (self.audioTapInstalled || item != self.player.currentItem || !self.tapCallback) return;
-
-    AVPlayerItemTrack *audioTrack = nil;
-    for (AVPlayerItemTrack *track in item.tracks) {
-        if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeAudio]) {
-            audioTrack = track;
-            break;
-        }
-    }
-    if (!audioTrack) {
-        if (remainingAttempts > 0) {
-            __weak AVPlayerBridge *weakSelf = self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [weakSelf installAudioTapForItem:item remainingAttempts:remainingAttempts - 1];
-            });
-        } else {
-            NSLog(@"AVPlayerBridge: audio track did not load; captions are unavailable for this item.");
-        }
-        return;
-    }
-
-    MTAudioProcessingTapCallbacks callbacks;
-    callbacks.version = kMTAudioProcessingTapCallbacksVersion_0;
-    callbacks.clientInfo = (__bridge void *)self;
-    callbacks.init = tapInit;
-    callbacks.prepare = tapPrepare;
-    callbacks.process = tapProcess;
-    callbacks.unprepare = tapUnprepare;
-    callbacks.finalize = tapFinalize;
-
-    MTAudioProcessingTapRef tap;
-    OSStatus status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap);
-    if (status != noErr) {
-        NSLog(@"AVPlayerBridge: could not create audio tap (%d).", (int)status);
-        return;
-    }
-
-    AVMutableAudioMixInputParameters *params = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:audioTrack.assetTrack];
-    params.audioTapProcessor = tap;
-    
-    AVMutableAudioMix *audioMix = [AVMutableAudioMix audioMix];
-    audioMix.inputParameters = @[params];
-    item.audioMix = audioMix;
-    self.audioTapInstalled = YES;
-
-    CFRelease(tap);
 }
 
 // Quality / Rendition controls

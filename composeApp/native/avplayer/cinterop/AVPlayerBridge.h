@@ -3,7 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-typedef void (^AudioTapCallback)(const float *pcmData, int numFrames, int numChannels, int sampleRate);
+typedef void (^AudioSegmentCallback)(const float *pcmData, int numFrames, int numChannels, int sampleRate);
 typedef void (^PreviewFrameCallback)(UIImage * _Nullable image, NSError * _Nullable error);
 
 /**
@@ -36,6 +36,20 @@ typedef void (^PreviewFrameCallback)(UIImage * _Nullable image, NSError * _Nulla
                             atTime:(CMTime)time
                         completion:(PreviewFrameCallback)completion;
 
+// Decodes one HLS "packed audio" segment — an ID3 header followed by raw ADTS
+// AAC frames, which is what the `_aac` rendition serves — into mono float PCM.
+//
+// This exists because live captions cannot read the player's audio directly:
+// MTAudioProcessingTap is not supported for HTTP Live Streaming, so an audio tap
+// on the playing item is created and installed successfully but its process
+// callback is never invoked. The caption pipeline instead fetches the audio-only
+// rendition's segments over plain HTTP and decodes them here.
+//
+// Returns NO if the segment could not be decoded. [callback] is invoked
+// synchronously, once, before returning; the pointer it receives is only valid
+// for the duration of the call.
++ (BOOL)decodeAudioSegment:(NSData *)data callback:(AudioSegmentCallback)callback;
+
 - (instancetype)initWithURL:(NSURL *)url;
 
 // Transport
@@ -60,9 +74,6 @@ typedef void (^PreviewFrameCallback)(UIImage * _Nullable image, NSError * _Nulla
 // Creates a UIView whose backing layer is an AVPlayerLayer linked to this player.
 // It automatically resizes the player layer to match its bounds.
 - (UIView *)createPlayerView;
-
-// Intercepts audio PCM data
-- (void)installAudioTapWithCallback:(AudioTapCallback)callback;
 
 // Quality / Rendition controls
 @property (nonatomic, assign) double preferredPeakBitRate;

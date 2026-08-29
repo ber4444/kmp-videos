@@ -101,7 +101,6 @@ targets:
       - framework: "$(SRCROOT)/../composeApp/build/bin/iosSimulatorArm64/debugFramework/ComposeApp.framework"
         embed: true
         implicit: true
-      - sdk: MediaToolbox.framework
     postBuildScripts:
       # Compose's iOS resource reader looks under
       # <bundle>/compose-resources/composeResources/..., but nothing puts it

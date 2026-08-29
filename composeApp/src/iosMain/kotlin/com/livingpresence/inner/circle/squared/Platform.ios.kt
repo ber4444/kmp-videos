@@ -13,9 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -113,12 +118,23 @@ actual fun PlatformPlayerScreen(
             }
         }
     
+        // Live captions read the audio-only `_aac` rendition over HTTP instead of
+        // tapping the player: MTAudioProcessingTap does not work for HLS, so a tap
+        // on the playing item installs cleanly and then never fires. See
+        // [CaptionSegmentFeeder]. Only numbered events have that sibling rendition,
+        // so manifest extras (which resolve no ladder) get no captions.
+        val captionHttp = remember { createHttpClient() }
+        val audioChunklistUrl = remember(renditions) {
+            renditions?.firstOrNull { it.isAudioOnly }?.chunklistUri
+        }
+        LaunchedEffect(captionController.enabled, audioChunklistUrl) {
+            if (!captionController.enabled || audioChunklistUrl == null) return@LaunchedEffect
+            CaptionSegmentFeeder(captionHttp).stream(audioChunklistUrl) { positionMs / 1000.0 }
+        }
+
         DisposableEffect(url) {
             bridge.play()
-            bridge.installAudioTapWithCallback { pcmData, numFrames, numChannels, sampleRate ->
-                CaptionAudioRouter.get().onPcm(pcmData, numFrames, numChannels, sampleRate)
-            }
-    
+
             // ~4 Hz position + status pump. `queue = null` → main run loop, safe to
             // touch Compose state directly from the block.
             val observer = bridge.addPeriodicTimeObserverForInterval(
@@ -206,9 +222,6 @@ actual fun PlatformPlayerScreen(
             var thumbCenterRootX by remember { mutableStateOf(0f) }
             var controlsBoxRootX by remember { mutableStateOf(0f) }
             var controlsBoxWidthPx by remember { mutableStateOf(0f) }
-            // Measured height of the bottom control bar; captions ride just above it
-            // rather than at a fixed lift (see [captionBottomInsetDp]).
-            var bottomBarHeightPx by remember { mutableStateOf(0f) }
 
             Box(
                 modifier = Modifier
@@ -256,7 +269,6 @@ actual fun PlatformPlayerScreen(
                                 bridge.play()
                             },
                             onThumbCenterXChanged = { thumbCenterRootX = it },
-                            onBottomBarHeightChanged = { bottomBarHeightPx = it },
                             onClose = onClose,
                             topRightControls = {
                                 PlayerTopRightControls(
@@ -310,16 +322,25 @@ actual fun PlatformPlayerScreen(
                     )
                 }
 
-                // Captions sit at the bottom of the player, lifted only by the control
-                // bar that is always on screen here. In landscape the old fixed lift put
-                // them across the middle of the picture.
-                val captionBottomDp = captionBottomInsetDp(
-                    controlsBarHeightDp = with(LocalDensity.current) { bottomBarHeightPx.toDp() }.value,
-                )
-                CaptionOverlay(
-                    captions = captionController.captions,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = captionBottomDp.dp)
-                )
+                // Captions along the bottom edge, as on Android: they yield the bottom
+                // of the frame to the controls rather than fighting them for the space,
+                // cross-fading out while those are up and returning at the edge as soon
+                // as they hide. The safe-area padding is the one iOS difference —
+                // Android hides its system bars in the player, so it has no home
+                // indicator to clear.
+                AnimatedVisibility(
+                    visible = captionController.enabled && !showVideoControls,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    CaptionOverlay(
+                        captions = captionController.captions,
+                        modifier = Modifier
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                            .padding(bottom = CAPTION_EDGE_INSET_DP.dp),
+                    )
+                }
             }
     }
 }
