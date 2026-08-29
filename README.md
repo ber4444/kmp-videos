@@ -54,7 +54,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 
 | Feature | Android | iOS | Web (Wasm) |
 | :--- | :---: | :---: | :---: |
-| **Live STT Captions** (Deepgram/Soniox WebSockets) | ✅ | ✅ | ✅ |
+| **Live STT Captions** (Soniox WebSockets) | ✅ | ✅ | ✅ |
 | **Device-Language Captions** (Soniox in-band translation) | ✅ | ✅ | ✅ |
 | **ABR Ladder Synthesis** (from sibling renditions) | ✅ | ✅ | ✅ |
 | **Viewport-Aware ABR** (auto-caps to screen size) | ✅ | ✅ | ✅ |
@@ -76,8 +76,10 @@ harness in [`eval/`](./eval) that scores Deepgram and Soniox against a domain-sp
 golden set of event audio — batch WER/CER, domain-term recall (Entity F1),
 keyterm-boosting impact, and real-time streaming realism (flicker + finalization
 latency). On this material **Soniox clearly outperforms Deepgram** (0.242 vs 0.350
-normalized WER; 0.77 vs 0.49 Entity F1), which is why the app ships Soniox as its
-preferred provider. Run [`eval/run_eval.sh`](./eval/run_eval.sh) to regenerate the scorecard at
+normalized WER; 0.77 vs 0.49 Entity F1), which is why **Deepgram is now switched off**:
+Soniox is the only provider the app reaches at runtime. The harness still scores both —
+re-running the comparison is the point of keeping it. Run
+[`eval/run_eval.sh`](./eval/run_eval.sh) to regenerate the scorecard at
 `eval/reports/scorecard.md` (generated output, not checked in); see
 [`eval/README.md`](./eval/README.md) for the methodology.
 
@@ -87,7 +89,11 @@ extra cost — so the captions are written in whatever language the device is se
 Russian phone reads Russian off the same English audio, with no second service in the path.
 The locale is resolved per session and falls back to untranslated English when the device
 already speaks English or is set to one of the few languages Soniox does not cover.
-Deepgram's streaming API has no translation, so it stays English-only.
+Deepgram's streaming API has no translation, so it could only ever caption in English —
+the reason it was switched off rather than kept as a runtime alternative. Its client still
+compiles and the provider switcher still exists in the source (`CaptionProviderButton`), but
+nothing renders the switcher, so no audio can be routed to it. Restoring the choice means
+rendering that button again — and updating the privacy policy, which now names Soniox alone.
 
 ## Architecture
 
@@ -237,12 +243,15 @@ published from [`docs/privacy/`](./docs/privacy) by the `Dokka API docs` workflo
 The app collects nothing: no analytics, no crash reporting, no advertising, and no server operated by
 the developer. The Discord refresh token and display name are stored on-device only; the guild list
 is checked in memory and discarded. Live captions send the *media's* audio — never the microphone,
-for which the app holds no permission — to the configured speech-to-text provider, and only while
-captions are on.
+for which the app holds no permission — to Soniox, and only while captions are on.
 
 ## Configuration
 
-Transcription API keys (for Deepgram and Soniox) are read from `secrets.properties` in the project root. See `secrets.properties.example` for details.
+Transcription API keys are read from `secrets.properties` in the project root. See
+`secrets.properties.example` for details. Only `SONIOX_API_KEY` is used at runtime;
+`DEEPGRAM_API_KEY` is still read and still embedded in the build, but nothing reaches it
+since Deepgram was switched off — the [`eval/`](./eval) harness takes its key from its own
+gitignored `.env` instead.
 
 ### Stream host
 
