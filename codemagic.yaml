@@ -1,0 +1,84 @@
+workflows:
+  ios-release:
+    name: iOS Release → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: Apollo Videos       # name of the ASC API key in Codemagic
+    environment:
+      groups:
+        - app_secrets                        # SONIOX_API_KEY, DISCORD_CLIENT_ID, etc.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.livingpresence.inner.circle.squared
+      xcode: latest
+      java: 17
+    scripts:
+      # 1. Reconstruct the gitignored secrets.properties from Codemagic env vars so
+      #    Gradle's generateIosSecretsXcconfig (a dependency of the framework link)
+      #    writes the values into iosApp/Secrets.xcconfig → Info.plist.
+      - name: Write secrets.properties
+        script: |
+          cat <<EOF > "$CM_BUILD_DIR/secrets.properties"
+          DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+          SONIOX_API_KEY=${SONIOX_API_KEY:-}
+          DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
+          APOLLO_GUILD_ID=${APOLLO_GUILD_ID:-}
+          STREAM_HOST=${STREAM_HOST:-}
+          EXTRA_VIDEOS_URL=${EXTRA_VIDEOS_URL:-}
+          EOF
+
+      # 2. Build the Kotlin/Native release framework for arm64 devices.
+      #    This also compiles the AVPlayerBridge cinterop, injects its bitcode,
+      #    assembles Compose resources, and writes Secrets.xcconfig.
+      - name: Build Release framework
+        script: |
+          ./gradlew :composeApp:linkReleaseFrameworkIosArm64
+
+      # 3. Generate the Xcode project from the committed project.yml spec.
+      #    The .xcodeproj is gitignored and regenerated every build.
+      - name: Generate Xcode project
+        script: |
+          cd iosApp && xcodegen generate
+
+      # 4. Let Codemagic's automatic signing set up the keychain, certificate
+      #    and provisioning profile before xcodebuild runs.
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files \
+            "com.livingpresence.inner.circle.squared" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      # 5. Archive a Release build targeting the iphoneos SDK.
+      - name: Build iOS archive
+        script: |
+          xcodebuild archive \
+            -project iosApp/ICSApp.xcodeproj \
+            -scheme ICSApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/ios/ICSApp.xcarchive \
+            | xcpretty
+
+      # 6. Export the archive to an IPA suitable for App Store / TestFlight.
+      - name: Export IPA
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath build/ios/ICSApp.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist iosApp/ExportOptions.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/ICSApp.xcarchive/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testing

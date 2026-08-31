@@ -199,6 +199,43 @@ xcodebuild -project ICSApp.xcodeproj -scheme ICSApp \
     -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
+#### Device / Release build
+
+For a physical arm64 device or an App Store archive, build the **release**
+framework and target `iphoneos`:
+
+```bash
+./gradlew :composeApp:linkReleaseFrameworkIosArm64
+cd iosApp && xcodegen generate
+xcodebuild archive -project ICSApp.xcodeproj -scheme ICSApp \
+    -configuration Release -sdk iphoneos \
+    -archivePath ../build/ios/ICSApp.xcarchive
+xcodebuild -exportArchive \
+    -archivePath ../build/ios/ICSApp.xcarchive \
+    -exportPath ../build/ios/ipa \
+    -exportOptionsPlist ExportOptions.plist
+```
+
+The Xcode project dynamically selects the right framework via build settings in
+`project.yml`: `KOTLIN_TARGET[sdk=iphoneos*] = iosArm64` and
+`KOTLIN_FRAMEWORK_BUILD_TYPE[config=Release] = release`, so no manual path
+switching is needed.
+
+#### Codemagic CI/CD
+
+`codemagic.yaml` in the project root defines an *iOS Release → TestFlight*
+workflow that reconstructs `secrets.properties` from Codemagic environment
+variables, builds the release framework, generates the Xcode project, archives,
+exports, and uploads to TestFlight. Configure these in the Codemagic dashboard:
+
+- **App Store Connect API key** — linked as an integration named "Apollo Videos"
+- **Environment group `app_secrets`** — `SONIOX_API_KEY`, `DISCORD_CLIENT_ID`,
+  `APOLLO_GUILD_ID`, `STREAM_HOST`, `EXTRA_VIDEOS_URL` (and optionally
+  `DEEPGRAM_API_KEY`)
+
+Code signing is automatic: the workflow calls `app-store-connect
+fetch-signing-files` to provision the certificate and profile on every build.
+
 > **Compose resources note (iOS).** Because the Xcode target links a *prebuilt*
 > framework instead of letting Xcode drive Gradle, CMP's own
 > `syncComposeResourcesForIos` never runs and nothing would copy

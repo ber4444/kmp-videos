@@ -86,19 +86,22 @@ targets:
         # artwork androidApp draws its adaptive icon from (res/drawable/ypf.png
         # over @color/ic_launcher_background), framed to match.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        KOTLIN_FRAMEWORK_BUILD_TYPE[config=Debug]: debug
+        KOTLIN_FRAMEWORK_BUILD_TYPE[config=Release]: release
+        KOTLIN_TARGET[sdk=iphoneos*]: iosArm64
+        KOTLIN_TARGET[sdk=iphonesimulator*]: iosSimulatorArm64
         # The Kotlin/Native framework is built by Gradle into composeApp/build.
         # We link it as an embedded framework.
         FRAMEWORK_SEARCH_PATHS:
           - "$(inherited)"
-          - "$(SRCROOT)/../composeApp/build/bin/iosSimulatorArm64/debugFramework"
-          - "$(SRCROOT)/../composeApp/build/bin/iosArm64/debugFramework"
+          - "$(SRCROOT)/../composeApp/build/bin/$(KOTLIN_TARGET)/$(KOTLIN_FRAMEWORK_BUILD_TYPE)Framework"
         OTHER_LDFLAGS:
           - "$(inherited)"
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/Frameworks"
     dependencies:
-      - framework: "$(SRCROOT)/../composeApp/build/bin/iosSimulatorArm64/debugFramework/ComposeApp.framework"
+      - framework: "$(SRCROOT)/../composeApp/build/bin/$(KOTLIN_TARGET)/$(KOTLIN_FRAMEWORK_BUILD_TYPE)Framework/ComposeApp.framework"
         embed: true
         implicit: true
     postBuildScripts:
@@ -113,14 +116,20 @@ targets:
       - name: Copy Compose resources
         basedOnDependencyAnalysis: false
         script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            GRADLE_CONFIG="Release"
+          else
+            GRADLE_CONFIG="Debug"
+          fi
+          
           case "$SDK_NAME" in
             iphonesimulator*)
               KN_TARGET=iosSimulatorArm64Main
-              LINK_TASK=:composeApp:linkDebugFrameworkIosSimulatorArm64
+              LINK_TASK=:composeApp:link${GRADLE_CONFIG}FrameworkIosSimulatorArm64
               ;;
             *)
               KN_TARGET=iosArm64Main
-              LINK_TASK=:composeApp:linkDebugFrameworkIosArm64
+              LINK_TASK=:composeApp:link${GRADLE_CONFIG}FrameworkIosArm64
               ;;
           esac
           SRC="${SRCROOT}/../composeApp/build/generated/compose/resourceGenerator/assembledResources/${KN_TARGET}"
