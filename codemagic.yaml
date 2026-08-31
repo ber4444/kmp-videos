@@ -5,6 +5,13 @@ workflows:
     max_build_duration: 120
     integrations:
       app_store_connect: Apollo Videos       # name of the ASC API key in Codemagic
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
     environment:
       groups:
         - app_secrets                        # SONIOX_API_KEY, DISCORD_CLIENT_ID, etc.
