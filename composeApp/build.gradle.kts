@@ -82,8 +82,13 @@ kotlin {
             inputs.property("target", target)
             outputs.file(bitcodeFile)
             doFirst {
-                val clang = file("${System.getProperty("user.home")}/.konan/dependencies/llvm-19-aarch64-macos-essentials-81/bin/clang")
-                check(clang.exists()) { "Konan clang not found at $clang — install Kotlin/Native dependencies first" }
+                val konanDeps = file("${System.getProperty("user.home")}/.konan/dependencies")
+                val clang = konanDeps.listFiles()?.asSequence()
+                    ?.filter { it.isDirectory && it.name.startsWith("llvm-") }
+                    ?.sortedByDescending { it.name }
+                    ?.map { it.resolve("bin/clang") }
+                    ?.firstOrNull { it.exists() }
+                    ?: error("Konan clang not found in $konanDeps — install Kotlin/Native dependencies first")
                 val outFile = bitcodeFile.get().asFile
                 outFile.parentFile.mkdirs()
                 ProcessBuilder(
