@@ -39,6 +39,7 @@ workflows:
       #    The .xcodeproj is gitignored and regenerated every build.
       - name: Generate Xcode project
         script: |
+          brew install xcodegen
           cd iosApp && xcodegen generate
 
       # 4. Let Codemagic's automatic signing set up the keychain, certificate
