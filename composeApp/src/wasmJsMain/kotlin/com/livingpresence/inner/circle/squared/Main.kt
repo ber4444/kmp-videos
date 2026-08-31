@@ -10,7 +10,7 @@ import kotlinx.browser.window
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    document.title = "Inner Circle Squared"
+    document.title = "Apollo Videos"
     // Live-caption keys are baked into the bundle from secrets.properties at build
     // time (see composeApp/build.gradle.kts). Empty when unset — the caption clients
     // then surface a "missing key" error and the CC button shows `CC!`.
