@@ -54,24 +54,15 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
-      # 5. Archive a Release build targeting the iphoneos SDK.
-      - name: Build iOS archive
+      # 5. Archive and export a Release build targeting the iphoneos SDK.
+      - name: Build and export IPA
         script: |
-          xcodebuild archive \
-            -project iosApp/ICSApp.xcodeproj \
-            -scheme ICSApp \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath build/ios/ICSApp.xcarchive \
-            | xcpretty
-
-      # 6. Export the archive to an IPA suitable for App Store / TestFlight.
-      - name: Export IPA
-        script: |
-          xcodebuild -exportArchive \
-            -archivePath build/ios/ICSApp.xcarchive \
-            -exportPath build/ios/ipa \
-            -exportOptionsPlist iosApp/ExportOptions.plist
+          xcode-project build-ipa \
+            --project iosApp/ICSApp.xcodeproj \
+            --scheme ICSApp \
+            --config Release \
+            --archive-directory build/ios \
+            --ipa-directory build/ios/ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
