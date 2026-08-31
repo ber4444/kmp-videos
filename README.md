@@ -1,4 +1,4 @@
-# Inner Circle Squared
+# Apollo Videos
 
 A Compose Multiplatform (Android + iOS + wasmJs) app for streaming live and
 recorded HLS event streams, built on **Media3/ExoPlayer** (Android) and

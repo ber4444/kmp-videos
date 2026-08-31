@@ -84,7 +84,7 @@ private fun mediaItem(url: String, mimeType: String?, title: String): MediaItem 
         .setMediaMetadata(
             androidx.media3.common.MediaMetadata.Builder()
                 .setTitle(title)
-                .setArtist("Inner Circle Squared")
+                .setArtist("Apollo Videos")
                 .setArtworkUri(android.net.Uri.parse("android.resource://com.livingpresence.inner.circle.squared/mipmap/ic_launcher"))
                 .build(),
         )
@@ -94,5 +94,5 @@ private fun mediaItem(url: String, mimeType: String?, title: String): MediaItem 
 
 private fun titleFor(url: String): String {
     val eventNumber = parseEventNumber(url)
-    return if (eventNumber != null) "Event $eventNumber" else "Inner Circle Squared"
+    return if (eventNumber != null) "Event $eventNumber" else "Apollo Videos"
 }
