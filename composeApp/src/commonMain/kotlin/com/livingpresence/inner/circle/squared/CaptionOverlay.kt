@@ -41,22 +41,29 @@ private val CaptionLineHeight = 20.sp
  * full height, aligned to the bottom of a [maxRows]-tall box and clipped, so older
  * rows scroll off the top rather than the live tail being ellipsized away.
  *
+ * Cues are joined into one reflowing paragraph rather than one line each. A cue
+ * boundary is where the recognizer finalized a fragment, not where a line should
+ * break — giving each its own row spent a whole row on a two-word fragment, so
+ * the [maxRows] window held only a couple of cues and text scrolled off before it
+ * could be read. Joined with spaces the same window fills with words instead.
+ *
  * @param captions the router's caption stream.
  * @param maxCues how many recent cues to feed the layout (the accumulator caps its history);
- *   what actually fits is decided by [maxRows].
+ *   what actually fits is decided by [maxRows]. Set high enough that the reflowed
+ *   text can always fill the window, since short fragments contribute few words each.
  * @param maxRows the tallest the caption strip may get, in text rows.
  */
 @Composable
 internal fun CaptionOverlay(
     captions: StateFlow<List<CaptionCue>>,
     modifier: Modifier = Modifier,
-    maxCues: Int = 3,
-    maxRows: Int = 2,
+    maxCues: Int = 8,
+    maxRows: Int = 3,
 ) {
     val cues by captions.collectAsState()
     if (cues.isEmpty()) return
     val visible = cues.takeLast(maxCues)
-    val joined = visible.joinToString("\n") { it.text }
+    val joined = visible.joinToString(" ") { it.text }
     val maxTextHeight = with(LocalDensity.current) { CaptionLineHeight.toDp() } * maxRows
     Box(
         modifier = modifier
