@@ -39,7 +39,7 @@ import kotlinx.serialization.json.Json
  * the live service.
  */
 class SonioxClient(
-    apiKey: () -> String,
+    apiKey: suspend () -> String,
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),
     private val translateTo: String? = null,
@@ -83,7 +83,9 @@ class SonioxClient(
     }
 
     override fun onMissingKey() {
-        val msg = "Missing Soniox API key"
+        // Reached when no token endpoint is configured for this build, which is the
+        // only way the app can now be short of a key — it no longer ships one.
+        val msg = "Captions are not configured for this build"
         setError(msg)
         accumulator.setPartial(msg)
     }

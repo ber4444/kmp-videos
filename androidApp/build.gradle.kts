@@ -78,11 +78,14 @@ android {
     }
 }
 
-// Transcription provider API keys are read from the gitignored `secrets.properties`
-// at the repo root (copy secrets.properties.example) and exposed via BuildConfig.
-// NOTE: BuildConfig strings are embedded in the APK and are extractable — this is a
-// dev/portfolio convenience, not production key handling. For production, proxy the
-// websocket through a backend that holds the key. Empty when the file/keys are absent.
+// Build configuration read from the gitignored `secrets.properties` at the repo
+// root (copy secrets.properties.example) and exposed via BuildConfig.
+//
+// NOTE: BuildConfig strings are plain constants in `classes.dex` — `unzip` and
+// `strings` are enough to read them out of a published APK, and R8 does not
+// obscure them. Nothing secret may go through here. The Soniox and Deepgram API
+// keys used to, which is why the app now ships only the URL of the service that
+// holds the Soniox key (see :server and TranscriptionSecrets).
 val transcriptionSecrets = Properties().apply {
     val f = rootProject.file("secrets.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -90,11 +93,12 @@ val transcriptionSecrets = Properties().apply {
 
 androidComponents {
     onVariants { variant ->
-        val deepgramKey = transcriptionSecrets.getProperty("DEEPGRAM_API_KEY", "")
-        variant.buildConfigFields?.put("DEEPGRAM_API_KEY", com.android.build.api.variant.BuildConfigField("String", "\"$deepgramKey\"", "Deepgram API key (local, gitignored)"))
-
-        val sonioxKey = transcriptionSecrets.getProperty("SONIOX_API_KEY", "")
-        variant.buildConfigFields?.put("SONIOX_API_KEY", com.android.build.api.variant.BuildConfigField("String", "\"$sonioxKey\"", "Soniox API key (local, gitignored)"))
+        // Base URL of the temporary-key service, NOT a key: it mints the
+        // short-lived Soniox credential each caption session connects with, so
+        // nothing long-lived is compiled into the app. Empty → captions report
+        // themselves unconfigured instead of connecting.
+        val sonioxTokenUrl = transcriptionSecrets.getProperty("SONIOX_TOKEN_URL", "")
+        variant.buildConfigFields?.put("SONIOX_TOKEN_URL", com.android.build.api.variant.BuildConfigField("String", "\"$sonioxTokenUrl\"", "Base URL of the Soniox temporary-key service"))
 
         // Discord OAuth config for the landing screen's Apollo gate. Not secrets
         // (the client id is public and the guild id is a snowflake), but kept in

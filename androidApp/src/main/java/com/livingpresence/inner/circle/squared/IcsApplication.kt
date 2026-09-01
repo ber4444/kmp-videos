@@ -36,10 +36,11 @@ class IcsApplication : Application() {
         // the repo. Empty → the feed is exactly the numbered events.
         FeedConfig.extraVideosManifestUrl = BuildConfig.EXTRA_VIDEOS_URL
 
-        // Streaming-ASR keys. Empty when unset — the caption clients then surface
-        // a "missing key" error rather than connecting.
-        TranscriptionSecrets.deepgramApiKey = BuildConfig.DEEPGRAM_API_KEY
-        TranscriptionSecrets.sonioxApiKey = BuildConfig.SONIOX_API_KEY
+        // Where captions get their per-session Soniox key. The app holds no
+        // provider key of its own: a BuildConfig string is a readable constant in
+        // the shipped dex, so this is a URL, not a credential. Empty when unset —
+        // captions then report themselves unconfigured rather than connecting.
+        TranscriptionSecrets.sonioxTokenEndpoint = BuildConfig.SONIOX_TOKEN_URL
 
         // Discord OAuth wiring for the landing screen's Apollo gate. Neither value
         // is a secret (the client id is public, the guild id is a snowflake), but

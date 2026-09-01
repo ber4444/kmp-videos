@@ -54,6 +54,14 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "InnerCircleSquared"
-include(":androidApp")
-include(":composeApp")
-include(":mediakit")
+
+// The token service is a plain JVM module and is built in a Docker image that has
+// no Android SDK. Including the Android/KMP modules there fails at plugin
+// resolution, long before anything is compiled, so `-PserverOnly=true` prunes them.
+// See server/Dockerfile.
+include(":server")
+if (providers.gradleProperty("serverOnly").orNull != "true") {
+    include(":androidApp")
+    include(":composeApp")
+    include(":mediakit")
+}

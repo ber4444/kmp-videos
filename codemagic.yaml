@@ -14,7 +14,9 @@ workflows:
           source: true
     environment:
       groups:
-        - app_secrets                        # SONIOX_API_KEY, DISCORD_CLIENT_ID, etc.
+        - app_secrets                        # SONIOX_TOKEN_URL, DISCORD_CLIENT_ID, etc.
+                                             # NOT SONIOX_API_KEY: it would land in
+                                             # the IPA's Info.plist in cleartext.
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.livingpresence.inner.circle.squared
@@ -27,8 +29,7 @@ workflows:
       - name: Write secrets.properties
         script: |
           cat <<EOF > "$CM_BUILD_DIR/secrets.properties"
-          DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
-          SONIOX_API_KEY=${SONIOX_API_KEY:-}
+          SONIOX_TOKEN_URL=${SONIOX_TOKEN_URL:-}
           DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
           APOLLO_GUILD_ID=${APOLLO_GUILD_ID:-}
           STREAM_HOST=${STREAM_HOST:-}

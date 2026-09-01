@@ -16,8 +16,10 @@ import platform.Foundation.NSBundle
  */
 fun mainViewController() = ComposeUIViewController {
     val info = NSBundle.mainBundle.infoDictionary
-    TranscriptionSecrets.deepgramApiKey = info?.get("DEEPGRAM_API_KEY") as? String ?: ""
-    TranscriptionSecrets.sonioxApiKey = info?.get("SONIOX_API_KEY") as? String ?: ""
+    // Where captions get their per-session Soniox key. Info.plist ships in cleartext
+    // inside the .app, so this is a URL and never a credential — the Soniox key
+    // lives in :server. Empty → captions report themselves unconfigured.
+    TranscriptionSecrets.sonioxTokenEndpoint = info?.get("SONIOX_TOKEN_URL") as? String ?: ""
     // Discord OAuth config for the landing screen's Apollo gate. Empty client id
     // disables the gate.
     DiscordConfig.clientId = info?.get("DISCORD_CLIENT_ID") as? String ?: ""

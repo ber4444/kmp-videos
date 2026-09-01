@@ -1,25 +1,38 @@
 package com.livingpresence.inner.circle.squared.transcription
 
 /**
- * Runtime holder for the streaming-ASR API keys. Keys are **not** compiled into
- * shared code — each platform reads them from its own gitignored source and pushes
- * them in here at startup:
- *  - Android: `BuildConfig.DEEPGRAM_API_KEY` / `SONIOX_API_KEY` (from `secrets.properties`)
- *  - iOS: xcconfig / Info.plist (Phase 3)
- *  - Web: build-time env (Phase 4)
+ * Runtime transcription configuration. Each platform host fills this in at startup
+ * from its own gitignored source, exactly as it does for `FeedConfig` and
+ * `DiscordConfig`.
  *
- * Empty when not configured; clients surface a clear error rather than connecting.
+ * **There is no provider API key here, and that is the point.** This object used to
+ * hold the Soniox and Deepgram keys, which were compiled into every build — Android
+ * `BuildConfig`, the iOS `Info.plist`, and the wasmJs bundle — putting a long-lived,
+ * billable credential in the hands of anyone who could unzip an APK or open
+ * devtools. The app now holds only [sonioxTokenEndpoint]: the URL of a service
+ * (`:server`) that holds the real key and mints 60-second, single-use,
+ * transcription-scoped keys against it. See `SonioxKeyProvider`.
  *
- * SECURITY: shipping a key in the client (BuildConfig/plist) is a dev/portfolio
- * convenience only — the key is extractable. For production, stream through a
- * backend proxy that holds the key and never expose it to the app.
+ * Blank endpoint means captions are unconfigured; the clients report that rather
+ * than connecting.
  */
 object TranscriptionSecrets {
-    var deepgramApiKey: String = ""
-    var sonioxApiKey: String = ""
 
-    fun select(provider: TranscriptionProvider): String = when (provider) {
-        TranscriptionProvider.DEEPGRAM -> deepgramApiKey
-        TranscriptionProvider.SONIOX -> sonioxApiKey
-    }
+    /**
+     * Base URL of the temporary-key service — scheme and authority, no path
+     * (`https://apollo-videos-tokens.fly.dev`). `SonioxKeyProvider` appends the
+     * route.
+     */
+    var sonioxTokenEndpoint: String = ""
+
+    /**
+     * Deepgram is not reachable from the UI — the provider switcher is not
+     * rendered (see `CaptionLabels.captionLabel`) and the README records Soniox as
+     * the only provider the app reaches — so its key is no longer shipped either.
+     * Selecting it in code yields the "not configured" path rather than a stream.
+     *
+     * The evaluation harness in `eval/` still scores both providers; it reads its
+     * own keys from its own environment and never went through this object.
+     */
+    const val DEEPGRAM_UNCONFIGURED: String = ""
 }

@@ -1,0 +1,43 @@
+# Fly.io deployment for the Soniox temporary-key service.
+#
+# Deploy from the repository root (the Dockerfile needs the Gradle wrapper and
+# settings.gradle.kts, which live there):
+#
+#   fly launch --no-deploy --config server/fly.toml --dockerfile server/Dockerfile
+#   fly secrets set SONIOX_API_KEY=…            # the ONLY place this value belongs
+#   fly deploy --config server/fly.toml --dockerfile server/Dockerfile
+#
+# `fly secrets set` stores the value encrypted and injects it as an environment
+# variable at boot. Do not put it in [env] below — that section is committed.
+
+app = "apollo-videos-tokens"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+  # Browser origins allowed to call the endpoint. The native apps ignore CORS;
+  # this exists solely for the wasmJs build. Empty (the default) blocks every
+  # web origin — set it to wherever the web bundle is actually served from.
+  ALLOWED_ORIGINS = ""
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Zero is the honest setting for this workload: a cold start costs one extra
+  # second before the first caption, and captions already tolerate a reconnect.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

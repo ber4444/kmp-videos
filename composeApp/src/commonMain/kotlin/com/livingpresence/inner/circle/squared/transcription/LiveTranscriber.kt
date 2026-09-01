@@ -1,6 +1,7 @@
 package com.livingpresence.inner.circle.squared.transcription
 
 import com.livingpresence.inner.circle.squared.CaptionCue
+import com.livingpresence.inner.circle.squared.createHttpClient
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,15 @@ import kotlinx.coroutines.launch
  * This is the piece the Android `CaptionAudioRouter` and the iOS/web taps all reuse —
  * only the audio capture differs per platform.
  */
-class LiveTranscriber {
+class LiveTranscriber(
+    /**
+     * Where session keys come from. Defaulted rather than injected at the call site
+     * because the only production caller is a process singleton
+     * ([com.livingpresence.inner.circle.squared.CaptionAudioRouter]); tests
+     * substitute it.
+     */
+    private val keys: SonioxKeyProvider = SonioxKeyProvider(createHttpClient()),
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -79,11 +88,14 @@ class LiveTranscriber {
     }
 
     private fun createClient(provider: TranscriptionProvider): StreamingTranscriber = when (provider) {
-        TranscriptionProvider.DEEPGRAM -> DeepgramClient(apiKey = { TranscriptionSecrets.deepgramApiKey })
+        // Unreachable from the UI, and no longer carries a key: the app ships none.
+        TranscriptionProvider.DEEPGRAM ->
+            DeepgramClient(apiKey = { TranscriptionSecrets.DEEPGRAM_UNCONFIGURED })
         // Resolved per session rather than once per process, so a language changed in
-        // system settings takes effect the next time captions are switched on.
+        // system settings takes effect the next time captions are switched on — and so
+        // that each session gets its own single-use key from :server.
         TranscriptionProvider.SONIOX -> SonioxClient(
-            apiKey = { TranscriptionSecrets.sonioxApiKey },
+            apiKey = { keys.fetch() },
             languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
             translateTo = CaptionLanguage.deviceTarget(),
         )
