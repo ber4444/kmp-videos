@@ -23,6 +23,12 @@ buildscript {
                     if (requested.name == "commons-lang3") useVersion("3.18.0")
                 requested.group == "org.apache.httpcomponents" ->
                     if (requested.name == "httpclient") useVersion("4.5.14")
+                // Dokka 2.2.0 pulls Apache HttpClient 5 for its analysis, and 5.5.1 /
+                // 5.3.6 carry open advisories. These are the 5.x line under different
+                // group ids from the httpclient 4.x above, so they need their own
+                // entries — matching on "org.apache.httpcomponents" does not cover them.
+                requested.group == "org.apache.httpcomponents.core5" -> useVersion("5.4.3")
+                requested.group == "org.apache.httpcomponents.client5" -> useVersion("5.6.3")
                 requested.group == "org.bitbucket.b_c" ->
                     if (requested.name == "jose4j") useVersion("0.9.6")
                 requested.group == "org.jdom" ->
@@ -71,6 +77,8 @@ fun DependencyResolveDetails.forceSecurityPatchedVersions() {
             if (requested.name == "commons-lang3") useVersion("3.18.0")
         requested.group == "org.apache.httpcomponents" ->
             if (requested.name == "httpclient") useVersion("4.5.14")
+        requested.group == "org.apache.httpcomponents.core5" -> useVersion("5.4.3")
+        requested.group == "org.apache.httpcomponents.client5" -> useVersion("5.6.3")
         requested.group == "org.bitbucket.b_c" ->
             if (requested.name == "jose4j") useVersion("0.9.6")
         requested.group == "org.jdom" ->
