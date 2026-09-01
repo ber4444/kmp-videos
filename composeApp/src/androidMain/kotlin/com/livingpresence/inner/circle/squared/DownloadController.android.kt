@@ -1,6 +1,12 @@
 package com.livingpresence.inner.circle.squared
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.media3.common.util.UnstableApi
@@ -18,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import java.util.concurrent.atomic.AtomicReference
 
 /** How often in-flight progress is re-read while a download is running. */
 private const val PROGRESS_POLL_MS = 500L
@@ -173,9 +180,57 @@ private fun DownloadCenter.DownloadState.toCommon(): DownloadStatus = when (this
     DownloadCenter.DownloadState.REMOVING -> DownloadStatus.REMOVING
 }
 
+/**
+ * Wraps a [DownloadController] so the POST_NOTIFICATIONS runtime permission
+ * (API 33+) is asked for at the moment the user starts their first download,
+ * rather than up front on the landing screen.
+ *
+ * Downloading is a niche feature, and the permission only buys its progress
+ * notification: a [DownloadsService] denied the permission still runs, the
+ * system just drops what it posts. So the request is best-effort and gates
+ * nothing — whichever way the dialog goes, the download is enqueued from the
+ * result callback.
+ */
+private class NotificationPromptingDownloadController(
+    private val context: Context,
+    private val delegate: DownloadController,
+    private val pending: AtomicReference<Pair<EventInfo, DownloadQuality>?>,
+    private val launcher: ActivityResultLauncher<String>,
+) : DownloadController by delegate {
+
+    override fun enqueue(event: EventInfo, tier: DownloadQuality) {
+        // Live events are not downloadable, so do not spend a permission prompt
+        // on a call the delegate is about to drop anyway.
+        if (event.isLive) return
+        val granted = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            delegate.enqueue(event, tier)
+            return
+        }
+        pending.set(event to tier)
+        // Permanently denied: the system answers immediately with no dialog, and
+        // the callback still enqueues.
+        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+}
+
 /** Remembers the process-wide [AndroidDownloadController]. */
 @Composable
 actual fun rememberDownloadController(): DownloadController {
     val context = androidx.compose.ui.platform.LocalContext.current
-    return remember { AndroidDownloadController.get(context) }
+    val delegate = remember { AndroidDownloadController.get(context) }
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return delegate
+
+    // Holds the requested download across the system dialog, which tears down
+    // nothing but does suspend the interaction until the user answers.
+    val pending = remember { AtomicReference<Pair<EventInfo, DownloadQuality>?>(null) }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        pending.getAndSet(null)?.let { (event, tier) -> delegate.enqueue(event, tier) }
+    }
+    return remember(delegate, launcher) {
+        NotificationPromptingDownloadController(context, delegate, pending, launcher)
+    }
 }
