@@ -20,7 +20,12 @@ app = 'apollo-videos-tokens'
 primary_region = 'lax'
 
 [build]
-  dockerfile = 'server/Dockerfile'
+  # Relative to THIS file's directory, not to the working directory you deploy
+  # from — `fly launch` writes 'server/Dockerfile' here and then `fly deploy`
+  # resolves it to server/server/Dockerfile and fails. The build *context* is a
+  # separate thing and is the working directory (the repository root), which is
+  # what the COPY lines in the Dockerfile expect and where .dockerignore lives.
+  dockerfile = 'Dockerfile'
 
 [env]
   PORT = '8080'
