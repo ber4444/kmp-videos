@@ -49,8 +49,12 @@ Set the secret **before** the first deploy. `ServerConfig.fromEnvironment` refus
 to boot without it, so deploying first only fails the health check and rolls back:
 
 ```bash
-fly secrets set SONIOX_API_KEY=your-key --app apollo-videos-tokens
+fly secrets set SONIOX_API_KEY=your-key APOLLO_GUILD_ID=your-guild-snowflake --app apollo-videos-tokens
 ```
+
+The guild id is not a secret — any member can read it off the server — but it is
+set alongside the key rather than committed to `fly.toml`, matching how the app
+keeps it in the gitignored `secrets.properties` so a fork configures its own.
 
 ```bash
 fly deploy --config server/fly.toml
@@ -78,6 +82,7 @@ its environment, so a missing secret fails the deploy rather than serving errors
 | Variable | Default | Notes |
 |---|---|---|
 | `SONIOX_API_KEY` | — | Required. Fails startup if unset. |
+| `APOLLO_GUILD_ID` | — | Required. Snowflake of the guild whose members may mint. Fails startup if unset. |
 | `PORT` | `8080` | |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated browser origins for CORS. Empty blocks every web origin; the native apps are unaffected. Set this only if you serve the wasmJs build. |
 | `KEY_TTL_SECONDS` | `60` | Only has to cover the WebSocket connect. |
@@ -87,12 +92,20 @@ its environment, so a missing secret fails the deploy rather than serving errors
 
 ## Authorization
 
-**The endpoint currently checks no identity** — see the `Authorizer` KDoc, which
-spells out exactly what that does and does not leave exposed, and sketches the
-Discord/Apollo check that would close it. In short: no long-lived credential is
-extractable from any binary any more, and abuse is bounded by the rate limit plus
-whatever spend limit is set on the Soniox account, but anyone who finds the URL
-can obtain short-lived keys.
+Keys are minted **only for members of the Apollo Discord guild**. The caller sends
+the Discord access token the app already holds from the landing-screen gate, and
+`DiscordGuildAuthorizer` asks Discord which guilds that token can see. The client's
+own membership check decides what the UI shows; it is not a constraint on anyone
+calling this endpoint directly, which is why the check is repeated here.
+
+It **fails closed** — a rejected token, a non-member, and a Discord outage all
+deny — and matches on the guild snowflake only, never the name, since guild names
+are not unique. Answers are cached for five minutes keyed on a hash of the token,
+because a long video's reconnects would otherwise become a stream of Discord calls.
+
+`APOLLO_GUILD_ID` is required and startup fails without it: an unset guild id could
+only mean "mint for everyone", and a service that silently stops checking identity
+looks healthy while standing open.
 
 ## Tests
 
@@ -102,4 +115,7 @@ can obtain short-lived keys.
 
 Covers the request options that do the bounding, the rule that neither the
 long-lived key nor a Soniox error body may reach a response, per-client rate
-limiting, and that a denied caller costs no Soniox call.
+limiting, and that a denied caller costs no Soniox call. The authorizer suite adds
+the gate itself: members minted, non-members and expired tokens refused, a Discord
+outage failing closed, the cache not confusing two users, and a revoked membership
+being re-checked once the cache expires.

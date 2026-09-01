@@ -45,7 +45,7 @@ fun main() {
 fun Application.module(
     config: ServerConfig,
     httpClient: HttpClient = HttpClient(CIO),
-    authorizer: Authorizer = Authorizer.Open,
+    authorizer: Authorizer = DiscordGuildAuthorizer(httpClient, config.apolloGuildId),
 ) {
     val tokens = SonioxTokenService(httpClient, config)
     val logger = log
@@ -70,6 +70,11 @@ fun Application.module(
             }
             allowMethod(HttpMethod.Post)
             allowHeader(HttpHeaders.ContentType)
+            // The wasmJs build sends its Discord token here. Without this the
+            // browser's preflight fails and the web build cannot mint at all —
+            // while the native apps, which do not preflight, keep working, so the
+            // omission would only ever show up on one target.
+            allowHeader(HttpHeaders.Authorization)
         }
     }
 

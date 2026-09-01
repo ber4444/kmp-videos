@@ -21,7 +21,7 @@ class TemporaryKeyRouteTest {
 
     @Test
     fun handsBackAMintedKey() = testApplication {
-        application { module(testConfig(), httpClient = sonioxReturning()) }
+        application { module(testConfig(), httpClient = sonioxReturning(), authorizer = Authorizer.AllowAll) }
 
         val response = client.post(TEMPORARY_KEY_PATH) { header("Fly-Client-IP", "1.1.1.1") }
 
@@ -31,7 +31,7 @@ class TemporaryKeyRouteTest {
 
     @Test
     fun theLongLivedKeyIsNeverInAResponse() = testApplication {
-        application { module(testConfig(), httpClient = sonioxReturning()) }
+        application { module(testConfig(), httpClient = sonioxReturning(), authorizer = Authorizer.AllowAll) }
 
         val ok = client.post(TEMPORARY_KEY_PATH) { header("Fly-Client-IP", "1.1.1.2") }.bodyAsText()
 
@@ -43,6 +43,7 @@ class TemporaryKeyRouteTest {
         application {
             module(
                 testConfig(),
+                authorizer = Authorizer.AllowAll,
                 httpClient = HttpClient(
                     MockEngine {
                         respond(
@@ -67,7 +68,7 @@ class TemporaryKeyRouteTest {
 
     @Test
     fun oneClientCannotDrainTheEndpoint() = testApplication {
-        application { module(testConfig(rateLimit = 3), httpClient = sonioxReturning()) }
+        application { module(testConfig(rateLimit = 3), httpClient = sonioxReturning(), authorizer = Authorizer.AllowAll) }
 
         val statuses = (1..5).map {
             client.post(TEMPORARY_KEY_PATH) { header("Fly-Client-IP", "9.9.9.9") }.status
@@ -79,7 +80,7 @@ class TemporaryKeyRouteTest {
 
     @Test
     fun theLimitIsPerClientNotGlobal() = testApplication {
-        application { module(testConfig(rateLimit = 1), httpClient = sonioxReturning()) }
+        application { module(testConfig(rateLimit = 1), httpClient = sonioxReturning(), authorizer = Authorizer.AllowAll) }
 
         // Behind Fly every request shares one source address; keying on that would
         // let the first busy viewer lock everyone else out.

@@ -86,9 +86,10 @@
 <div class="lede">
   <p><strong>Apollo Videos does not collect your data.</strong> There is no account to create, no
   analytics, no advertising, and no tracking. The developer operates exactly one small service, and
-  it exists to protect the caption provider&rsquo;s credentials rather than to receive anything about
+  it exists to protect the caption provider&rsquo;s credentials rather than to collect anything about
   you: when you switch captions on, the app asks it for a key that expires in a minute. It is sent no
-  audio, no sign-in details, and nothing identifying, and it stores nothing.</p>
+  audio. It does check your existing Discord sign-in, so that only Apollo members can spend the
+  transcription account, and it stores nothing.</p>
   <p>The app is gated by the Apollo Discord server, and its sole purpose is playing media files.</p>
 </div>
 
@@ -101,8 +102,9 @@ trust.</p>
 <ul class="no-list">
   <li>No analytics, telemetry, crash reporting, or advertising SDK is present in the app.</li>
   <li>No user profile, account, or record is created or stored anywhere by the developer.</li>
-  <li>The developer&rsquo;s only server issues short-lived caption keys. It never receives your
-      audio, your Discord identity, or anything you do in the app, and it keeps no records.</li>
+  <li>The developer&rsquo;s only server issues short-lived caption keys. It never receives your audio
+      or anything you do in the app. It checks your Discord sign-in to confirm Apollo membership,
+      exactly as the app already does, and keeps no records.</li>
   <li>No access to your microphone, camera, contacts, photos, files, or location. The app does not
       request those permissions, so it cannot use them.</li>
   <li>Nothing is sold, rented, or shared with data brokers, advertisers, or anyone else.</li>
@@ -140,8 +142,9 @@ for any website you visit.</p>
     </tr>
     <tr>
       <td><strong>Caption key service</strong><br><span class="sub">operated by the developer</span></td>
-      <td>A request for a short-lived key so the app can open a caption stream. No information about
-          you is included, and nothing is stored.</td>
+      <td>A request for a short-lived key so the app can open a caption stream, carrying the same
+          Discord sign-in you already used to reach the feed. It is used once, to ask Discord whether
+          you are on the Apollo server, and nothing about you is stored.</td>
       <td>Only while you have live captions switched on.</td>
     </tr>
     <tr>

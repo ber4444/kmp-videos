@@ -60,6 +60,26 @@ class SonioxKeyProviderTest {
     }
 
     @Test
+    fun sendsTheDiscordTokenSoTheServiceCanCheckMembership() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+
+        provider(requests, baseUrl = "https://tokens.example", token = "member-token").fetch()
+
+        assertEquals("Bearer member-token", requests.single().headers[HttpHeaders.Authorization])
+    }
+
+    @Test
+    fun withoutASignInItRefusesLocallyInsteadOfAskingTheService() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val provider = provider(requests, baseUrl = "https://tokens.example", token = "")
+
+        val failure = assertFailsWith<TranscriptionKeyException> { provider.fetch() }
+
+        assertEquals(403, failure.status, "terminal: reconnecting cannot produce a sign-in")
+        assertTrue(requests.isEmpty(), "a request the service is certain to refuse is not worth making")
+    }
+
+    @Test
     fun aRefusalCarriesTheStatusTheRetryDecisionNeeds() = runTest {
         val provider = provider(baseUrl = "https://tokens.example", status = HttpStatusCode.Forbidden)
 
@@ -75,6 +95,7 @@ class SonioxKeyProviderTest {
     private fun provider(
         captured: MutableList<HttpRequestData> = mutableListOf(),
         baseUrl: String,
+        token: String = "discord-token",
         status: HttpStatusCode = HttpStatusCode.Created,
         body: String = """{"api_key":"temp-key-123","expires_at":"2026-08-31T12:00:00Z"}""",
     ): SonioxKeyProvider {
@@ -86,6 +107,6 @@ class SonioxKeyProviderTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        return SonioxKeyProvider(HttpClient(engine), baseUrl = { baseUrl })
+        return SonioxKeyProvider(HttpClient(engine), baseUrl = { baseUrl }, discordToken = { token })
     }
 }

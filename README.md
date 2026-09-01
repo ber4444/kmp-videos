@@ -289,8 +289,9 @@ published from [`docs/privacy/`](./docs/privacy) by the `Dokka API docs` workflo
 
 The app collects nothing: no analytics, no crash reporting, and no advertising. The one
 server the developer operates is [`:server`](./server), which mints a short-lived Soniox
-key when captions are switched on; it receives no audio, no account information and no
-personal data, and stores nothing. The Discord refresh token and display name are stored on-device only; the guild list
+key when captions are switched on. It receives no audio and stores nothing; it does check
+the Discord token you already signed in with, to confirm you are on the Apollo server
+before spending the transcription account. The Discord refresh token and display name are stored on-device only; the guild list
 is checked in memory and discarded. Live captions send the *media's* audio — never the microphone,
 for which the app holds no permission — to Soniox, and only while captions are on.
 

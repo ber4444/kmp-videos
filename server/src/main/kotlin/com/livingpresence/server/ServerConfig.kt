@@ -10,6 +10,12 @@ package com.livingpresence.server
  */
 data class ServerConfig(
     val sonioxApiKey: String,
+    /**
+     * Snowflake of the Apollo guild. Callers must present a Discord token that can
+     * see it. Not a secret — any member can read it off the server — but required,
+     * because it is the whole of the identity check.
+     */
+    val apolloGuildId: String,
     val port: Int,
     /**
      * Origins allowed to call the endpoint from a browser. The wasmJs build is a
@@ -44,8 +50,17 @@ data class ServerConfig(
             require(key.isNotEmpty()) {
                 "SONIOX_API_KEY is not set. Run: fly secrets set SONIOX_API_KEY=…"
             }
+            // Fatal for the same reason the key is. An unset guild id could only
+            // mean "let everyone through", and a service that silently stops
+            // checking identity is worse than one that never claimed to: the
+            // dashboard stays green while the gate is open.
+            val guildId = env("APOLLO_GUILD_ID")?.trim().orEmpty()
+            require(guildId.isNotEmpty()) {
+                "APOLLO_GUILD_ID is not set. Run: fly secrets set APOLLO_GUILD_ID=…"
+            }
             return ServerConfig(
                 sonioxApiKey = key,
+                apolloGuildId = guildId,
                 port = env("PORT")?.toIntOrNull() ?: 8080,
                 allowedOrigins = env("ALLOWED_ORIGINS").orEmpty()
                     .split(',')

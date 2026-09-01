@@ -1,8 +1,11 @@
 package com.livingpresence.inner.circle.squared.transcription
 
+import com.livingpresence.inner.circle.squared.discord.DiscordIdentity
 import io.ktor.client.HttpClient
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -26,6 +29,12 @@ import kotlinx.serialization.json.Json
 class SonioxKeyProvider(
     private val httpClient: HttpClient,
     private val baseUrl: () -> String = { TranscriptionSecrets.sonioxTokenEndpoint },
+    /**
+     * Proves who is asking. `:server` mints only for Apollo members and verifies
+     * this token with Discord itself, so what the app believes about membership
+     * never has to be trusted.
+     */
+    private val discordToken: () -> String = { DiscordIdentity.accessToken },
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
 
@@ -41,7 +50,17 @@ class SonioxKeyProvider(
         val base = baseUrl().trim().trimEnd('/')
         if (base.isEmpty()) return ""
 
-        val response = httpClient.post("$base$TEMPORARY_KEY_PATH")
+        val token = discordToken()
+        if (token.isEmpty()) {
+            // Answered here rather than by a round trip the service would refuse
+            // anyway. 403 so the session loop treats it as terminal: no amount of
+            // reconnecting produces a sign-in.
+            throw TranscriptionKeyException(403, NOT_SIGNED_IN)
+        }
+
+        val response = httpClient.post("$base$TEMPORARY_KEY_PATH") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
         if (!response.status.isSuccess()) {
             throw TranscriptionKeyException(
                 status = response.status.value,
@@ -62,6 +81,9 @@ class SonioxKeyProvider(
     companion object {
         /** Must match `TEMPORARY_KEY_PATH` in the `:server` module. */
         const val TEMPORARY_KEY_PATH = "/v1/soniox/temporary-key"
+
+        /** Shown in the transcript when captions are used without a Discord session. */
+        const val NOT_SIGNED_IN = "Connect to Discord to use captions"
     }
 }
 

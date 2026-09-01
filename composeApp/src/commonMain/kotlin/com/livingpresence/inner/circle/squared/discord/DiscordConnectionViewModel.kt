@@ -120,6 +120,7 @@ class DiscordConnectionViewModel(
                 // than an error the user can do nothing about.
                 if (error.status in 400..499) {
                     sessionStore.clear()
+                    DiscordIdentity.clear()
                     DiscordConnectionState.Disconnected
                 } else {
                     DiscordConnectionState.Failed(error.message ?: UNREACHABLE_MESSAGE)
@@ -201,8 +202,14 @@ class DiscordConnectionViewModel(
         val guilds = api.currentUserGuilds(token.accessToken)
         if (!isApolloMember(guilds)) {
             sessionStore.clear()
+            DiscordIdentity.clear()
             return DiscordConnectionState.NotOnApolloServer
         }
+        // Held for the session so the caption path can prove membership to :server,
+        // which re-checks it server-side — this gate decides what the UI shows, not
+        // who may spend the Soniox account. Recorded only after the check passes, so
+        // a non-member's token is never retained.
+        DiscordIdentity.remember(token.accessToken)
         val refreshToken = token.refreshToken ?: fallbackRefreshToken
         if (refreshToken != null) {
             sessionStore.save(
