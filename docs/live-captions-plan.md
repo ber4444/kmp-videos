@@ -66,7 +66,8 @@ before `feedPcm` (reuse the anti-aliased resampler already in `TranscriptionEngi
   docs): first send a JSON **config** frame `{api_key, model:"stt-rt-v5",
   audio_format:"pcm_s16le", sample_rate:16000, num_channels:1, language_hints, ...}`,
   then stream PCM16 binary frames. Receive JSON `{tokens:[{text,is_final,...}]}`.
-  Finish by sending `{"type":"finalize"}` then an empty frame to close.
+  Finish by sending `{"type":"finalize"}` then an empty frame to close. The config frame
+  also takes an optional `context` object — see *Domain glossary* below.
   **Both endpoints/fields must be re-verified against current vendor docs before trusting.**
 
 ## Current status
@@ -205,6 +206,43 @@ played on.
 - Tests: `ReconnectPolicyTest` (commonTest) for the schedule, and
   `WebSocketTranscriberReconnectTest` (androidHostTest) which drives the whole loop over a
   fake transport on virtual time.
+
+## Domain glossary: `context.terms` + `context.translation_terms` (added after translation shipped)
+The talks are full of vocabulary a general model has never been trained to expect, and the
+failure is two-sided: the ASR mis-hears the English, and even when it hears it correctly the
+translator renders it literally instead of using the term the tradition already settled on.
+Soniox takes both fixes in one optional `context` object on the config frame (verified
+against soniox.com/docs/stt/concepts/context):
+
+```json
+{ "context": {
+    "terms": ["Uncreated light", "Influence C", "Four wordless breaths"],
+    "translation_terms": [{ "source": "Uncreated light", "target": "Несотворённый Свет" }]
+} }
+```
+
+- `terms` — uncommon/invented words, pinning spelling and casing. Sent on **every** session,
+  translated or not; getting the English right is the precondition for translating it.
+- `translation_terms` — `{source, target}` pairs, only meaningful when translating, and only
+  for the one language the session is writing in.
+- The other two sections (`general` key-values, free-text `text`) are unused so far.
+- Whole object caps at ~8,000 tokens (~10,000 chars); over that the API **rejects the
+  session**, which `WebSocketTranscriber` would see as an error and retry forever.
+
+`CaptionGlossary` (commonMain) holds the table: one `TERMS` list plus one source→target map
+per language (`hu`, `ru` today), wired in by `LiveTranscriber.createClient` from the same
+`CaptionLanguage.deviceTarget()` that picks the translation language. A device whose language
+has no glossary still gets `terms` and Soniox's own translation. `CaptionGlossaryTest` guards
+the invariants that hand-editing breaks — every language rendering exactly the terms in
+`TERMS`, and the size staying under the cap.
+
+The renderings are the community's accepted terms (49 entries from a 40-row list; rows that
+give two English forms, such as *Transforming friction / Suffering* or *Steward (Steward's
+work)*, are split into one entry each). Where a row offers a second acceptable wording the
+primary is used and the alternate kept in a `//` comment — Soniox takes exactly one target
+per source. Correct these against the accepted-terms list, not by ear; the three entries that
+deliberately depart from it (Hungarian `Felsőbb` rather than `Magasabb`, to pair with the
+list's own `Alsóbb én`) carry the list's wording in a comment.
 
 ## VOD path (separate, not in this doc)
 Recorded events should get **batch** transcription (once per asset) → WebVTT served as

@@ -94,10 +94,17 @@ class LiveTranscriber(
         // Resolved per session rather than once per process, so a language changed in
         // system settings takes effect the next time captions are switched on — and so
         // that each session gets its own single-use key from :server.
-        TranscriptionProvider.SONIOX -> SonioxClient(
-            apiKey = { keys.fetch() },
-            languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
-            translateTo = CaptionLanguage.deviceTarget(),
-        )
+        TranscriptionProvider.SONIOX -> {
+            val target = CaptionLanguage.deviceTarget()
+            SonioxClient(
+                apiKey = { keys.fetch() },
+                languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
+                translateTo = target,
+                // The event vocabulary: `terms` every session, the accepted translations
+                // only for the language this one is actually writing in.
+                terms = CaptionGlossary.TERMS,
+                translationTerms = CaptionGlossary.translationTermsFor(target),
+            )
+        }
     }
 }

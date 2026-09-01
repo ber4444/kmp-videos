@@ -27,6 +27,12 @@ import kotlinx.serialization.json.Json
  * that it emits the *originals* too — see [selectCaptionText]. [CaptionLanguage] picks the
  * language; null leaves the stream untranslated.
  *
+ * **Domain vocabulary.** The config frame also carries a `context` object built from
+ * [CaptionGlossary]: `terms` pins the spelling of vocabulary a general model has no reason
+ * to expect, and `translation_terms` pins the accepted rendering of those terms in the
+ * language being translated into, so the caption says what the tradition says rather than
+ * what a literal translation of the English would.
+ *
  * **Idle timeouts.** Soniox closes a stream that receives neither audio nor a keepalive
  * for more than ~20 s, reporting `error_message: "Request timeout"` — which a paused video,
  * or any gap in the platform audio tap, reaches easily. [idleFrame] sends the documented
@@ -43,11 +49,13 @@ class SonioxClient(
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),
     private val translateTo: String? = null,
+    private val terms: List<String> = emptyList(),
+    private val translationTerms: Map<String, String> = emptyMap(),
 ) : WebSocketTranscriber(
     apiKey,
     // encodeDefaults so the config frame carries the model/format fields Soniox needs;
-    // explicitNulls=false so the optional `translation` block is *absent* rather than
-    // null when captions aren't being translated.
+    // explicitNulls=false so the optional `translation` and `context` blocks are *absent*
+    // rather than null when captions aren't being translated, or when there is no glossary.
     json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false },
 ) {
 
@@ -73,6 +81,7 @@ class SonioxClient(
             sampleRate = sampleRate,
             languageHints = languageHints,
             translation = translateTo?.let { SonioxTranslation(targetLanguage = it) },
+            context = sonioxContext(terms, translationTerms),
         )
         ws.sendText(json.encodeToString(config))
     }
@@ -129,6 +138,7 @@ class SonioxClient(
         @SerialName("num_channels") val numChannels: Int = 1,
         @SerialName("language_hints") val languageHints: List<String> = listOf("en"),
         val translation: SonioxTranslation? = null,
+        val context: SonioxContext? = null,
     )
 
     /**
@@ -196,3 +206,36 @@ internal fun selectCaptionText(tokens: List<SonioxToken>, translating: Boolean):
 }
 
 private const val TRANSLATION_STATUS_TRANSLATION = "translation"
+
+/**
+ * The session `context` Soniox accepts alongside the audio settings. Only the two sections
+ * this app has anything to say are modelled; the API also takes `general` key-values and a
+ * free-text `text` block.
+ */
+@Serializable
+internal data class SonioxContext(
+    val terms: List<String>? = null,
+    @SerialName("translation_terms") val translationTerms: List<SonioxTranslationTerm>? = null,
+)
+
+/** One accepted rendering: [source] as it is spoken, [target] as the caption should read. */
+@Serializable
+internal data class SonioxTranslationTerm(val source: String, val target: String)
+
+/**
+ * Builds the context block, or null when there is nothing to say — an empty `terms` array
+ * would otherwise be sent on every session, and the two sections are independently empty:
+ * a device with no glossary for its language still gets the transcription terms.
+ */
+internal fun sonioxContext(
+    terms: List<String>,
+    translationTerms: Map<String, String>,
+): SonioxContext? {
+    if (terms.isEmpty() && translationTerms.isEmpty()) return null
+    return SonioxContext(
+        terms = terms.takeIf { it.isNotEmpty() },
+        translationTerms = translationTerms
+            .map { (source, target) -> SonioxTranslationTerm(source, target) }
+            .takeIf { it.isNotEmpty() },
+    )
+}
