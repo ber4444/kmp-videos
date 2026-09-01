@@ -52,8 +52,11 @@ targets:
           - CFBundleURLName: "$(PRODUCT_BUNDLE_IDENTIFIER).discord"
             CFBundleURLSchemes:
               - "$(DISCORD_REDIRECT_SCHEME)"
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
+        # Bumped per release. App Store Connect rejects an upload whose
+        # CFBundleVersion is not higher than the last one it accepted, and nothing
+        # in codemagic.yaml derives these, so they are maintained here by hand.
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "2"
         # The home-screen and Settings name. CFBundleName still follows
         # PRODUCT_NAME (ICSApp), which is what the target, the .app and the
         # README's xcodebuild commands are keyed to; CFBundleDisplayName is the
