@@ -54,7 +54,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 
 | Feature | Android | iOS | Web (Wasm) |
 | :--- | :---: | :---: | :---: |
-| **Live STT Captions** (Soniox WebSockets) | ✅ | ✅ | ✅ |
+| **Live STT Captions** (Soniox WebSockets, keys minted by [`:server`](./server)) | ✅ | ✅ | ✅ |
 | **Device-Language Captions** (Soniox in-band translation) | ✅ | ✅ | ✅ |
 | **ABR Ladder Synthesis** (from sibling renditions) | ✅ | ✅ | ✅ |
 | **Viewport-Aware ABR** (auto-caps to screen size) | ✅ | ✅ | ✅ |
@@ -229,9 +229,9 @@ variables, builds the release framework, generates the Xcode project, archives,
 exports, and uploads to TestFlight. Configure these in the Codemagic dashboard:
 
 - **App Store Connect API key** — linked as an integration named "Apollo Videos"
-- **Environment group `app_secrets`** — `SONIOX_API_KEY`, `DISCORD_CLIENT_ID`,
-  `APOLLO_GUILD_ID`, `STREAM_HOST`, `EXTRA_VIDEOS_URL` (and optionally
-  `DEEPGRAM_API_KEY`)
+- **Environment group `app_secrets`** — `SONIOX_TOKEN_URL`, `DISCORD_CLIENT_ID`,
+  `APOLLO_GUILD_ID`, `STREAM_HOST`, `EXTRA_VIDEOS_URL`. Not `SONIOX_API_KEY`: these
+  values reach `Info.plist`, which ships in cleartext inside the IPA.
 
 Code signing is automatic: the workflow calls `app-store-connect
 fetch-signing-files` to provision the certificate and profile on every build.
@@ -287,18 +287,28 @@ binary-breaking changes fail CI. Dokka API docs are published to GitHub Pages on
 [Privacy policy](https://ber4444.github.io/kmp-videos/privacy/) — the page Google Play links to,
 published from [`docs/privacy/`](./docs/privacy) by the `Dokka API docs` workflow job.
 
-The app collects nothing: no analytics, no crash reporting, no advertising, and no server operated by
-the developer. The Discord refresh token and display name are stored on-device only; the guild list
+The app collects nothing: no analytics, no crash reporting, and no advertising. The one
+server the developer operates is [`:server`](./server), which mints a short-lived Soniox
+key when captions are switched on. It receives no audio and stores nothing; it does check
+the Discord token you already signed in with, to confirm you are on the Apollo server
+before spending the transcription account. The Discord refresh token and display name are stored on-device only; the guild list
 is checked in memory and discarded. Live captions send the *media's* audio — never the microphone,
 for which the app holds no permission — to Soniox, and only while captions are on.
 
 ## Configuration
 
-Transcription API keys are read from `secrets.properties` in the project root. See
-`secrets.properties.example` for details. Only `SONIOX_API_KEY` is used at runtime;
-`DEEPGRAM_API_KEY` is still read and still embedded in the build, but nothing reaches it
-since Deepgram was switched off — the [`eval/`](./eval) harness takes its key from its own
-gitignored `.env` instead.
+Build configuration is read from `secrets.properties` in the project root. See
+`secrets.properties.example` for details.
+
+> **No provider API key goes in that file.** Everything in it is compiled into the
+> shipped app — dex constants on Android, `Info.plist` on iOS, the JS bundle on web —
+> and all three are readable from a published binary. The Soniox key used to live
+> there and therefore shipped to every user; it now lives only in the
+> [`:server`](./server) deployment's environment, and the app carries just
+> `SONIOX_TOKEN_URL`, the address of the service that mints per-session keys. See
+> [server/README.md](./server/README.md). Deepgram is unreachable in the app and its
+> key is no longer shipped either; the [`eval/`](./eval) harness takes its keys from
+> its own gitignored `.env`.
 
 Gradle is the single reader of that file on every platform: Android gets `BuildConfig`
 fields, wasm a generated constants object, and iOS the gitignored

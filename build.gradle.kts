@@ -36,6 +36,12 @@ plugins {
     alias(libs.plugins.androidApplication) apply false
     alias(libs.plugins.androidLibrary) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+    // Declared here, not only in :server: the Kotlin plugin is already on the root
+    // buildscript classpath via the multiplatform alias, and a versioned request
+    // from a subproject cannot be version-checked against it ("already on the
+    // classpath with an unknown version"). Pinning it once at the root resolves it.
+    alias(libs.plugins.kotlinJvm) apply false
+    alias(libs.plugins.kotlinx.serialization) apply false
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.compose.compiler) apply false
     // SDK discipline (plan.md Phase 1/6): Dokka API docs + Kover coverage gate.

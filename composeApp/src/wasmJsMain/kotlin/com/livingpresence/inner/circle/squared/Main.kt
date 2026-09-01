@@ -11,11 +11,11 @@ import kotlinx.browser.window
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     document.title = "Apollo Videos"
-    // Live-caption keys are baked into the bundle from secrets.properties at build
-    // time (see composeApp/build.gradle.kts). Empty when unset — the caption clients
-    // then surface a "missing key" error and the CC button shows `CC!`.
-    TranscriptionSecrets.deepgramApiKey = TranscriptionKeys.DEEPGRAM_API_KEY
-    TranscriptionSecrets.sonioxApiKey = TranscriptionKeys.SONIOX_API_KEY
+    // Where captions get their per-session Soniox key. A web bundle is public by
+    // construction, so what is baked in here is a URL and never a credential — the
+    // Soniox key lives in :server. Empty when unset: the caption clients then
+    // report themselves unconfigured and the CC button shows `!`.
+    TranscriptionSecrets.sonioxTokenEndpoint = TranscriptionKeys.SONIOX_TOKEN_URL
 
     // Discord OAuth config for the landing screen's Apollo gate, from the same
     // generated constants. Empty client id disables the gate.

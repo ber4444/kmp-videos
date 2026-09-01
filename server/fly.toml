@@ -1,0 +1,60 @@
+# Fly.io deployment for the Soniox temporary-key service.
+#
+# Set the secret BEFORE the first deploy — ServerConfig.fromEnvironment refuses to
+# boot without it, so deploying first just fails the health check and rolls back:
+#
+#   fly secrets set SONIOX_API_KEY=… --app apollo-videos-tokens
+#   fly deploy --config server/fly.toml
+#
+# `fly secrets set` stores the value encrypted and injects it as an environment
+# variable at boot. It must NOT go in [env] below — that section is committed, and
+# a key in this file is a key in the repository, which is the exact problem this
+# service exists to solve.
+#
+# Run these from the repository root: the Dockerfile's build context needs the
+# Gradle wrapper and settings.gradle.kts, which live there. Note the sibling chess
+# project also has a server/fly.toml, so a relative --config is ambiguous between
+# the two — check `fly status` names this app before deploying.
+
+app = 'apollo-videos-tokens'
+primary_region = 'lax'
+
+[build]
+  # Relative to THIS file's directory, not to the working directory you deploy
+  # from — `fly launch` writes 'server/Dockerfile' here and then `fly deploy`
+  # resolves it to server/server/Dockerfile and fails. The build *context* is a
+  # separate thing and is the working directory (the repository root), which is
+  # what the COPY lines in the Dockerfile expect and where .dockerignore lives.
+  dockerfile = 'Dockerfile'
+
+[env]
+  PORT = '8080'
+  # Browser origins allowed to call the endpoint. The native apps ignore CORS;
+  # this exists solely for the wasmJs build. Empty blocks every web origin — set
+  # it to wherever the web bundle is served from if that build needs captions.
+  ALLOWED_ORIGINS = ''
+  # KEY_TTL_SECONDS, MAX_SESSION_SECONDS, RATE_LIMIT and RATE_LIMIT_REFILL_SECONDS
+  # are deliberately absent: their defaults live in ServerConfig, next to the
+  # comments explaining what each one bounds. Override here only to differ.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  # Zero is the honest setting for this workload: a cold start costs about a
+  # second before the first caption, and captions already tolerate a reconnect.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpus = 1
+  memory_mb = 512

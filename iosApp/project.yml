@@ -35,8 +35,10 @@ targets:
         # below, and every one degrades gracefully when empty. These belong
         # here, not hand-edited into Info.plist: that file is *generated* by
         # `xcodegen generate`, which silently discards anything not listed here.
-        DEEPGRAM_API_KEY: "$(DEEPGRAM_API_KEY)"
-        SONIOX_API_KEY: "$(SONIOX_API_KEY)"
+        # A URL, not a key. Info.plist is shipped in cleartext inside the .app —
+        # `unzip` on an IPA reads it — so no credential may be declared here. The
+        # Soniox API key it used to carry now lives only in :server.
+        SONIOX_TOKEN_URL: "$(SONIOX_TOKEN_URL)"
         DISCORD_CLIENT_ID: "$(DISCORD_CLIENT_ID)"
         APOLLO_GUILD_ID: "$(APOLLO_GUILD_ID)"
         STREAM_HOST: "$(STREAM_HOST)"

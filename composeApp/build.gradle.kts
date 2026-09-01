@@ -236,6 +236,11 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // Lets SonioxKeyProviderTest exercise the real Ktor call path — the
+            // route it posts to has to match :server's, and only a client-side
+            // assertion can catch the two drifting apart.
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
             @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
             implementation(compose.uiTest)
         }
@@ -253,12 +258,14 @@ kotlin {
     }
 }
 
-// Web (wasmJs) transcription key provisioning — mirror of the Android BuildConfig
-// approach (androidApp/build.gradle.kts): read the gitignored secrets.properties and
-// generate a Kotlin constants file into the wasmJs source set.
-// NOTE: these keys are embedded in the web bundle and are extractable by anyone who
-// loads the page — a dev/portfolio convenience, not production key handling. For
-// production, proxy the websocket through a backend that holds the key.
+// Web (wasmJs) build configuration — mirror of the Android BuildConfig approach
+// (androidApp/build.gradle.kts): read the gitignored secrets.properties and generate
+// a Kotlin constants file into the wasmJs source set.
+//
+// NOTE: everything here is readable by anyone who loads the page — the bundle is
+// JavaScript. Nothing secret may go through it. The Soniox and Deepgram API keys
+// used to, which is why only the token-service URL is generated now; the key
+// itself lives in :server. See TranscriptionSecrets.
 val transcriptionSecrets = Properties().apply {
     val f = rootProject.file("secrets.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -266,8 +273,8 @@ val transcriptionSecrets = Properties().apply {
 val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys") {
     val outputDir = layout.buildDirectory.dir("generated/transcriptionKeys/wasmJsMain")
     outputs.dir(outputDir)
-    val deepgram = transcriptionSecrets.getProperty("DEEPGRAM_API_KEY", "")
-    val soniox = transcriptionSecrets.getProperty("SONIOX_API_KEY", "")
+    // The token service's base URL — not a credential. See :server.
+    val sonioxTokenUrl = transcriptionSecrets.getProperty("SONIOX_TOKEN_URL", "")
     // Discord OAuth config for the landing screen's Apollo gate — public values,
     // carried in the same file so a fork configures its own Discord application.
     val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
@@ -277,8 +284,7 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
     // Scheme + authority of the stream server — see MediaKitConfig.defaultHost.
     val streamHost = transcriptionSecrets.getProperty("STREAM_HOST", "")
     // Track key values so the task re-runs when they change.
-    inputs.property("deepgram", deepgram)
-    inputs.property("soniox", soniox)
+    inputs.property("sonioxTokenUrl", sonioxTokenUrl)
     inputs.property("discordClientId", discordClientId)
     inputs.property("apolloGuildId", apolloGuildId)
     inputs.property("extraVideosUrl", extraVideosUrl)
@@ -293,8 +299,7 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
 
             // Generated from secrets.properties at build time — do not edit or commit.
             internal object TranscriptionKeys {
-                const val DEEPGRAM_API_KEY = "${esc(deepgram)}"
-                const val SONIOX_API_KEY = "${esc(soniox)}"
+                const val SONIOX_TOKEN_URL = "${esc(sonioxTokenUrl)}"
                 const val DISCORD_CLIENT_ID = "${esc(discordClientId)}"
                 const val APOLLO_GUILD_ID = "${esc(apolloGuildId)}"
                 const val EXTRA_VIDEOS_URL = "${esc(extraVideosUrl)}"
@@ -312,8 +317,7 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
 // until you build twice. Gradle runs first in the documented iOS flow (link the
 // framework, then xcodebuild), which puts the values on disk in time.
 val iosSecretKeys = listOf(
-    "DEEPGRAM_API_KEY",
-    "SONIOX_API_KEY",
+    "SONIOX_TOKEN_URL",
     "DISCORD_CLIENT_ID",
     "APOLLO_GUILD_ID",
     "STREAM_HOST",

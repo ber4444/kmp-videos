@@ -19,11 +19,12 @@ import kotlinx.serialization.decodeFromString
  * supplies the endpoint, auth, a periodic KeepAlive, the CloseStream on drain, and
  * Deepgram's JSON shape.
  *
- * @param apiKey supplies the key lazily at [start] time (from [TranscriptionSecrets]).
+ * @param apiKey supplies the key when a session is about to open. Deepgram is no
+ *   longer configured in the app (see [TranscriptionSecrets.DEEPGRAM_UNCONFIGURED]).
  * @param sampleRate PCM rate declared to Deepgram; must match what [feedPcm] sends.
  */
 class DeepgramClient(
-    apiKey: () -> String,
+    apiKey: suspend () -> String,
     private val sampleRate: Int = 16_000,
 ) : WebSocketTranscriber(apiKey) {
 

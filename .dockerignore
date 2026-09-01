@@ -1,0 +1,96 @@
+# flyctl launch added from .gitignore
+# Miscellaneous
+**/*.class
+**/*.log
+**/*.pyc
+**/*.swp
+**/.DS_Store
+**/.atom
+**/.buildlog
+**/.history
+**/.svn
+
+# IntelliJ related
+**/*.iml
+**/*.ipr
+**/*.iws
+**/.idea
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Kotlin
+**/.kotlin
+
+# Web related
+**/lib/generated_plugin_registrant.dart
+
+# Symbolication related
+**/app.*.symbols
+
+# Obfuscation related
+**/app.*.map.json
+
+# Gradle related
+**/.gradle
+**/build
+**/*/build
+**/local.properties
+
+# API keys for transcription providers (Deepgram/Soniox) — never commit.
+# Copy secrets.properties.example → secrets.properties and fill in.
+**/secrets.properties
+
+# Local scratch dumps from `gh api` / PR tooling — never commit.
+pr.txt
+pr.json
+pr_body.md
+pr_diff.txt
+pr_*.json
+comments.json
+reviews.json
+issues_comments.json
+
+# Android Studio
+**/captures
+**/.externalNativeBuild
+**/.cxx
+
+# iOS — the Xcode project is generated from iosApp/project.yml via xcodegen.
+# Only the source (Swift), the project spec, and the generated Info.plist
+# are committed; the .xcodeproj itself is regenerable.
+**/iosApp/ICSApp.xcodeproj
+**/iosApp/ICSApp.xcworkspace
+
+# Exceptions to above rules.
+!packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# flyctl launch added from .idea/.gitignore
+# Default ignored files
+.idea/shelf
+.idea/workspace.xml
+
+# flyctl launch added from .pytest_cache/.gitignore
+# Created by pytest automatically.
+.pytest_cache/**/*
+
+# flyctl launch added from eval/.gitignore
+eval/**/golden/clips
+eval/**/golden/refs
+eval/**/golden/align
+eval/**/fixtures
+eval/**/reports
+eval/**/venv
+eval/**/__pycache__
+eval/**/.env
+
+# flyctl launch added from eval/venv/.gitignore
+# Created by venv; see https://docs.python.org/3/library/venv.html
+eval/venv/**/*
+
+# flyctl launch added from iosApp/.gitignore
+iosApp/**/Secrets.xcconfig
+iosApp/**/Secrets.xcconfig
+fly.toml

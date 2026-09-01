@@ -136,10 +136,94 @@ class WebSocketTranscriberReconnectTest {
         client.stop()
     }
 
-    private fun TestScope.transcriber(transport: FakeTransport) = TestTranscriber(
+    /**
+     * The keys minted by `:server` are single-use, so a key that opened one session
+     * cannot open the next. Resolving once per `start()` — which is what this did
+     * while the key was a compiled-in constant — would authenticate the first
+     * session of a video and fail every reconnect after it, and the symptom would
+     * be captions that die partway through rather than an obvious break.
+     */
+    @Test
+    fun everySessionAsksForItsOwnKey() = runTest {
+        val transport = FakeTransport(
+            listOf(
+                FakeSession(frames = listOf(ERROR_FRAME)),
+                FakeSession(frames = listOf("still going")),
+            )
+        )
+        var issued = 0
+        val client = transcriber(transport) { "key-${++issued}" }
+
+        client.start()
+        advanceTimeBy(RETRY_MS.milliseconds + 1.milliseconds)
+        runCurrent()
+
+        assertEquals(listOf("key-1", "key-2"), client.keysUsed)
+
+        client.stop()
+    }
+
+    @Test
+    fun aFailedKeyRequestIsRetriedLikeADroppedSocket() = runTest {
+        val transport = FakeTransport(listOf(FakeSession(frames = listOf("captions"))))
+        var attempts = 0
+        val client = transcriber(transport) {
+            if (++attempts == 1) throw TranscriptionKeyException(503, "Caption key request failed (503)")
+            "key-ok"
+        }
+
+        client.start()
+        advanceTimeBy(RETRY_MS.milliseconds + 1.milliseconds)
+        runCurrent()
+
+        assertEquals(1, transport.runs, "the first attempt never reached the socket")
+        assertEquals(TranscriberStatus.LISTENING, client.status.value)
+        assertEquals(listOf("captions"), client.transcribed)
+
+        client.stop()
+    }
+
+    @Test
+    fun aRefusedCallerStopsInsteadOfHammeringTheService() = runTest {
+        val transport = FakeTransport(listOf(FakeSession(frames = listOf("never reached"))))
+        val client = transcriber(transport) {
+            throw TranscriptionKeyException(403, "Caption key request failed (403)")
+        }
+
+        client.start()
+        advanceTimeBy((20 * RETRY_MS).milliseconds)
+        runCurrent()
+
+        assertEquals(0, transport.runs)
+        assertEquals(TranscriberStatus.ERROR, client.status.value)
+
+        client.stop()
+    }
+
+    @Test
+    fun anUnconfiguredBuildSaysSoOnceInsteadOfLooping() = runTest {
+        val transport = FakeTransport(listOf(FakeSession(frames = listOf("never reached"))))
+        val client = transcriber(transport) { "" }
+
+        client.start()
+        advanceTimeBy((20 * RETRY_MS).milliseconds)
+        runCurrent()
+
+        assertEquals(0, transport.runs)
+        assertEquals(1, client.missingKeyReports, "a build with no endpoint gains nothing from retrying")
+        assertEquals(TranscriberStatus.ERROR, client.status.value)
+
+        client.stop()
+    }
+
+    private fun TestScope.transcriber(
+        transport: FakeTransport,
+        key: suspend () -> String = { "test-key" },
+    ) = TestTranscriber(
         transport = transport,
         dispatcher = StandardTestDispatcher(testScheduler),
         policy = ReconnectPolicy(initialDelayMs = RETRY_MS, maxDelayMs = RETRY_MS, healthySessionMs = 15_000),
+        key = key,
     )
 
     private companion object {
@@ -157,8 +241,9 @@ private class TestTranscriber(
     transport: WsTransport,
     dispatcher: CoroutineDispatcher,
     policy: ReconnectPolicy,
+    key: suspend () -> String = { "test-key" },
 ) : WebSocketTranscriber(
-    apiKey = { "test-key" },
+    apiKey = key,
     json = Json { ignoreUnknownKeys = true },
     reconnect = policy,
     transportFactory = { transport },
@@ -168,6 +253,21 @@ private class TestTranscriber(
     override val providerName = "Test"
 
     val transcribed = mutableListOf<String>()
+
+    /** The key each opened session actually authenticated with, in order. */
+    val keysUsed = mutableListOf<String>()
+
+    var missingKeyReports = 0
+        private set
+
+    override suspend fun onOpen(ws: WsSession, apiKey: String) {
+        keysUsed += apiKey
+    }
+
+    override fun onMissingKey() {
+        missingKeyReports++
+        setError("Test captions are not configured")
+    }
 
     override fun handleMessage(text: String) {
         if (text.startsWith("ERROR: ")) {

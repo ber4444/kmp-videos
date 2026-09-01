@@ -3,6 +3,13 @@
 > **Living document.** Each step is checked off with a note when complete so another
 > agent can resume. Read "Current status" first, then the step whose box is unchecked.
 
+> **Superseded on key handling.** Steps 1.7/2.x below describe reading
+> `SONIOX_API_KEY`/`DEEPGRAM_API_KEY` out of `secrets.properties` into `BuildConfig`,
+> `Info.plist` and the wasm bundle. That is no longer how it works, and must not be
+> reintroduced: those are all readable in a shipped binary, so the key was public. The
+> app now holds only `SONIOX_TOKEN_URL` and fetches a single-use key per session from
+> the `:server` module. See [server/README.md](../server/README.md).
+
 ## Context / why
 
 On-device Whisper (whisper.cpp via WhisperJNI) was tried for real-time captions and

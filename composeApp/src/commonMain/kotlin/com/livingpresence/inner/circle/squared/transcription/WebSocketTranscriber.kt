@@ -43,9 +43,16 @@ import kotlin.time.TimeSource
  * `WebSocket` on web — so subclasses declare auth as [headers] (used where the platform
  * can set them) plus [subprotocols] (used by the browser transport for `token` auth),
  * and never touch the socket directly.
+ *
+ * **Credentials are resolved per session, and [apiKey] suspends.** The app no longer
+ * ships a provider key; it asks `:server` for a single-use one (see [SonioxKeyProvider]),
+ * which means acquiring it is I/O that can fail, and means a key that opened the last
+ * socket cannot open the next. Resolving once in [start] — as this did while the key was
+ * a compiled-in constant — would authenticate the first session of a video and none of
+ * the reconnects after it.
  */
 abstract class WebSocketTranscriber internal constructor(
-    private val apiKey: () -> String,
+    private val apiKey: suspend () -> String,
     protected val json: Json,
     private val reconnect: ReconnectPolicy,
     private val transportFactory: () -> WsTransport,
@@ -53,7 +60,7 @@ abstract class WebSocketTranscriber internal constructor(
 ) : StreamingTranscriber {
 
     constructor(
-        apiKey: () -> String,
+        apiKey: suspend () -> String,
         json: Json = Json { ignoreUnknownKeys = true },
         reconnect: ReconnectPolicy = ReconnectPolicy(),
     ) : this(apiKey, json, reconnect, { createWsTransport() }, Dispatchers.Default)
@@ -171,26 +178,30 @@ abstract class WebSocketTranscriber internal constructor(
         // A job left over from a terminal failure is finished, not running: don't let it
         // block a restart (re-enabling CC, switching provider back).
         if (job?.isActive == true) return
-        val key = apiKey()
-        if (key.isBlank()) {
-            onMissingKey()
-            return
-        }
         _error.value = null
         _status.value = TranscriberStatus.CONNECTING
-        job = scope.launch { runSessions(key) }
+        job = scope.launch { runSessions() }
     }
 
     /**
      * Connects, streams until the session ends, then reconnects — until the job is cancelled
      * by [stop] or a failure turns out to be terminal.
      */
-    private suspend fun runSessions(key: String) {
+    private suspend fun runSessions() {
         var failures = 0
         while (coroutineContext.isActive) {
             _status.value = if (failures == 0) TranscriberStatus.CONNECTING else TranscriberStatus.RECONNECTING
             val startedAt = TimeSource.Monotonic.markNow()
-            val failure = runSession(key)
+            val failure: String? = when (val outcome = resolveKey()) {
+                // Nothing to wait for: this build has no way to obtain a key, so the
+                // loop ends here rather than retrying an unconfigured endpoint forever.
+                KeyOutcome.Unconfigured -> {
+                    onMissingKey()
+                    return
+                }
+                is KeyOutcome.Failed -> outcome.message
+                is KeyOutcome.Resolved -> runSession(outcome.key)
+            }
             val sessionMs = startedAt.elapsedNow().inWholeMilliseconds
             if (!coroutineContext.isActive) return
 
@@ -208,6 +219,32 @@ abstract class WebSocketTranscriber internal constructor(
             onReconnecting(message, failures, delayMs)
             delay(delayMs)
         }
+    }
+
+    /** What one attempt to obtain a session credential produced. */
+    private sealed interface KeyOutcome {
+        data class Resolved(val key: String) : KeyOutcome
+        data class Failed(val message: String) : KeyOutcome
+
+        /** No key source at all — an unconfigured build, not a transient failure. */
+        data object Unconfigured : KeyOutcome
+    }
+
+    /**
+     * Obtains the credential for the session about to start.
+     *
+     * A failure here is reported like any other ended session so it takes the same
+     * backoff, with one distinction the caller depends on: [isTerminalFailure] sees
+     * the message, so a service that refuses this caller outright (403) stops the
+     * loop while a rate limit or a provider blip retries.
+     */
+    private suspend fun resolveKey(): KeyOutcome = try {
+        val key = apiKey()
+        if (key.isBlank()) KeyOutcome.Unconfigured else KeyOutcome.Resolved(key)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        KeyOutcome.Failed(e.message ?: "$providerName key request failed")
     }
 
     /**
