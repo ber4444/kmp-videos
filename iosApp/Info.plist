@@ -21,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -34,17 +34,15 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>DEEPGRAM_API_KEY</key>
-	<string>$(DEEPGRAM_API_KEY)</string>
+	<string>2</string>
 	<key>DISCORD_CLIENT_ID</key>
 	<string>$(DISCORD_CLIENT_ID)</string>
 	<key>EXTRA_VIDEOS_URL</key>
 	<string>$(EXTRA_VIDEOS_URL)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>SONIOX_API_KEY</key>
-	<string>$(SONIOX_API_KEY)</string>
+	<key>SONIOX_TOKEN_URL</key>
+	<string>$(SONIOX_TOKEN_URL)</string>
 	<key>STREAM_HOST</key>
 	<string>$(STREAM_HOST)</string>
 	<key>UIApplicationSceneManifest</key>
