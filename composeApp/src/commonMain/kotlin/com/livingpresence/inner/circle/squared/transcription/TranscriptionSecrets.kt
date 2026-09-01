@@ -13,17 +13,40 @@ package com.livingpresence.inner.circle.squared.transcription
  * (`:server`) that holds the real key and mints 60-second, single-use,
  * transcription-scoped keys against it. See `SonioxKeyProvider`.
  *
- * Blank endpoint means captions are unconfigured; the clients report that rather
- * than connecting.
+ * A build that sets no endpoint falls back to [DEFAULT_SONIOX_TOKEN_URL], so
+ * captions work in a fresh clone without any local configuration.
  */
 object TranscriptionSecrets {
 
     /**
-     * Base URL of the temporary-key service — scheme and authority, no path
-     * (`https://apollo-videos-tokens.fly.dev`). `SonioxKeyProvider` appends the
-     * route.
+     * The token service this project deploys, used when a build supplies no
+     * endpoint of its own.
+     *
+     * Hardcoding this is safe in a way the provider key never was, because the URL
+     * mints nothing by itself: every request must carry a Discord access token
+     * that `:server` re-verifies against the Apollo guild snowflake, it fails
+     * closed, and it is rate limited per caller. Publishing the hostname grants no
+     * more than knowing where to be refused — and it ships inside every binary
+     * anyway (dex, `Info.plist`, the JS bundle), so a default costs no exposure a
+     * released build did not already have.
+     *
+     * A fork points at its own service by setting `SONIOX_TOKEN_URL` in
+     * `secrets.properties`, which overrides this.
+     */
+    const val DEFAULT_SONIOX_TOKEN_URL: String = "https://apollo-videos-tokens.fly.dev"
+
+    /**
+     * Base URL of the temporary-key service — scheme and authority, no path.
+     * `SonioxKeyProvider` appends the route.
+     *
+     * Reads back [DEFAULT_SONIOX_TOKEN_URL] when nothing was set. The fallback
+     * lives in the getter rather than the initializer because all three platform
+     * hosts assign this unconditionally from their build config, so an unset
+     * `SONIOX_TOKEN_URL` arrives here as `""` — which has to mean "use the
+     * default", not "captions are off".
      */
     var sonioxTokenEndpoint: String = ""
+        get() = field.ifBlank { DEFAULT_SONIOX_TOKEN_URL }
 
     /**
      * Deepgram is not reachable from the UI — the provider switcher is not

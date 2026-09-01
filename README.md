@@ -310,6 +310,14 @@ Build configuration is read from `secrets.properties` in the project root. See
 > key is no longer shipped either; the [`eval/`](./eval) harness takes its keys from
 > its own gitignored `.env`.
 
+`SONIOX_TOKEN_URL` is the one value that may be left empty and still work: it falls
+back to `TranscriptionSecrets.DEFAULT_SONIOX_TOKEN_URL`, this project's own
+deployment, so a fresh clone gets captions with nothing configured. That address is
+hardcoded where `STREAM_HOST` deliberately is not, because it mints nothing on its
+own — `:server` re-verifies the caller's Discord token against the Apollo guild and
+rate limits per caller, so knowing the hostname only tells you where to be refused.
+A fork sets the key to point at its own service.
+
 Gradle is the single reader of that file on every platform: Android gets `BuildConfig`
 fields, wasm a generated constants object, and iOS the gitignored
 `iosApp/Secrets.xcconfig` (written by `:composeApp:generateIosSecretsXcconfig`, which the
