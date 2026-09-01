@@ -90,16 +90,42 @@ internal fun rememberCaptionController(): CaptionController {
  * being recreated.
  */
 @Composable
-internal fun CaptionToggleButton(controller: CaptionController) {
+internal fun CaptionToggleButton(
+    controller: CaptionController,
+    onCaptionsShown: () -> Unit = {},
+) {
     val status by controller.status.collectAsState()
     val translateTo = remember { CaptionLanguage.deviceTarget() }
-    TextButton(onClick = controller.onToggle) {
+    TextButton(
+        onClick = {
+            val reveal = dismissesControlsOnToggle(captionsWereEnabled = controller.enabled)
+            controller.onToggle()
+            if (reveal) onCaptionsShown()
+        },
+    ) {
         Text(
             text = captionToggleLabel(controller.enabled, translateTo, status),
             color = if (controller.enabled) Color.White else Color.White.copy(alpha = 0.7f),
         )
     }
 }
+
+/**
+ * Whether toggling captions should also dismiss the player controls.
+ *
+ * Only when turning them **on**. Android and iOS render the caption overlay behind
+ * `captionController.enabled && !showVideoControls` — the controls and the captions
+ * occupy the same strip, so captions are literally not drawn while the control bar is
+ * up. Tapping the toggle therefore appeared to do nothing until the auto-hide timer
+ * expired, and did nothing at all while paused, since the timer only runs during
+ * playback.
+ *
+ * Turning captions **off** must not dismiss anything: the user is working in the
+ * control bar, and yanking it away as a side effect of an unrelated tap is the kind of
+ * thing that makes a control feel broken. That asymmetry is the whole content of this
+ * function, which is why it is named and tested rather than inlined as `!enabled`.
+ */
+internal fun dismissesControlsOnToggle(captionsWereEnabled: Boolean): Boolean = !captionsWereEnabled
 
 /**
  * The shared top-right control cluster for every player: the caption toggle, followed by
@@ -125,6 +151,9 @@ internal fun CaptionToggleButton(controller: CaptionController) {
  *
  * @param onToggleStats flips the platform's stats overlay. Currently unreached.
  * @param qualityMenu the platform's rendition picker. Currently unreached.
+ * @param onCaptionsShown called when the toggle switches captions *on*, so a platform
+ *   whose controls cover the caption strip can get out of the way. Defaults to a no-op
+ *   for the web player, which has no controls-visibility state to change.
  */
 @Composable
 internal fun PlayerTopRightControls(
@@ -132,8 +161,9 @@ internal fun PlayerTopRightControls(
     @Suppress("UNUSED_PARAMETER") onToggleStats: () -> Unit,
     @Suppress("UNUSED_PARAMETER") qualityMenu: @Composable () -> Unit,
     trailingControls: @Composable () -> Unit = {},
+    onCaptionsShown: () -> Unit = {},
 ) {
-    CaptionToggleButton(controller = captionController)
+    CaptionToggleButton(controller = captionController, onCaptionsShown = onCaptionsShown)
     trailingControls()
 }
 

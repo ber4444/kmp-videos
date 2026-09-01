@@ -470,6 +470,10 @@ private fun ExoPlayerScreen(
                             topRightControls = {
                                 PlayerTopRightControls(
                                     captionController = captionController,
+                                    // The caption overlay is drawn only while the
+                                    // controls are down, so switching captions on has
+                                    // to take the controls with it or nothing appears.
+                                    onCaptionsShown = { showVideoControls = false },
                                     onToggleStats = { showStats = !showStats },
                                     qualityMenu = {
                                         QualityMenu(
