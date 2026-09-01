@@ -38,20 +38,29 @@ allowed one — stop).
 
 ## Deploy
 
-From the repository root — the Dockerfile needs the Gradle wrapper and
-`settings.gradle.kts`, which live there:
+Run these from the repository root — the Dockerfile's build context needs the
+Gradle wrapper and `settings.gradle.kts`, which live there.
+
+The app already exists (`apollo-videos-tokens`). For a fresh environment, create it
+with `fly apps create <name>` rather than `fly launch`: launch rewrites `fly.toml`
+and strips every comment out of it, and the app name is already declared there.
+
+Set the secret **before** the first deploy. `ServerConfig.fromEnvironment` refuses
+to boot without it, so deploying first only fails the health check and rolls back:
 
 ```bash
-fly launch --no-deploy --config server/fly.toml --dockerfile server/Dockerfile
+fly secrets set SONIOX_API_KEY=your-key --app apollo-videos-tokens
 ```
 
 ```bash
-fly secrets set SONIOX_API_KEY=your-key --config server/fly.toml
+fly deploy --config server/fly.toml
 ```
 
-```bash
-fly deploy --config server/fly.toml --dockerfile server/Dockerfile
-```
+`--app` on the secrets command is deliberate: the sibling chess project also has a
+`server/fly.toml`, so a relative `--config` resolves against whichever repository
+you happen to be standing in.
+
+No local Docker daemon is needed — `fly deploy` falls back to a remote builder.
 
 Then point the apps at it by setting `SONIOX_TOKEN_URL` in the gitignored
 `secrets.properties` (and in the Codemagic `app_secrets` group for iOS builds):

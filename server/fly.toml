@@ -1,43 +1,55 @@
 # Fly.io deployment for the Soniox temporary-key service.
 #
-# Deploy from the repository root (the Dockerfile needs the Gradle wrapper and
-# settings.gradle.kts, which live there):
+# Set the secret BEFORE the first deploy — ServerConfig.fromEnvironment refuses to
+# boot without it, so deploying first just fails the health check and rolls back:
 #
-#   fly launch --no-deploy --config server/fly.toml --dockerfile server/Dockerfile
-#   fly secrets set SONIOX_API_KEY=…            # the ONLY place this value belongs
-#   fly deploy --config server/fly.toml --dockerfile server/Dockerfile
+#   fly secrets set SONIOX_API_KEY=… --app apollo-videos-tokens
+#   fly deploy --config server/fly.toml
 #
 # `fly secrets set` stores the value encrypted and injects it as an environment
-# variable at boot. Do not put it in [env] below — that section is committed.
+# variable at boot. It must NOT go in [env] below — that section is committed, and
+# a key in this file is a key in the repository, which is the exact problem this
+# service exists to solve.
+#
+# Run these from the repository root: the Dockerfile's build context needs the
+# Gradle wrapper and settings.gradle.kts, which live there. Note the sibling chess
+# project also has a server/fly.toml, so a relative --config is ambiguous between
+# the two — check `fly status` names this app before deploying.
 
-app = "apollo-videos-tokens"
-primary_region = "iad"
+app = 'apollo-videos-tokens'
+primary_region = 'lax'
 
 [build]
+  dockerfile = 'server/Dockerfile'
 
 [env]
-  PORT = "8080"
+  PORT = '8080'
   # Browser origins allowed to call the endpoint. The native apps ignore CORS;
-  # this exists solely for the wasmJs build. Empty (the default) blocks every
-  # web origin — set it to wherever the web bundle is actually served from.
-  ALLOWED_ORIGINS = ""
+  # this exists solely for the wasmJs build. Empty blocks every web origin — set
+  # it to wherever the web bundle is served from if that build needs captions.
+  ALLOWED_ORIGINS = ''
+  # KEY_TTL_SECONDS, MAX_SESSION_SECONDS, RATE_LIMIT and RATE_LIMIT_REFILL_SECONDS
+  # are deliberately absent: their defaults live in ServerConfig, next to the
+  # comments explaining what each one bounds. Override here only to differ.
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  # Zero is the honest setting for this workload: a cold start costs one extra
+  # Zero is the honest setting for this workload: a cold start costs about a
   # second before the first caption, and captions already tolerate a reconnect.
   min_machines_running = 0
 
   [[http_service.checks]]
-    interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
-    method = "GET"
-    path = "/health"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpus = 1
+  memory_mb = 512
