@@ -155,24 +155,13 @@ fun App() {
 
 @Composable
 private fun rememberMainViewModel(): MainViewModel {
-    val manifestStore = rememberManifestStore()
-    val videoRepository = remember(manifestStore) {
+    val videoRepository = remember {
         val httpClient = createHttpClient()
+        // No catalogues are built here: the stream host and the manifest URL are
+        // issued per account by :server, so neither address exists until someone
+        // has connected. See VideoRepository.
         VideoRepository(
             httpClient = httpClient,
-            // No manifest configured for this build → the feed is exactly the
-            // numbered events, with no extra request made.
-            extras = if (FeedConfig.hasExtraVideos) {
-                ExtraVideoCatalog(
-                    httpClient = httpClient,
-                    manifestUrl = FeedConfig.extraVideosManifestUrl,
-                    store = manifestStore,
-                )
-            } else {
-                null
-            },
-            // Asks :server whether this account is confined to a manifest of its
-            // own. Absent or unreachable → the feed above, unchanged.
             policyClient = FeedPolicyClient(httpClient),
         )
     }

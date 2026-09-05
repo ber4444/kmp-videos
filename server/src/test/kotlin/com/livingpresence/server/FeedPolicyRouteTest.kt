@@ -24,29 +24,31 @@ private const val REVIEWER_TOKEN = "reviewer-token"
 private const val MEMBER_TOKEN = "member-token"
 
 /**
- * What each kind of account is allowed to watch.
+ * Who is told where the videos are.
  *
- * These run through the real route, because the property worth pinning is not
- * "the resolver returns a data class" but "a review account cannot be served the
- * members' feed, and a member cannot be served the demo one".
+ * This route *is* the Apollo membership check, so the properties worth pinning
+ * are about disclosure rather than display: a non-member must not learn the
+ * stream host, and a review account must not learn it either — being confined to
+ * the demo list has to mean the numbered events are unreachable, not merely
+ * unlisted.
  */
 class FeedPolicyRouteTest {
 
     @Test
-    fun anApolloMemberGetsTheOrdinaryFeed() = testApplication {
+    fun anApolloMemberIsGivenTheStreamHostAndTheExtrasManifest() = testApplication {
         application { module(testConfig(), httpClient = unusedSoniox(), feedPolicy = resolver(discord())) }
 
-        val response = get(token = MEMBER_TOKEN)
+        val body = get(token = MEMBER_TOKEN).let {
+            assertEquals(HttpStatusCode.OK, it.status)
+            it.bodyAsText()
+        }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertFalse(
-            response.bodyAsText().contains(DEMO_MANIFEST_URL),
-            "a member's feed is the app's own; the demo manifest must never reach them",
-        )
+        assertTrue(body.contains(TEST_STREAM_HOST))
+        assertTrue(body.contains(EXTRAS_MANIFEST_URL))
     }
 
     @Test
-    fun aReviewAccountGetsTheDemoManifest() = testApplication {
+    fun aReviewAccountIsGivenTheDemoManifestAndNoStreamHost() = testApplication {
         application {
             module(
                 testConfig(),
@@ -59,6 +61,11 @@ class FeedPolicyRouteTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.bodyAsText().contains(DEMO_MANIFEST_URL))
+        assertFalse(
+            response.bodyAsText().contains(TEST_STREAM_HOST),
+            "without the host the numbered events are unreachable, not merely unlisted",
+        )
+        assertFalse(response.bodyAsText().contains(EXTRAS_MANIFEST_URL))
     }
 
     /**
@@ -96,7 +103,13 @@ class FeedPolicyRouteTest {
             )
         }
 
-        assertEquals(HttpStatusCode.Forbidden, get(token = "outsider-token").status)
+        val response = get(token = "outsider-token")
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertFalse(
+            response.bodyAsText().contains(TEST_STREAM_HOST),
+            "a refusal must not leak the address it is refusing access to",
+        )
     }
 
     @Test
@@ -115,8 +128,8 @@ class FeedPolicyRouteTest {
     /**
      * A named review account with no manifest behind it is a half-applied config.
      * Falling through to the membership check would refuse them here anyway — but
-     * a deployment that *had* put them on Apollo would then hand over the real
-     * catalogue, which is the opposite of what naming them meant.
+     * a deployment that *had* put them on Apollo would then hand over the host and
+     * the real catalogue, which is the opposite of what naming them meant.
      */
     @Test
     fun aReviewAccountWithNoDemoManifestIsRefusedRatherThanGivenTheRealFeed() = testApplication {
@@ -127,6 +140,8 @@ class FeedPolicyRouteTest {
                 feedPolicy = DiscordFeedPolicyResolver(
                     httpClient = discord(memberOf = { listOf(TEST_GUILD_ID) }),
                     guildId = TEST_GUILD_ID,
+                    streamHost = TEST_STREAM_HOST,
+                    extraVideosUrl = EXTRAS_MANIFEST_URL,
                     testUserIds = setOf(REVIEWER_ID),
                     demoVideosUrl = "",
                 ),
@@ -184,9 +199,9 @@ class FeedPolicyRouteTest {
             )
         }
 
-        assertFalse(get(token = MEMBER_TOKEN).bodyAsText().contains(DEMO_MANIFEST_URL))
-        assertTrue(get(token = REVIEWER_TOKEN).bodyAsText().contains(DEMO_MANIFEST_URL))
-        assertFalse(get(token = MEMBER_TOKEN).bodyAsText().contains(DEMO_MANIFEST_URL))
+        assertTrue(get(token = MEMBER_TOKEN).bodyAsText().contains(TEST_STREAM_HOST))
+        assertFalse(get(token = REVIEWER_TOKEN).bodyAsText().contains(TEST_STREAM_HOST))
+        assertTrue(get(token = MEMBER_TOKEN).bodyAsText().contains(TEST_STREAM_HOST))
     }
 
     @Test
@@ -200,6 +215,8 @@ class FeedPolicyRouteTest {
                 feedPolicy = DiscordFeedPolicyResolver(
                     httpClient = discord(memberOf = { memberOf }),
                     guildId = TEST_GUILD_ID,
+                    streamHost = TEST_STREAM_HOST,
+                    extraVideosUrl = EXTRAS_MANIFEST_URL,
                     testUserIds = emptySet(),
                     demoVideosUrl = "",
                     nowMs = { now },
@@ -225,6 +242,8 @@ class FeedPolicyRouteTest {
         DiscordFeedPolicyResolver(
             httpClient = discord,
             guildId = TEST_GUILD_ID,
+            streamHost = TEST_STREAM_HOST,
+            extraVideosUrl = EXTRAS_MANIFEST_URL,
             testUserIds = if (reviewersAllowed) setOf(REVIEWER_ID) else emptySet(),
             demoVideosUrl = if (reviewersAllowed) DEMO_MANIFEST_URL else "",
         )

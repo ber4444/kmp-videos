@@ -68,6 +68,29 @@ class ServerConfigTest {
         assertEquals("", config.demoVideosUrl)
     }
 
+    /**
+     * Unset means "hand out nothing", which surfaces as an empty gallery. Unlike
+     * the guild id there is no reading of these under which the gate quietly opens,
+     * so they are defaults rather than boot failures.
+     */
+    @Test
+    fun anUnconfiguredFeedHandsOutNothing() {
+        val config = ServerConfig.fromEnvironment { configured(it) }
+
+        assertEquals("", config.streamHost)
+        assertEquals("", config.extraVideosUrl)
+    }
+
+    /** A trailing slash would double up when the app appends `/live/event…`. */
+    @Test
+    fun theStreamHostIsTrimmedOfItsTrailingSlash() {
+        val config = ServerConfig.fromEnvironment {
+            if (it == "STREAM_HOST") " https://stream.example:443/ " else configured(it)
+        }
+
+        assertEquals("https://stream.example:443", config.streamHost)
+    }
+
     @Test
     fun parsesACommaSeparatedReviewAccountList() {
         val config = ServerConfig.fromEnvironment {

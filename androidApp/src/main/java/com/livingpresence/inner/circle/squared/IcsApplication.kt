@@ -26,15 +26,11 @@ class IcsApplication : Application() {
 
         HostBridge.isDebug = { BuildConfig.DEBUG }
 
-        // The stream host. Not published in this repository: it is the one value
-        // every playlist URL is built from, so it lives in secrets.properties and
-        // is injected here. Empty → probes resolve nowhere and the feed is empty,
-        // which beats pointing at a stale hardcoded server.
-        FeedConfig.streamHost = BuildConfig.STREAM_HOST
-
-        // Extra videos appended to the feed, listed in a manifest hosted outside
-        // the repo. Empty → the feed is exactly the numbered events.
-        FeedConfig.extraVideosManifestUrl = BuildConfig.EXTRA_VIDEOS_URL
+        // No stream host and no manifest URL are injected here any more. Both are
+        // issued per account by :server once someone has connected — see
+        // FeedConfig — so an account that is not an Apollo member is never told
+        // where the streams are, rather than being shown a gallery built from
+        // addresses this build was carrying all along.
 
         // Where captions get their per-session Soniox key. The app holds no
         // provider key of its own: a BuildConfig string is a readable constant in
@@ -42,11 +38,10 @@ class IcsApplication : Application() {
         // captions then report themselves unconfigured rather than connecting.
         TranscriptionSecrets.sonioxTokenEndpoint = BuildConfig.SONIOX_TOKEN_URL
 
-        // Discord OAuth wiring for the landing screen's Apollo gate. Neither value
-        // is a secret (the client id is public, the guild id is a snowflake), but
-        // both come from the same file so forks configure their own Discord
-        // application. Empty client id disables the gate.
+        // Discord OAuth wiring for the landing screen's Apollo gate. Not a secret
+        // — the client id is public by design — but it comes from the same file so
+        // forks configure their own Discord application. Empty disables the gate.
+        // The guild snowflake is not here: :server makes the membership call.
         DiscordConfig.clientId = BuildConfig.DISCORD_CLIENT_ID
-        DiscordConfig.apolloGuildId = BuildConfig.APOLLO_GUILD_ID
     }
 }

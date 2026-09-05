@@ -15,11 +15,10 @@ object DiscordConfig {
     /** OAuth2 client id of the Discord application. Empty disables the gate. */
     var clientId: String = ""
 
-    /**
-     * Snowflake of the Apollo guild. Empty falls back to matching on
-     * [APOLLO_GUILD_NAME], which is convenient but not unique on Discord.
-     */
-    var apolloGuildId: String = ""
+    // No apolloGuildId here. The membership check is :server's — it is the one
+    // that has to hold against a client that has been patched — and the snowflake
+    // is required in that service's environment. A copy in the app would be a
+    // value nothing reads.
 
     /** Overrides [defaultDiscordRedirectUri] when a host needs a different URI. */
     var redirectUriOverride: String? = null
@@ -32,8 +31,6 @@ object DiscordConfig {
      */
     val redirectUri: String get() = redirectUriOverride ?: defaultDiscordRedirectUri()
 
-    /** Name match used when [apolloGuildId] is unset. */
-    const val APOLLO_GUILD_NAME: String = "Apollo"
 
     /**
      * `identify` names the connected account, `guilds` lists the servers it

@@ -1,19 +1,12 @@
 package com.livingpresence.inner.circle.squared.discord
 
-import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class DiscordAuthTest {
-
-    @AfterTest
-    fun resetConfig() {
-        DiscordConfig.apolloGuildId = ""
-    }
 
     @Test
     fun authorizeUrlRequestsAnAuthorizationCodeWithPkceAndTheGuildScope() {
@@ -95,21 +88,18 @@ class DiscordAuthTest {
         )
     }
 
+    /**
+     * There is no client-side membership test to exercise any more — `:server`
+     * makes that call (see `DiscordFeedPolicyResolver` and its route test). What
+     * still has to hold here is that the app keeps *asking* for the `guilds`
+     * scope, since the token this flow returns is what the server checks with.
+     * Dropping the scope would break the gate from the far end, silently.
+     */
     @Test
-    fun apolloMembershipMatchesTheConfiguredGuildId() {
-        DiscordConfig.apolloGuildId = "999"
+    fun theGuildsScopeIsStillRequestedForTheServerToCheckWith() {
+        val scopes = DiscordConfig.SCOPES.split(' ')
 
-        assertTrue(isApolloMember(listOf(DiscordGuild(id = "999", name = "Something Else"))))
-        // A guild merely *named* Apollo is not the configured one.
-        assertFalse(isApolloMember(listOf(DiscordGuild(id = "111", name = "Apollo"))))
-    }
-
-    @Test
-    fun apolloMembershipFallsBackToTheGuildNameWhenNoIdIsConfigured() {
-        DiscordConfig.apolloGuildId = ""
-
-        assertTrue(isApolloMember(listOf(DiscordGuild(id = "111", name = "apollo"))))
-        assertFalse(isApolloMember(listOf(DiscordGuild(id = "111", name = "Artemis"))))
-        assertFalse(isApolloMember(emptyList()))
+        assertTrue("guilds" in scopes)
+        assertTrue("identify" in scopes)
     }
 }

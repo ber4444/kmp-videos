@@ -15,13 +15,15 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Discord-gated landing page.** The app opens on a photo landing screen whose
   only action is *Connect to Discord*. Authorization uses the OAuth2
   authorization-code grant with PKCE (mandatory for Discord mobile deep links,
-  and no client secret ever reaches the device), then `/users/@me/guilds` decides
-  access: members of the Apollo server land in the events feed, everyone else is
-  told *"User must be on the Apollo server."* The session persists across
-  launches via a refresh token — stored in `SharedPreferences` on Android, the
-  Keychain on iOS, `localStorage` on web — and membership is **re-verified on
-  every launch**, so leaving Apollo revokes access at the next start rather than
-  never. See [Configuration](#configuration).
+  and no client secret ever reaches the device). `:server` then decides access
+  from that token: members of the Apollo server are handed the addresses the feed
+  is built from, everyone else is told *"User must be on the Apollo server."* The
+  app carries no stream host and no manifest URL of its own, so a refusal is not
+  a hidden tile — there is nothing to reach. The session persists across launches
+  via a refresh token — stored in `SharedPreferences` on Android, the Keychain on
+  iOS, `localStorage` on web — and membership is **re-verified on every launch**,
+  so leaving Apollo revokes access at the next start rather than never. See
+  [Where the feed comes from](#where-the-feed-comes-from).
 - **Adaptive streaming.** Genuine client-side ABR synthesized from four
   unadvertised sibling renditions, with viewport-aware track selection so the
   chosen quality matches the surface size.
@@ -39,9 +41,9 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
   and background audio constrained to the low-bitrate audio-only tier.
 - **Remotely-curated extras.** Beyond the numbered events the server exposes, the
   feed appends videos listed in a plain-text manifest fetched from outside the
-  repository (a secret gist). The body is cached for a day — on disk, so it
-  survives launches — and a pull-to-refresh re-reads it immediately. See
-  [Extra videos](#extra-videos).
+  repository (a secret gist), whose URL `:server` issues per account. A
+  pull-to-refresh re-reads it immediately. See
+  [Where the feed comes from](#where-the-feed-comes-from).
 - **Offline downloads.** Bounded (VOD) events download via WorkManager (Android) 
   and `AVAssetDownloadURLSession` (iOS) into a cache shared with playback; 
   truly-live events get no download affordance.
@@ -64,7 +66,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 | **Pillarboxing & Orientation Handling** | ✅ | ✅ | ✅ |
 | **Background Audio** (auto-shifts to audio-only tier) | ✅ | ✅ | ✅ |
 | **Picture-in-Picture (PiP)** | ✅ | ✅ | ✅ |
-| **Remote Extras Manifest** (cached 24h between launches) | ✅ | ✅ | ✅ |
+| **Remote Extras Manifest** (issued per account by `:server`) | ✅ | ✅ | ✅ |
 | **Offline HLS Downloads** | ✅ | ✅ | ❌ |
 | **Preview Disk Caching** (persisted between sessions) | ✅ | ✅ | ❌ |
 | **Memory Governor** (OOM prevention during PiP/bg) | ✅ | ❌ | ❌ |
@@ -230,8 +232,9 @@ exports, and uploads to TestFlight. Configure these in the Codemagic dashboard:
 
 - **App Store Connect API key** — linked as an integration named "Apollo Videos"
 - **Environment group `app_secrets`** — `SONIOX_TOKEN_URL`, `DISCORD_CLIENT_ID`,
-  `APOLLO_GUILD_ID`, `STREAM_HOST`, `EXTRA_VIDEOS_URL`. Not `SONIOX_API_KEY`: these
-  values reach `Info.plist`, which ships in cleartext inside the IPA.
+  `APOLLO_GUILD_ID`. Not `SONIOX_API_KEY`, and no longer `STREAM_HOST` or
+  `EXTRA_VIDEOS_URL`: these values reach `Info.plist`, which ships in cleartext
+  inside the IPA. The stream addresses are `fly secrets` on `:server` now.
 
 Code signing is automatic: the workflow calls `app-store-connect
 fetch-signing-files` to provision the certificate and profile on every build.
@@ -312,11 +315,11 @@ Build configuration is read from `secrets.properties` in the project root. See
 
 `SONIOX_TOKEN_URL` is the one value that may be left empty and still work: it falls
 back to `TranscriptionSecrets.DEFAULT_SONIOX_TOKEN_URL`, this project's own
-deployment, so a fresh clone gets captions with nothing configured. That address is
-hardcoded where `STREAM_HOST` deliberately is not, because it mints nothing on its
-own — `:server` re-verifies the caller's Discord token against the Apollo guild and
-rate limits per caller, so knowing the hostname only tells you where to be refused.
-A fork sets the key to point at its own service.
+deployment, so a fresh clone gets captions with nothing configured. Hardcoding it
+is safe because it hands out nothing on its own — every route re-verifies the
+caller's Discord token against the Apollo guild and is rate limited per caller, so
+knowing the hostname only tells you where to be refused. A fork sets the key to
+point at its own service.
 
 Gradle is the single reader of that file on every platform: Android gets `BuildConfig`
 fields, wasm a generated constants object, and iOS the gitignored
@@ -327,33 +330,54 @@ framework link depends on) whose values `iosApp/project.yml` substitutes into
 
 ### Stream host
 
-Every playlist URL is built from one value, `STREAM_HOST` in `secrets.properties`
-— scheme and authority, no trailing slash:
+Not in this repository, and not in the apps. Every playlist URL is built from one
+value — scheme and authority, no trailing slash — and it is a `fly secret` on
+`:server`, handed to a member's client at sign-in and to nobody else:
 
+```bash
+fly secrets set STREAM_HOST=https://your-host.example:443 --app apollo-videos-tokens
 ```
-STREAM_HOST=https://your-host.example:443
-```
 
-It is not compiled into the SDK. Each host injects it at startup
-(`FeedConfig.streamHost` → `MediaKitConfig.defaultHost`) from its own gitignored
-source: Android
-`BuildConfig` via `IcsApplication`, the wasm bundle's generated constants, the
-iOS `Info.plist`. Leaving it empty makes every probe resolve nowhere and the feed
-come back empty — a louder failure than reaching a stale hardcoded server.
+It used to live in `secrets.properties`, which kept it out of the repository but
+never out of the binary: a `BuildConfig` constant in the dex, an `Info.plist`
+entry in the IPA, a string in the web bundle. A host a client streams from is
+still on the wire once that client is playing — this is not a secret in the
+cryptographic sense — but it is now disclosed only to an account that has been
+admitted, rather than to everyone holding a build.
 
-This is **not** a secret and cannot be: a host the client streams from is on the
-wire and inside the binary — a web build ships it in the bundle, and any deployed
-site (including `gh-pages`) serves it. Keeping it in `secrets.properties` keeps it
-out of a public repository and its history, which is a different and achievable
-goal. `eval/scripts/fetch_clips.py` reads the same host from `WOWZA_HOST`.
+`FeedConfig.streamHost` (→ `MediaKitConfig.defaultHost`) tracks whatever the
+current account was issued, and is set back to empty for an account issued none,
+so probes resolve nowhere rather than reaching a server that account was never
+given. `eval/scripts/fetch_clips.py` reads its own host from `WOWZA_HOST`.
 
-### Extra videos
+### Where the feed comes from
 
-The feed is the numbered events (`event1`…`event20`) probed on the Wowza server,
-plus anything listed in a manifest whose raw URL is `EXTRA_VIDEOS_URL` in
-`secrets.properties`. One video per line, URL first and an optional title after
-it; `#` comments and blank lines are ignored. `docs/extra-videos.example.txt` is
-a copyable starting point:
+The feed has two sources — the numbered events (`event1`…`event20`) probed on the
+Wowza server, and a plain-text manifest of extra recordings — and the app holds
+the address of neither. Both are issued per account by `:server` over an
+authenticated route, `GET /v1/feed/policy`:
+
+| Account | Stream host | Manifest |
+|---|---|---|
+| Apollo member | the real host | the members' extras list |
+| Review account | *(none)* | its demo list |
+| Anyone else | *(none)* | *(none)* — refused at the gate |
+
+**That is the Apollo membership check**, and it is why the addresses moved. It
+used to be a client-side comparison against a guild snowflake, with `STREAM_HOST`
+and `EXTRA_VIDEOS_URL` compiled into every build: membership decided what the UI
+*showed*, while the addresses it guarded shipped to anyone who could unzip an
+APK, read an `Info.plist` out of an IPA, or view-source the web bundle. Now a
+non-member is simply not told where the streams are — a decision a patched client
+cannot reverse.
+
+A review account gets a manifest and no host, so for it the numbered events are
+unreachable rather than merely unlisted. Adding or removing one is a `fly secrets`
+change, not a release. See [server/README.md](server/README.md#feed-policy).
+
+The manifest format is unchanged — one video per line, URL first with an optional
+title after it, `#` comments and blank lines ignored;
+`docs/extra-videos.example.txt` is a copyable starting point:
 
 ```
 https://your-stream-host.example/vod/a-recording-8-20-26/playlist.m3u8?DVR   A Recording, Aug 20
@@ -363,49 +387,34 @@ https://your-stream-host.example/vod/another-recording/playlist.m3u8?DVR
 Each URL is probed exactly like an event, so extras get the same LIVE badge,
 duration label and download affordance; a 4xx drops the entry, anything else
 keeps it. Editing the manifest is enough to change the feed — no release needed.
+Use a gist raw URL *without* the revision hash, or the manifest is frozen at the
+revision you pinned.
 
-The body is cached in `SharedPreferences` / `NSUserDefaults` / `localStorage` and
-reused for 24 hours, so the manifest is fetched about once a day per device; a
-failed refresh falls back to the stale copy rather than emptying the feed. Pull
-to refresh bypasses both that TTL and the event-probe cache.
+A **secret gist** is still the intended host, and is still *unlisted, not
+access-controlled*: anyone with the raw URL can read it. What changed is who
+learns the URL — only an admitted account, rather than everyone holding a build.
+Recordings that need real privacy still want signed URLs or a backend that
+authorizes each viewer.
 
-A **secret gist** is the intended host: it keeps a private list out of this
-repository and off GitHub's search. It is *unlisted, not access-controlled* —
-anyone with the raw URL can read it, and the URL ships inside the app, where it
-is extractable. Recordings that need real privacy want signed URLs or a backend
-that authorizes each viewer. Leaving `EXTRA_VIDEOS_URL` empty disables the
-feature outright: no request is made and the feed is exactly the events.
-
-### Review accounts
-
-App-store review needs an account that can sign in and watch something without
-being on the Apollo Discord server. That exception lives entirely in `:server`:
-the app asks `GET /v1/feed/policy` who it is talking to, and a listed account
-comes back confined to a manifest of its own — no numbered events, none of the
-extras above, just that list.
-
-Nothing about it is configured in this repository. The account list and the demo
-manifest URL are `fly secrets` on the token service (`TEST_USER_IDS` and
-`DEMO_VIDEOS_URL` — see [server/README.md](server/README.md#feed-policy)), so
-adding or removing a reviewer is a deploy rather than a release, and neither
-value is compiled into a shipped binary where `unzip` would find it.
-
-The apps degrade to the ordinary feed whenever there is no answer — no token
-service configured, nobody signed in, or the service unreachable — so this path
-cannot empty a member's gallery. Only an explicit `403` is a refusal, and it is
-consulted at the landing gate solely for an account the Apollo check already
-turned away, which keeps a member's sign-in independent of the service.
+**The service is now a dependency of playback, not just of captions.** The apps
+distinguish the failure modes so an outage is not an eviction: a `403` is
+terminal and clears the stored session, while an unreachable service leaves the
+session intact and offers a retry.
 
 ### Discord / Apollo gate
 
-The landing screen's gate reads two more values from the same `secrets.properties`.
-Neither is a secret — the client id is public by design and the guild id is a
-snowflake — but they live there so a fork configures its own Discord application:
+The landing screen's gate reads one more value from the same `secrets.properties`.
+It is not a secret — the client id is public by design — but it lives there so a
+fork configures its own Discord application:
 
 | Key | Where to get it |
 | --- | --- |
 | `DISCORD_CLIENT_ID` | Discord Developer Portal → your application → OAuth2 → Client ID |
-| `APOLLO_GUILD_ID` | Enable Developer Mode in Discord, then right-click the Apollo server icon → Copy Server ID |
+
+`APOLLO_GUILD_ID` is **not** an app value. The membership check runs in `:server`,
+which requires the snowflake in its own environment and refuses to boot without
+it — `fly secrets set APOLLO_GUILD_ID=…`. Copy it by enabling Developer Mode in
+Discord, then right-clicking the Apollo server icon → *Copy Server ID*.
 
 Register these redirect URIs on the application (OAuth2 → Redirects) — they must
 match byte-for-byte or Discord rejects the request:
@@ -426,6 +435,9 @@ derives `DISCORD_REDIRECT_SCHEME` from the same value, and `iosApp/project.yml`
 registers it under `CFBundleURLTypes`. Nothing to set by hand.
 
 Leaving `DISCORD_CLIENT_ID` empty disables the gate — the button then reports that
-sign-in is not configured rather than opening a broken authorization URL. Leaving
-`APOLLO_GUILD_ID` empty falls back to matching the guild *name* `Apollo`, which is
-convenient for a first run but not unique on Discord.
+sign-in is not configured rather than opening a broken authorization URL.
+
+The `guilds` scope is still requested even though the app never reads the guild
+list: the token this flow returns is what `:server` presents to Discord when it
+makes the membership call. Dropping the scope would break the gate from the far
+end.

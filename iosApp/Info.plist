@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>APOLLO_GUILD_ID</key>
-	<string>$(APOLLO_GUILD_ID)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -37,14 +35,10 @@
 	<string>2</string>
 	<key>DISCORD_CLIENT_ID</key>
 	<string>$(DISCORD_CLIENT_ID)</string>
-	<key>EXTRA_VIDEOS_URL</key>
-	<string>$(EXTRA_VIDEOS_URL)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>SONIOX_TOKEN_URL</key>
 	<string>$(SONIOX_TOKEN_URL)</string>
-	<key>STREAM_HOST</key>
-	<string>$(STREAM_HOST)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

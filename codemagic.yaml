@@ -31,9 +31,6 @@ workflows:
           cat <<EOF > "$CM_BUILD_DIR/secrets.properties"
           SONIOX_TOKEN_URL=${SONIOX_TOKEN_URL:-}
           DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
-          APOLLO_GUILD_ID=${APOLLO_GUILD_ID:-}
-          STREAM_HOST=${STREAM_HOST:-}
-          EXTRA_VIDEOS_URL=${EXTRA_VIDEOS_URL:-}
           EOF
 
       # 2. Build the Kotlin/Native release framework for arm64 devices.

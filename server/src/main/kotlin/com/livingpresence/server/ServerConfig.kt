@@ -17,8 +17,27 @@ data class ServerConfig(
      */
     val apolloGuildId: String,
     /**
-     * Snowflakes of the review/demo accounts that are let past the Apollo check
-     * and shown [demoVideosUrl] instead of the ordinary feed.
+     * Scheme and authority of the stream server, e.g. `https://host:443`, handed
+     * to members and to nobody else.
+     *
+     * Every numbered-event playlist URL is built from this, so an account that is
+     * not given it has no way to reach the catalogue at all — which is why it is
+     * served per-caller rather than compiled into the apps, where `unzip` would
+     * read it out of any build regardless of who was signed in.
+     *
+     * Empty is not fatal: members then see only [extraVideosUrl], which is an
+     * obviously wrong feed rather than a silently open door.
+     */
+    val streamHost: String,
+    /**
+     * Raw URL of the members' extras manifest — the plain-text list of recordings
+     * appended to the numbered events. Served alongside [streamHost], to the same
+     * callers, for the same reason.
+     */
+    val extraVideosUrl: String,
+    /**
+     * Snowflakes of the review/demo accounts, which are admitted without being
+     * Apollo members and shown [demoVideosUrl] alone.
      *
      * Lives here rather than in the apps because it is a *policy*, and a policy
      * compiled into a shipped binary is neither confidential nor revocable: it
@@ -28,11 +47,12 @@ data class ServerConfig(
     val testUserIds: Set<String>,
     /**
      * Manifest served to a [testUserIds] account, in the plain-text format
-     * `ExtraVideoCatalog` parses. It is that account's *whole* feed: no numbered
-     * events, and none of the extras a member sees.
+     * `ExtraVideoCatalog` parses. It is that account's *whole* feed: those
+     * accounts are given no [streamHost], so the numbered events are not merely
+     * hidden from them — they are unreachable.
      *
      * Empty means the exemption cannot be honoured, and [DiscordFeedPolicyResolver]
-     * refuses those accounts rather than falling back to the real feed.
+     * refuses those accounts rather than falling back to the members' feed.
      */
     val demoVideosUrl: String,
     val port: Int,
@@ -77,13 +97,15 @@ data class ServerConfig(
             require(guildId.isNotEmpty()) {
                 "APOLLO_GUILD_ID is not set. Run: fly secrets set APOLLO_GUILD_ID=…"
             }
-            // Both optional, and optional together: a deployment that names no
-            // review accounts needs no demo manifest, and one that names them
-            // without a manifest is caught at the route rather than here, so a
-            // half-configured exemption cannot quietly widen the real feed.
+            // The feed values are all optional. Unset means "hand out nothing",
+            // which shows up immediately as an empty gallery — unlike an unset
+            // guild id, there is no reading of them under which the service keeps
+            // looking healthy while standing open.
             return ServerConfig(
                 sonioxApiKey = key,
                 apolloGuildId = guildId,
+                streamHost = env("STREAM_HOST")?.trim()?.trimEnd('/').orEmpty(),
+                extraVideosUrl = env("EXTRA_VIDEOS_URL")?.trim().orEmpty(),
                 testUserIds = env("TEST_USER_IDS").orEmpty()
                     .split(',')
                     .map { it.trim() }

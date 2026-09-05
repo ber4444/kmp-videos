@@ -15,20 +15,25 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * What the caller's feed is allowed to contain.
+ * The caller's feed, in full.
  *
- * One nullable field rather than a flag plus a URL, because the two would only
- * ever be set together: a restricted account is restricted *to* something.
+ * Not a description of what to filter — the app has nothing to filter *from*.
+ * These two values are the only sources it has, so an account is confined to a
+ * feed by being handed less of them, not by being told to hide something it
+ * already holds.
  */
 @Serializable
 data class FeedPolicy(
     /**
-     * When present, this manifest is the caller's **entire** feed — the app skips
-     * the numbered events and its own build-time extras. Absent is the ordinary
-     * feed, and carries no URL: a member's extras manifest stays a build-time
-     * value in the app, so an outage here cannot empty a member's gallery.
+     * Scheme and authority every numbered-event URL is built from. Empty means the
+     * caller gets no numbered events at all — not hidden, unreachable.
      */
-    @SerialName("restricted_manifest_url") val restrictedManifestUrl: String? = null,
+    @SerialName("stream_host") val streamHost: String = "",
+    /**
+     * Raw URL of the caller's manifest: the members' extras list, or a review
+     * account's demo list. Empty means no manifest is fetched.
+     */
+    @SerialName("manifest_url") val manifestUrl: String = "",
 )
 
 /** Whether a caller gets a feed, and which one. */
@@ -53,25 +58,27 @@ fun interface FeedPolicyResolver {
 }
 
 /**
- * The shipped [FeedPolicyResolver]: Apollo members get the ordinary feed, the
- * configured review accounts get the demo manifest and nothing else.
+ * The shipped [FeedPolicyResolver]: Apollo members get the stream host and the
+ * extras manifest, the configured review accounts get the demo manifest alone,
+ * and everyone else is refused.
  *
- * **Why this is server-side.** The apps used to carry the account list and the
- * demo URL in their build config and branch on them locally. That put a policy
- * in a shipped binary — readable with `unzip`, and changeable only by cutting a
- * release — and made "which videos does this account see" a claim the client made
- * about itself. Here the list is a `fly secrets` value, the answer is derived from
- * the identity Discord reports for the presented token, and changing either is a
- * deploy rather than a release.
+ * **This is the Apollo membership check.** It used to be a client-side one, with
+ * the stream host and the extras URL compiled into every build; membership then
+ * decided what the UI *showed* while the addresses themselves shipped to anyone
+ * who could unzip an APK. Here the addresses are the answer: an account that is
+ * not a member is not told where the streams are, so there is nothing for a
+ * patched client to reveal. The apps hold no host, no manifest URL and no account
+ * list of their own.
  *
  * **Matches on the snowflake only.** Discord usernames can be changed and a
  * released one can be re-registered, so a username in the allowlist would be an
  * exemption inherited by whoever claims it next. Ids are permanent, which is the
  * only property that makes an allowlist meaningful.
  *
- * **Identity is checked before membership.** A review account that later joins
- * Apollo must keep seeing the demo feed rather than silently gaining the real one,
- * so the allowlist wins and the guild call is skipped entirely for those accounts.
+ * **Identity is checked before membership.** A review account gets no stream host
+ * even if it is on Apollo — the guild call is skipped for it entirely — so one
+ * that is later added to the server keeps the demo feed rather than silently
+ * gaining the real catalogue.
  *
  * **Fails closed**, and caches per token for [CACHE_TTL_MS], for the reasons given
  * on [DiscordGuildAuthorizer] — the gallery reloads on every launch and pull to
@@ -80,6 +87,8 @@ fun interface FeedPolicyResolver {
 class DiscordFeedPolicyResolver(
     private val httpClient: HttpClient,
     private val guildId: String,
+    private val streamHost: String,
+    private val extraVideosUrl: String,
     private val testUserIds: Set<String>,
     private val demoVideosUrl: String,
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -108,19 +117,25 @@ class DiscordFeedPolicyResolver(
     private suspend fun decide(token: String): FeedDecision {
         val userId = fetchUserId(token) ?: return FeedDecision.Denied(DISCORD_UNREACHABLE)
         if (userId in testUserIds) {
-            // A named review account with nothing to show it is a misconfiguration,
-            // and the safe reading of it is "no feed" — falling through to the
-            // membership check would hand the real catalogue to an account that was
+            // No stream host, deliberately: a review account is meant to see the
+            // demo list and nothing else, and withholding the host is what makes
+            // that true of the streams rather than only of the gallery.
+            //
+            // A named review account with no manifest behind it is a
+            // misconfiguration whose safe reading is "no feed" — falling through
+            // to the membership check would hand the real catalogue to an account
             // singled out precisely to be kept away from it.
             return if (demoVideosUrl.isNotEmpty()) {
-                FeedDecision.Granted(FeedPolicy(restrictedManifestUrl = demoVideosUrl))
+                FeedDecision.Granted(FeedPolicy(streamHost = "", manifestUrl = demoVideosUrl))
             } else {
                 FeedDecision.Denied(NO_DEMO_FEED)
             }
         }
         return when (isApolloMember(token)) {
             null -> FeedDecision.Denied(DISCORD_UNREACHABLE)
-            true -> FeedDecision.Granted(FeedPolicy())
+            true -> FeedDecision.Granted(
+                FeedPolicy(streamHost = streamHost, manifestUrl = extraVideosUrl),
+            )
             false -> FeedDecision.Denied(NOT_A_MEMBER)
         }
     }
@@ -186,7 +201,7 @@ class DiscordFeedPolicyResolver(
         const val CACHE_TTL_MS = DiscordGuildAuthorizer.CACHE_TTL_MS
 
         const val NOT_SIGNED_IN = "Connect to Discord to load the feed."
-        const val NOT_A_MEMBER = "The feed is for members of the Apollo server."
+        const val NOT_A_MEMBER = "User must be on the Apollo server."
         const val NO_DEMO_FEED = "No demo feed is configured for this account."
         const val DISCORD_UNREACHABLE = "Could not verify your Discord account right now."
     }

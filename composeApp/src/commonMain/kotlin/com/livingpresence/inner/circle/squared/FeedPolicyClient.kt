@@ -14,27 +14,33 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * What `:server` says this account may watch.
+ * The account's feed, in full, as `:server` issued it.
  *
- * @property restrictedManifestUrl When non-null, the account's **entire** feed:
- *   no numbered events and none of the build-time extras. Null is the ordinary
- *   feed, and deliberately carries no URL — a member's extras manifest stays a
- *   build-time value, so an outage here cannot empty a member's gallery.
+ * Both fields are addresses rather than permissions, and that is the point: the
+ * app has no stream host and no manifest URL of its own, so an account that is
+ * handed neither cannot reach the catalogue at all — there is nothing compiled
+ * into the binary for a patched client to fall back on.
+ *
+ * @property streamHost Scheme and authority every numbered-event URL is built
+ *   from. Empty means no numbered events.
+ * @property manifestUrl The account's manifest: the members' extras list, or a
+ *   review account's demo list. Empty means none is fetched.
  */
 @Serializable
 data class FeedPolicy(
-    @SerialName("restricted_manifest_url") val restrictedManifestUrl: String? = null,
+    @SerialName("stream_host") val streamHost: String = "",
+    @SerialName("manifest_url") val manifestUrl: String = "",
 )
 
 /** Why [FeedPolicyClient] had no policy to hand back. */
 enum class FeedPolicyAbsence {
-    /** No endpoint, or nobody signed in. The app falls back to its own config. */
+    /** No endpoint, or nobody signed in — nothing has been asked for yet. */
     NOT_APPLICABLE,
 
-    /** The service was asked and could not answer. Also a fallback. */
+    /** The service was asked and could not answer. Retryable. */
     UNAVAILABLE,
 
-    /** The service answered, and the answer is no. Not a fallback. */
+    /** The service answered, and the answer is no. Terminal. */
     REFUSED,
 }
 
@@ -45,19 +51,21 @@ sealed interface FeedPolicyResult {
 }
 
 /**
- * Asks `:server` which videos the connected account is allowed to see.
+ * Asks `:server` where this account's videos are.
  *
- * The demo/review accounts used for app-store review are not on the Apollo
- * server and must see a curated manifest instead of the real catalogue. That list
- * and that URL used to live in each app's build config, which made a *policy*
- * into a shipped constant: readable with `unzip`, unchangeable without a release,
- * and enforced by the client on its own say-so. Both now live in `:server`, which
- * derives the answer from the identity Discord reports for the presented token.
+ * This is the Apollo membership check, and it is a check the app cannot make. It
+ * used to be one: the client read the account's guild list, compared it to a
+ * snowflake, and unlocked a UI built on a stream host and a manifest URL that
+ * were compiled into every build. Membership decided what was *shown* while the
+ * addresses shipped to anyone who could unzip an APK. Now the addresses are the
+ * answer — a non-member is not told where the streams are — so the check holds
+ * against a client that has been patched to ignore it.
  *
- * **Absence is not refusal.** A build with no endpoint, a user who is not
- * connected, and a service that is down all yield [FeedPolicyAbsence] values the
- * caller treats as "carry on with the build-time feed" — the ordinary feed must
- * not depend on this service being reachable. Only an explicit 403 is a refusal.
+ * **Absence is not refusal.** A build with no endpoint and a user who is not yet
+ * connected are [FeedPolicyAbsence.NOT_APPLICABLE]; a service that cannot answer
+ * is [FeedPolicyAbsence.UNAVAILABLE] and is worth retrying. Only an explicit 403
+ * is [FeedPolicyAbsence.REFUSED], and only that may cost a stored session — an
+ * outage must not log a member out of an app they are still entitled to use.
  */
 class FeedPolicyClient(
     private val httpClient: HttpClient,
@@ -74,9 +82,9 @@ class FeedPolicyClient(
     /**
      * The policy for [token], or why there is none.
      *
-     * Never throws: every transport failure is [FeedPolicyAbsence.UNAVAILABLE],
-     * because a gallery that goes blank when this service hiccups would be a worse
-     * outcome than one that shows what the build was configured with.
+     * Never throws: every transport failure is [FeedPolicyAbsence.UNAVAILABLE], so
+     * the callers get to decide what an outage means for them — a retryable error
+     * in the gallery, and a preserved session at the gate.
      */
     suspend fun fetch(token: String = discordToken()): FeedPolicyResult {
         val base = baseUrl().trim().trimEnd('/')

@@ -10,7 +10,6 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -21,25 +20,37 @@ import kotlin.test.assertTrue
 class FeedPolicyClientTest {
 
     @Test
-    fun aRestrictedAccountReadsBackItsManifest() = runTest {
-        val client = clientReturning(HttpStatusCode.OK, """{"restricted_manifest_url":"https://m.example/d.txt"}""")
-
-        val result = client.fetch()
+    fun aMembersPolicyCarriesBothAddresses() = runTest {
+        val client = clientReturning(
+            HttpStatusCode.OK,
+            """{"stream_host":"https://s.example:443","manifest_url":"https://m.example/x.txt"}""",
+        )
 
         assertEquals(
-            FeedPolicyResult.Resolved(FeedPolicy(restrictedManifestUrl = "https://m.example/d.txt")),
-            result,
+            FeedPolicyResult.Resolved(
+                FeedPolicy(streamHost = "https://s.example:443", manifestUrl = "https://m.example/x.txt"),
+            ),
+            client.fetch(),
         )
     }
 
     @Test
-    fun anUnrestrictedAccountResolvesToAPolicyWithNoManifest() = runTest {
-        val client = clientReturning(HttpStatusCode.OK, "{}")
+    fun aReviewAccountsPolicyCarriesAManifestAndNoHost() = runTest {
+        val client = clientReturning(HttpStatusCode.OK, """{"manifest_url":"https://m.example/demo.txt"}""")
 
         val result = client.fetch()
 
         assertTrue(result is FeedPolicyResult.Resolved)
-        assertNull(result.policy.restrictedManifestUrl)
+        assertEquals("", result.policy.streamHost)
+        assertEquals("https://m.example/demo.txt", result.policy.manifestUrl)
+    }
+
+    /** A field the server stops sending must read as "none", never as a crash. */
+    @Test
+    fun anEmptyObjectIsAPolicyWithNoAddresses() = runTest {
+        val client = clientReturning(HttpStatusCode.OK, "{}")
+
+        assertEquals(FeedPolicyResult.Resolved(FeedPolicy()), client.fetch())
     }
 
     @Test

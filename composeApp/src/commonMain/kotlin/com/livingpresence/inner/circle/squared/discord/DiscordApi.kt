@@ -25,13 +25,6 @@ data class DiscordUser(
     val displayName: String get() = globalName?.takeIf { it.isNotBlank() } ?: username
 }
 
-/** A partial guild object as returned by `/users/@me/guilds`. */
-@Serializable
-data class DiscordGuild(
-    val id: String,
-    val name: String,
-)
-
 /** The token endpoint's response. */
 @Serializable
 data class DiscordAccessToken(
@@ -53,9 +46,13 @@ class DiscordApiException(
 ) : Exception(message)
 
 /**
- * The two reads the Apollo gate needs, over the same [HttpClient] the rest of the
- * app uses. Deliberately tiny: an access token goes in, an answer comes out, and
- * nothing is cached or persisted.
+ * The OAuth exchange and the one read the landing screen needs, over the same
+ * [HttpClient] the rest of the app uses. Deliberately tiny: an access token goes
+ * in, an answer comes out, and nothing is cached or persisted.
+ *
+ * There is no guild read here. Membership is `:server`'s question now — see
+ * `DiscordConnectionViewModel.admit` — and the `guilds` scope is still requested
+ * so that *it* can ask Discord with the token this exchange returns.
  */
 class DiscordApi(
     private val httpClient: HttpClient,
@@ -122,10 +119,6 @@ class DiscordApi(
     suspend fun currentUser(accessToken: String): DiscordUser =
         json.decodeFromString(authorizedGet("${DiscordConfig.API_BASE}/users/@me", accessToken))
 
-    /** Every guild the account is a member of (requires the `guilds` scope). */
-    suspend fun currentUserGuilds(accessToken: String): List<DiscordGuild> =
-        json.decodeFromString(authorizedGet("${DiscordConfig.API_BASE}/users/@me/guilds", accessToken))
-
     private suspend fun authorizedGet(url: String, accessToken: String): String {
         val response = httpClient.get(url) {
             header("Authorization", "Bearer $accessToken")
@@ -137,22 +130,5 @@ class DiscordApi(
             )
         }
         return response.bodyAsText()
-    }
-}
-
-/**
- * Whether [guilds] includes the Apollo server.
- *
- * Matches the configured snowflake when there is one — guild *names* are not
- * unique on Discord, so anyone could stand up their own "Apollo" and walk in.
- * The name match is only a fallback so the gate still functions before an id has
- * been configured.
- */
-fun isApolloMember(guilds: List<DiscordGuild>): Boolean {
-    val guildId = DiscordConfig.apolloGuildId
-    return if (guildId.isNotBlank()) {
-        guilds.any { it.id == guildId }
-    } else {
-        guilds.any { it.name.equals(DiscordConfig.APOLLO_GUILD_NAME, ignoreCase = true) }
     }
 }

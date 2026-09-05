@@ -52,6 +52,8 @@ fun Application.module(
     feedPolicy: FeedPolicyResolver = DiscordFeedPolicyResolver(
         httpClient = httpClient,
         guildId = config.apolloGuildId,
+        streamHost = config.streamHost,
+        extraVideosUrl = config.extraVideosUrl,
         testUserIds = config.testUserIds,
         demoVideosUrl = config.demoVideosUrl,
     ),

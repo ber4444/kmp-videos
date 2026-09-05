@@ -20,16 +20,11 @@ fun main() {
     // Discord OAuth config for the landing screen's Apollo gate, from the same
     // generated constants. Empty client id disables the gate.
     DiscordConfig.clientId = TranscriptionKeys.DISCORD_CLIENT_ID
-    DiscordConfig.apolloGuildId = TranscriptionKeys.APOLLO_GUILD_ID
 
-    // The stream host, kept out of the source tree — every playlist URL is built
-    // from it. Empty → the feed resolves nowhere rather than reaching a stale
-    // hardcoded server.
-    FeedConfig.streamHost = TranscriptionKeys.STREAM_HOST
-
-    // Extra videos appended to the feed, listed in a manifest hosted outside the
-    // repo. Empty → the feed is exactly the numbered events.
-    FeedConfig.extraVideosManifestUrl = TranscriptionKeys.EXTRA_VIDEOS_URL
+    // No stream host and no manifest URL are read here any more. Both are issued
+    // per account by :server once someone has connected — see FeedConfig — which
+    // matters most on this target, where the bundle is served to anyone who opens
+    // the page and "view source" is the whole extraction toolchain.
 
     captureDiscordRedirect()
 
