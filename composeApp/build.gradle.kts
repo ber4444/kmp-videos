@@ -327,7 +327,12 @@ val generateIosSecretsXcconfig = tasks.register("generateIosSecretsXcconfig") {
     description = "Writes iosApp/Secrets.xcconfig from the gitignored secrets.properties."
     val outputFile = rootProject.file("iosApp/Secrets.xcconfig")
     outputs.file(outputFile)
-    val values = iosSecretKeys.associateWith { transcriptionSecrets.getProperty(it, "") }
+    // The environment wins over the file so a CI job can supply these without
+    // writing a secrets.properties first — Codemagic currently does write one,
+    // but nothing about the task should require it to.
+    val values = iosSecretKeys.associateWith {
+        System.getenv(it) ?: transcriptionSecrets.getProperty(it, "")
+    }
     // Track the values so the task re-runs when secrets.properties changes.
     values.forEach { (key, value) -> inputs.property(key, value) }
     doLast {

@@ -81,6 +81,10 @@ fun App() {
                 composable(route = AppRoute.Landing) {
                     LandingRoute(
                         onConnected = {
+                            // The feed depends on who just connected — :server
+                            // confines a review account to its own manifest — and
+                            // the first load ran before anyone was signed in.
+                            mainViewModel.retryLoadingVideos()
                             // Drop the landing page from the back stack: once the
                             // Apollo check has passed, backing into the gate again
                             // would only offer to re-authorize.
@@ -167,6 +171,9 @@ private fun rememberMainViewModel(): MainViewModel {
             } else {
                 null
             },
+            // Asks :server whether this account is confined to a manifest of its
+            // own. Absent or unreachable → the feed above, unchanged.
+            policyClient = FeedPolicyClient(httpClient),
         )
     }
     // NOTE: previously used lifecycle-viewmodel-compose's `viewModel()` against a

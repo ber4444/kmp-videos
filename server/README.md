@@ -1,7 +1,8 @@
-# Soniox temporary-key service
+# Token and feed-policy service
 
-A single-route Ktor service whose only job is to hold the Soniox API key so the
-apps don't have to.
+A small Ktor service holding the two things the apps must not carry themselves:
+the Soniox API key, and the list of accounts whose feed differs from everyone
+else's.
 
 ## Why it exists
 
@@ -29,12 +30,19 @@ opens a socket, and what it gets back is bounded four ways — the key is
 
 ```
 POST /v1/soniox/temporary-key   ->  201 {"api_key": "...", "expires_at": "..."}
+GET  /v1/feed/policy            ->  200 {"restricted_manifest_url": "..." | absent}
 GET  /health                    ->  200 {"status": "ok"}
 ```
 
 Failure modes the client distinguishes: `429` (rate limited — retry), `502`
 (Soniox refused *our* key — retry, and check the logs), `403` (this caller is not
 allowed one — stop).
+
+`/v1/feed/policy` answers "what may this account watch". A present
+`restricted_manifest_url` is the account's **entire** feed; an absent one means
+the ordinary feed, and deliberately carries no URL — a member's extras manifest
+stays a build-time value in the app, so an outage here cannot empty their gallery.
+See [Feed policy](#feed-policy).
 
 ## Deploy
 
@@ -83,6 +91,8 @@ its environment, so a missing secret fails the deploy rather than serving errors
 |---|---|---|
 | `SONIOX_API_KEY` | — | Required. Fails startup if unset. |
 | `APOLLO_GUILD_ID` | — | Required. Snowflake of the guild whose members may mint. Fails startup if unset. |
+| `TEST_USER_IDS` | *(empty)* | Comma-separated Discord **user** snowflakes shown `DEMO_VIDEOS_URL` instead of the real feed. Empty means no account is exempt. |
+| `DEMO_VIDEOS_URL` | *(empty)* | Raw URL of the manifest those accounts see. Required if `TEST_USER_IDS` is set; without it those accounts are refused. |
 | `PORT` | `8080` | |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated browser origins for CORS. Empty blocks every web origin; the native apps are unaffected. Set this only if you serve the wasmJs build. |
 | `KEY_TTL_SECONDS` | `60` | Only has to cover the WebSocket connect. |
@@ -106,6 +116,47 @@ because a long video's reconnects would otherwise become a stream of Discord cal
 `APOLLO_GUILD_ID` is required and startup fails without it: an unset guild id could
 only mean "mint for everyone", and a service that silently stops checking identity
 looks healthy while standing open.
+
+## Feed policy
+
+App-store review needs an account that can sign in and watch something without
+being on the Apollo Discord server. `DiscordFeedPolicyResolver` is where that
+exception lives:
+
+| Caller | `/v1/feed/policy` |
+|---|---|
+| Listed in `TEST_USER_IDS` | `200 {"restricted_manifest_url": "<DEMO_VIDEOS_URL>"}` |
+| An Apollo member | `200 {}` — the ordinary feed |
+| Neither | `403` |
+
+The apps hold neither the list nor the demo URL. They previously did, in each
+platform's build config, which made a policy into a shipped constant: readable
+with `unzip`, changeable only by cutting a release, and enforced by the client on
+its own say-so. Here both are `fly secrets`, the answer is derived from the
+identity Discord reports for the presented token, and changing either is a deploy.
+
+Two properties are deliberate and covered by `FeedPolicyRouteTest`:
+
+- **Snowflakes only, never usernames.** Discord usernames can be changed and a
+  released one can be re-registered, so a username in the allowlist would be an
+  exemption inherited by whoever claims it next.
+- **Identity is checked before membership.** A listed account that later joins
+  Apollo keeps the demo feed rather than silently gaining the real one — the
+  guild call is skipped for it entirely. A listed account with no
+  `DEMO_VIDEOS_URL` behind it is refused rather than falling through to the
+  membership check, so a half-applied config cannot widen the real feed.
+
+Like the caption route it fails closed and caches per token for five minutes.
+
+```bash
+fly secrets set TEST_USER_IDS=1545912350056390857 \
+  DEMO_VIDEOS_URL=https://gist.githubusercontent.com/…/raw/videos.txt \
+  --app apollo-videos-tokens
+```
+
+Use a gist raw URL **without** the revision hash (`…/raw/videos.txt`, not
+`…/raw/<sha>/videos.txt`). The pinned form freezes the manifest at one revision,
+which costs the whole point of hosting the list outside the app.
 
 ## Tests
 

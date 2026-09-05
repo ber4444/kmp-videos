@@ -98,13 +98,18 @@ class SonioxTokenServiceTest {
 
 internal const val LONG_LIVED_KEY = "long-lived-secret"
 internal const val TEST_GUILD_ID = "952353661969920051"
+internal const val DEMO_MANIFEST_URL = "https://manifests.example/demo.txt"
 
 internal fun testConfig(
     rateLimit: Int = 30,
     allowedOrigins: List<String> = emptyList(),
+    testUserIds: Set<String> = emptySet(),
+    demoVideosUrl: String = "",
 ) = ServerConfig(
     sonioxApiKey = LONG_LIVED_KEY,
     apolloGuildId = TEST_GUILD_ID,
+    testUserIds = testUserIds,
+    demoVideosUrl = demoVideosUrl,
     port = 0,
     allowedOrigins = allowedOrigins,
     keyTtlSeconds = ServerConfig.DEFAULT_KEY_TTL_SECONDS,

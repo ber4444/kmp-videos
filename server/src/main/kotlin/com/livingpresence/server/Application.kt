@@ -31,6 +31,9 @@ import kotlin.time.Duration.Companion.seconds
 /** The route the apps call. Mirrored by `SonioxKeyProvider` in `composeApp`. */
 const val TEMPORARY_KEY_PATH = "/v1/soniox/temporary-key"
 
+/** The route the apps call for their feed policy. Mirrored by `FeedPolicyClient`. */
+const val FEED_POLICY_PATH = "/v1/feed/policy"
+
 /** A refusal the client can render or retry against. Never carries provider detail. */
 @Serializable
 data class ErrorResponse(val error: String)
@@ -46,6 +49,12 @@ fun Application.module(
     config: ServerConfig,
     httpClient: HttpClient = HttpClient(CIO),
     authorizer: Authorizer = DiscordGuildAuthorizer(httpClient, config.apolloGuildId),
+    feedPolicy: FeedPolicyResolver = DiscordFeedPolicyResolver(
+        httpClient = httpClient,
+        guildId = config.apolloGuildId,
+        testUserIds = config.testUserIds,
+        demoVideosUrl = config.demoVideosUrl,
+    ),
 ) {
     val tokens = SonioxTokenService(httpClient, config)
     val logger = log
@@ -69,6 +78,10 @@ fun Application.module(
                 allowHost(origin.substringAfter("://"), schemes = listOf(scheme))
             }
             allowMethod(HttpMethod.Post)
+            // The feed policy route. Ktor allows GET by default, but stating it
+            // keeps the two routes the web build needs visible in one place
+            // rather than one of them resting on a plugin default.
+            allowMethod(HttpMethod.Get)
             allowHeader(HttpHeaders.ContentType)
             // The wasmJs build sends its Discord token here. Without this the
             // browser's preflight fails and the web build cannot mint at all —
@@ -80,6 +93,16 @@ fun Application.module(
 
     install(RateLimit) {
         register(RateLimitName(TEMPORARY_KEY_LIMIT)) {
+            rateLimiter(
+                limit = config.rateLimit,
+                refillPeriod = config.rateLimitRefillSeconds.seconds,
+            )
+            requestKey { call -> call.clientKey() }
+        }
+        // Its own bucket, on the same budget. Sharing one with the caption route
+        // would let a gallery that reloads on every launch eat the allowance a
+        // long video's reconnects need, and the two have no reason to compete.
+        register(RateLimitName(FEED_POLICY_LIMIT)) {
             rateLimiter(
                 limit = config.rateLimit,
                 refillPeriod = config.rateLimitRefillSeconds.seconds,
@@ -122,10 +145,25 @@ fun Application.module(
                 call.respond(HttpStatusCode.Created, tokens.mint())
             }
         }
+
+        rateLimit(RateLimitName(FEED_POLICY_LIMIT)) {
+            // What the caller may watch. A 200 says "you are allowed a feed" and
+            // describes it; the app treats a 403 as the gate refusing, which is
+            // what lets a review account in without the apps carrying the list.
+            get(FEED_POLICY_PATH) {
+                when (val decision = feedPolicy.resolve(call)) {
+                    is FeedDecision.Denied ->
+                        call.respond(HttpStatusCode.Forbidden, ErrorResponse(decision.reason))
+                    is FeedDecision.Granted ->
+                        call.respond(HttpStatusCode.OK, decision.policy)
+                }
+            }
+        }
     }
 }
 
 private const val TEMPORARY_KEY_LIMIT = "temporary-key"
+private const val FEED_POLICY_LIMIT = "feed-policy"
 
 /**
  * The identity the rate limiter counts against.

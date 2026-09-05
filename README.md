@@ -376,6 +376,26 @@ is extractable. Recordings that need real privacy want signed URLs or a backend
 that authorizes each viewer. Leaving `EXTRA_VIDEOS_URL` empty disables the
 feature outright: no request is made and the feed is exactly the events.
 
+### Review accounts
+
+App-store review needs an account that can sign in and watch something without
+being on the Apollo Discord server. That exception lives entirely in `:server`:
+the app asks `GET /v1/feed/policy` who it is talking to, and a listed account
+comes back confined to a manifest of its own — no numbered events, none of the
+extras above, just that list.
+
+Nothing about it is configured in this repository. The account list and the demo
+manifest URL are `fly secrets` on the token service (`TEST_USER_IDS` and
+`DEMO_VIDEOS_URL` — see [server/README.md](server/README.md#feed-policy)), so
+adding or removing a reviewer is a deploy rather than a release, and neither
+value is compiled into a shipped binary where `unzip` would find it.
+
+The apps degrade to the ordinary feed whenever there is no answer — no token
+service configured, nobody signed in, or the service unreachable — so this path
+cannot empty a member's gallery. Only an explicit `403` is a refusal, and it is
+consulted at the landing gate solely for an account the Apollo check already
+turned away, which keeps a member's sign-in independent of the service.
+
 ### Discord / Apollo gate
 
 The landing screen's gate reads two more values from the same `secrets.properties`.

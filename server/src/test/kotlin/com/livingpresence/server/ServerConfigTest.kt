@@ -56,6 +56,30 @@ class ServerConfigTest {
         )
     }
 
+    /**
+     * Unlike the guild id, an unset allowlist has an unambiguous safe meaning —
+     * "no account is exempt" — so it is a default rather than a boot failure.
+     */
+    @Test
+    fun noReviewAccountsIsTheDefault() {
+        val config = ServerConfig.fromEnvironment { configured(it) }
+
+        assertEquals(emptySet(), config.testUserIds)
+        assertEquals("", config.demoVideosUrl)
+    }
+
+    @Test
+    fun parsesACommaSeparatedReviewAccountList() {
+        val config = ServerConfig.fromEnvironment {
+            when (it) {
+                "TEST_USER_IDS" -> " 100000000000000001, 200000000000000002 ,, "
+                else -> configured(it)
+            }
+        }
+
+        assertEquals(setOf("100000000000000001", "200000000000000002"), config.testUserIds)
+    }
+
     @Test
     fun parsesACommaSeparatedOriginList() {
         val config = ServerConfig.fromEnvironment {

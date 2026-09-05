@@ -55,6 +55,21 @@ class DiscordConnectionViewModel(
     private val api: DiscordApi,
     private val sessionStore: DiscordSessionStore = NoOpDiscordSessionStore,
     private val broker: DiscordAuthBroker = DiscordAuthBroker,
+    /**
+     * Second opinion on an account the Apollo check turned away — the review
+     * accounts used for app-store submission are not on the server and still have
+     * to get in.
+     *
+     * A function rather than a list, because the list is not the app's to hold:
+     * `:server` keeps it and answers from the identity Discord reports for the
+     * token, so the exemption is a deploy-time value rather than a constant
+     * compiled into every binary. See `FeedPolicyClient`.
+     *
+     * Consulted **only** on the failing path, so a member's sign-in never depends
+     * on that service being reachable. The default admits nobody, which makes the
+     * gate exactly the Apollo check for any caller that supplies none.
+     */
+    private val isExemptAccount: suspend (accessToken: String) -> Boolean = { false },
 ) : ViewModel() {
 
     /** The session found at construction, if any. Consumed once by [restoreSession]. */
@@ -185,11 +200,12 @@ class DiscordConnectionViewModel(
     }
 
     /**
-     * Checks Apollo membership with [token] and, when the user is a member,
+     * Checks Apollo membership with [token] and, when the account is admitted,
      * stores the session so the next launch skips the consent screen.
      *
-     * Nothing is stored for a non-member: there is no access to resume, and a
-     * saved token would only be a credential sitting on disk for no reason.
+     * Nothing is stored for an account that is turned away: there is no access to
+     * resume, and a saved token would only be a credential sitting on disk for no
+     * reason.
      *
      * @param fallbackRefreshToken kept when Discord omits a rotated token from
      *   the response, so a refresh never leaves the session without one.
@@ -200,7 +216,7 @@ class DiscordConnectionViewModel(
     ): DiscordConnectionState {
         val user = api.currentUser(token.accessToken)
         val guilds = api.currentUserGuilds(token.accessToken)
-        if (!isApolloMember(guilds)) {
+        if (!isApolloMember(guilds) && !isExemptAccount(token.accessToken)) {
             sessionStore.clear()
             DiscordIdentity.clear()
             return DiscordConnectionState.NotOnApolloServer

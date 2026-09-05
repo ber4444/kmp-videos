@@ -3,6 +3,8 @@ package com.livingpresence.inner.circle.squared
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.livingpresence.mediakit.EventInfo
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +26,9 @@ class MainViewModel(
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+
+    /** The load in flight, so a forced refresh can supersede it. */
+    private var loadJob: Job? = null
 
     init {
         ensureVideosLoaded()
@@ -47,12 +52,16 @@ class MainViewModel(
 
     private fun loadVideos(forceRefresh: Boolean = false) {
         val currentState = _uiState.value
-        if (currentState.isLoadingVideos) {
+        if (!forceRefresh && (currentState.isLoadingVideos || currentState.availableEvents.isNotEmpty())) {
             return
         }
-        if (!forceRefresh && currentState.availableEvents.isNotEmpty()) {
-            return
-        }
+
+        // A forced refresh replaces whatever is in flight rather than deferring to
+        // it. Returning early here would drop the reload the landing screen fires
+        // on connect whenever the first load has not finished yet — leaving a
+        // just-connected account looking at the feed built before anyone was
+        // signed in, which for a restricted account is the wrong feed entirely.
+        loadJob?.cancel()
 
         _uiState.update {
             it.copy(
@@ -61,7 +70,7 @@ class MainViewModel(
             )
         }
 
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             // Pass the flag through: a pull-to-refresh has to bypass the SDK's
             // caches (event probes, and the extras manifest's day-long TTL), or
             // it redraws the same list it already had.
@@ -76,6 +85,9 @@ class MainViewModel(
                     }
                 }
                 .onFailure { error ->
+                    // A cancellation is this method superseding itself; the load
+                    // that replaced it owns the state from here.
+                    if (error is CancellationException) return@launch
                     _uiState.update {
                         it.copy(
                             isLoadingVideos = false,

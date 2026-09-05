@@ -95,9 +95,21 @@ private fun rememberDiscordConnectionViewModel(): DiscordConnectionViewModel {
     // lifecycle-viewmodel-compose factory requires a SavedStateRegistryOwner,
     // which the app's manual ViewModelStoreOwner does not provide (fatal under
     // Kotlin/Wasm). This ViewModel holds no SavedState either.
-    val api = remember { DiscordApi(createHttpClient()) }
+    val httpClient = remember { createHttpClient() }
+    val api = remember(httpClient) { DiscordApi(httpClient) }
+    val feedPolicy = remember(httpClient) { FeedPolicyClient(httpClient) }
     val sessionStore = rememberDiscordSessionStore()
-    return remember(api, sessionStore) { DiscordConnectionViewModel(api, sessionStore) }
+    return remember(api, sessionStore, feedPolicy) {
+        DiscordConnectionViewModel(
+            api = api,
+            sessionStore = sessionStore,
+            // The gate's second opinion for an account that is not on Apollo:
+            // :server holds the review-account allowlist, so a 200 here is it
+            // saying "this one is expected". Anything else — refused, down,
+            // unconfigured — leaves the Apollo check's answer standing.
+            isExemptAccount = { token -> feedPolicy.fetch(token) is FeedPolicyResult.Resolved },
+        )
+    }
 }
 
 /**

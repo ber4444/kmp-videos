@@ -16,6 +16,25 @@ data class ServerConfig(
      * because it is the whole of the identity check.
      */
     val apolloGuildId: String,
+    /**
+     * Snowflakes of the review/demo accounts that are let past the Apollo check
+     * and shown [demoVideosUrl] instead of the ordinary feed.
+     *
+     * Lives here rather than in the apps because it is a *policy*, and a policy
+     * compiled into a shipped binary is neither confidential nor revocable: it
+     * would be readable with `unzip`, and changing it would mean a release. Empty
+     * is the ordinary state — no account is exempt.
+     */
+    val testUserIds: Set<String>,
+    /**
+     * Manifest served to a [testUserIds] account, in the plain-text format
+     * `ExtraVideoCatalog` parses. It is that account's *whole* feed: no numbered
+     * events, and none of the extras a member sees.
+     *
+     * Empty means the exemption cannot be honoured, and [DiscordFeedPolicyResolver]
+     * refuses those accounts rather than falling back to the real feed.
+     */
+    val demoVideosUrl: String,
     val port: Int,
     /**
      * Origins allowed to call the endpoint from a browser. The wasmJs build is a
@@ -58,9 +77,19 @@ data class ServerConfig(
             require(guildId.isNotEmpty()) {
                 "APOLLO_GUILD_ID is not set. Run: fly secrets set APOLLO_GUILD_ID=…"
             }
+            // Both optional, and optional together: a deployment that names no
+            // review accounts needs no demo manifest, and one that names them
+            // without a manifest is caught at the route rather than here, so a
+            // half-configured exemption cannot quietly widen the real feed.
             return ServerConfig(
                 sonioxApiKey = key,
                 apolloGuildId = guildId,
+                testUserIds = env("TEST_USER_IDS").orEmpty()
+                    .split(',')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toSet(),
+                demoVideosUrl = env("DEMO_VIDEOS_URL")?.trim().orEmpty(),
                 port = env("PORT")?.toIntOrNull() ?: 8080,
                 allowedOrigins = env("ALLOWED_ORIGINS").orEmpty()
                     .split(',')
