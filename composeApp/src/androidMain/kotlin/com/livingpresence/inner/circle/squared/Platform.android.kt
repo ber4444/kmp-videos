@@ -71,6 +71,7 @@ import com.livingpresence.mediakit.LadderResolver
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.ProbedRendition
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlinx.coroutines.delay
@@ -89,7 +90,11 @@ private val ScrubPreviewHeight = 90.dp
 /** Material3 Slider thumb radius; used to map fraction → thumb center x. */
 private val SliderThumbRadius = 10.dp
 
-actual fun createHttpClient(): HttpClient = HttpClient()
+// The engine is named rather than left to `HttpClient()`, which discovers it
+// through ServiceLoader. Naming it lets R8 see the only engine we use and drop
+// the rest, and removes the need for a keep rule over io.ktor to protect a
+// lookup that happens by reflection.
+actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
 
 
 actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
@@ -120,7 +125,7 @@ actual fun PlatformPlayerScreen(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    val httpClient = remember { HttpClient() }
+    val httpClient = remember { HttpClient(OkHttp) }
     val eventNumber = remember(url) { parseEventNumber(url) }
 
     // Connect to the service-owned player. It survives config changes and
