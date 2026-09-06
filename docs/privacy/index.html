@@ -80,16 +80,17 @@
 
 <header>
   <h1>Privacy Policy</h1>
-  <p class="sub"><strong>Apollo Videos</strong> · Effective 1 September 2026</p>
+  <p class="sub"><strong>Apollo Videos</strong> · Effective 6 September 2026</p>
 </header>
 
 <div class="lede">
   <p><strong>Apollo Videos does not collect your data.</strong> There is no account to create, no
   analytics, no advertising, and no tracking. The developer operates exactly one small service, and
-  it exists to protect the caption provider&rsquo;s credentials rather than to collect anything about
-  you: when you switch captions on, the app asks it for a key that expires in a minute. It is sent no
-  audio. It does check your existing Discord sign-in, so that only Apollo members can spend the
-  transcription account, and it stores nothing.</p>
+  it exists to hold things the app must not carry rather than to collect anything about you. It does
+  two jobs. It tells the app <em>where the videos are</em>, which is how access is limited to Apollo
+  members: the app itself knows no addresses, so a non-member is not shown a locked door, there is
+  simply nothing to open. And when you switch captions on, it issues a transcription key that expires
+  in a minute. It is sent no audio, and it keeps no records of you.</p>
   <p>The app is gated by the Apollo Discord server, and its sole purpose is playing media files.</p>
 </div>
 
@@ -102,9 +103,12 @@ trust.</p>
 <ul class="no-list">
   <li>No analytics, telemetry, crash reporting, or advertising SDK is present in the app.</li>
   <li>No user profile, account, or record is created or stored anywhere by the developer.</li>
-  <li>The developer&rsquo;s only server issues short-lived caption keys. It never receives your audio
-      or anything you do in the app. It checks your Discord sign-in to confirm Apollo membership,
-      exactly as the app already does, and keeps no records.</li>
+  <li>The developer&rsquo;s only server answers two questions — where this account&rsquo;s videos are,
+      and whether it may have a caption key. It never receives your audio, and it is told nothing
+      about what you watch or do in the app. To answer, it asks Discord whether you are on the Apollo
+      server, using the sign-in you already made. Its answer is held in memory for five minutes so a
+      long video does not re-ask on every reconnect, under a one-way hash of your sign-in token rather
+      than the token itself. Nothing is written to disk, and nothing outlives the process.</li>
   <li>No access to your microphone, camera, contacts, photos, files, or location. The app does not
       request those permissions, so it cannot use them.</li>
   <li>Nothing is sold, rented, or shared with data brokers, advertisers, or anyone else.</li>
@@ -130,22 +134,28 @@ for any website you visit.</p>
     </tr>
     <tr>
       <td><strong>Discord</strong><br><span class="sub">discord.com</span></td>
-      <td>The standard OAuth2 sign-in exchange you start by tapping <em>Connect to Discord</em>. The
-          app asks Discord for two things: your display name, and the list of servers you belong to.</td>
+      <td>The standard OAuth2 sign-in exchange you start by tapping <em>Connect to Discord</em>, which
+          returns your display name. The membership question is asked by the developer&rsquo;s service
+          rather than by the app — see the row below — so it is that service which reads your account
+          id and your list of servers, using the sign-in you granted.</td>
       <td>When you sign in, and once at each launch to re-check membership.</td>
     </tr>
     <tr>
       <td><strong>GitHub</strong><br><span class="sub">gist.githubusercontent.com</span></td>
-      <td>A request for a text file listing additional videos in the feed. No information about you
-          is included.</td>
-      <td>About once a day, or when you pull to refresh.</td>
+      <td>A request for a text file listing additional videos in the feed, at an address the
+          developer&rsquo;s service supplies once you are signed in. No information about you is
+          included.</td>
+      <td>Once per launch, and when you pull to refresh.</td>
     </tr>
     <tr>
-      <td><strong>Caption key service</strong><br><span class="sub">operated by the developer</span></td>
-      <td>A request for a short-lived key so the app can open a caption stream, carrying the same
-          Discord sign-in you already used to reach the feed. It is used once, to ask Discord whether
-          you are on the Apollo server, and nothing about you is stored.</td>
-      <td>Only while you have live captions switched on.</td>
+      <td><strong>The feed and caption service</strong><br><span class="sub">operated by the developer</span></td>
+      <td>Your Discord sign-in, so the service can ask Discord who you are and whether you are on the
+          Apollo server. On that basis it returns the addresses the feed is built from, and — when
+          captions are on — a transcription key good for one connection within a minute. It is told
+          nothing about which videos you open. Its yes-or-no answer is cached in memory for five
+          minutes under a hash of your token; your requests are also counted per network address, in
+          memory, so that no one caller can exhaust the service.</td>
+      <td>At launch and on each refresh of the feed, and additionally while captions are on.</td>
     </tr>
     <tr>
       <td><strong>Soniox</strong><br><span class="sub">stt-rt.soniox.com</span></td>
@@ -163,9 +173,11 @@ for any website you visit.</p>
 Discord who you are. It uses the standard authorization-code flow with PKCE, and requests the two
 narrowest scopes that answer the question: <code>identify</code> and <code>guilds</code>.</p>
 <ul>
-  <li>Your <strong>server list</strong> is examined in memory to answer one yes-or-no question — are
-      you on Apollo? — and is then discarded. It is never written to storage and never leaves your
-      device.</li>
+  <li>Your <strong>server list</strong> and your Discord <strong>account id</strong> are read to
+      answer one yes-or-no question — are you on Apollo? — and are then discarded. That question is
+      answered by the developer&rsquo;s service rather than on your device, because an app can be
+      modified to lie about the answer and a server cannot. Neither value is written to storage,
+      by the app or by the service.</li>
   <li>Your <strong>display name</strong> is kept on your device only, so the app can greet you
       without asking Discord again on every screen.</li>
   <li>Your Discord <strong>password is never seen by the app</strong>. You type it on Discord's own
@@ -185,10 +197,14 @@ anywhere.</p>
   <li><strong>Thumbnail images</strong> extracted from videos, cached so the feed does not re-download
       them.</li>
   <li><strong>Videos you chose to download</strong> for offline viewing.</li>
-  <li>The cached <strong>list of extra videos</strong> described above.</li>
 </ul>
 <p>Signing out erases the stored session. Uninstalling the app, or clearing its data in system
 settings, erases everything above. On the web build, clearing site data does the same.</p>
+<p class="sub">One iOS detail, stated because it is not obvious: iOS deliberately keeps Keychain
+entries when an app is deleted, so the saved sign-in survives an uninstall until something clears it.
+The app clears it itself the first time it runs after being installed, so a reinstall never resumes
+someone else&rsquo;s session — but between deleting the app and installing it again, the entry is
+still on the device.</p>
 
 <h2>Permissions</h2>
 <p>The Android app requests only what the media player needs to work:</p>
@@ -204,10 +220,12 @@ settings, erases everything above. On the web build, clearing site data does the
 <h2>Google Play Data Safety</h2>
 <p>In the Google Play Data Safety form, this app declares <span class="badge">No data
 collected</span> and <span class="badge">No data shared with third parties</span>.</p>
-<p>That declaration reflects the behaviour described above: the app transmits nothing about you to
-the developer, keeps no record of you anywhere, and stores what little it holds on your own device.
-The requests it makes to Discord, to the streaming server, and to the caption provider are actions
-you initiate, sent directly from your device to services you have chosen to use.</p>
+<p>That declaration reflects the behaviour described above. The app builds no profile of you, keeps
+no record of you anywhere, and stores what little it holds on your own device. What it does send the
+developer&rsquo;s service is the Discord sign-in you already granted, and only so that the service can
+put one question to Discord on your behalf. The answer is used to reply to that request and held in
+memory for a few minutes; it is never written down, never joined to anything else, and never used to
+work out what you watched.</p>
 
 <h2>Children</h2>
 <p>Apollo Videos is not directed at children, and is not designed or marketed for them. It knowingly
