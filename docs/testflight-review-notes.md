@@ -45,7 +45,8 @@ exemption exists (see [server/README.md](../server/README.md#feed-policy)).
 > 4. **Background and PiP** — swipe up mid-playback; audio should continue, and
 >    Picture in Picture should pick up the video.
 > 5. **Captions** — turn on CC. Captions appear a beat behind the audio and are
->    written in the device language.
+>    written in the device language. (Try changing the device language and
+>    reopening a video; the same English audio should caption in the new one.)
 > 6. **Downloads** — download a non-live video, then re-open it with the device in
 >    Airplane Mode.
 
@@ -73,12 +74,6 @@ Tick **Sign-in required** and supply the demo Discord account's email and passwo
 >
 > No account creation, purchase, or subscription is involved, and the app collects no
 > personal data beyond the Discord sign-in itself.
->
-> **Live captions are unavailable on the demo account.** Turning captions on will
-> show an error. This is deliberate: captions are billed per hour of audio against
-> our transcription provider, and the demo account is not authorized to spend that
-> budget. If you need to verify the captions feature, contact us at the feedback
-> address and we will enable it for the review window.
 >
 > Some events are genuinely live and only play while a real event is in progress. If
 > a video reports itself unavailable, it has ended — the recorded entries in the feed
