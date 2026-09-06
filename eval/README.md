@@ -32,6 +32,7 @@ Everything except the two spending scripts runs offline from `fixtures/` and cos
 | Record **batch** | `python scripts/record.py` | 💲 live | writes `fixtures/{provider}[-boost]/` |
 | Record **streaming** | `python scripts/record_stream.py [--max-clips N]` | 💲 live | real-time paced websocket sessions → `fixtures/{provider}-stream/` |
 | Translate | `python scripts/translate.py [--target DE]` | 💲 live | DeepL-translates each hypothesis + the reference → `fixtures/translations/`; needs `DEEPL_API_KEY` |
+| Record **in-band translation** | `python scripts/record_translate.py --targets hu[,ru] [--variant both]` | 💲 live | Soniox translating on the socket, as the app does → `fixtures/soniox-translate[-nocontext]/{lang}/`; needs `SONIOX_API_KEY` |
 | Score | `python scoring/scorecard.py` | free | regenerates `reports/scorecard.md` from fixtures |
 
 `./run_eval.sh` chains the free steps + batch record + score, skipping work whose
@@ -54,6 +55,26 @@ fixtures already exist.
 - **Finalization latency (med / p95)** — per word, wall-clock time from spoken to
   finalized. Measured against each provider's **self-reported** word timestamps;
   forced-alignment ground truth (plan Phase 5) is intentionally **not wired yet**.
+
+**In-band translation (Soniox, per language)**
+- What the player actually shows: Soniox translating on the same websocket, real-time paced,
+  with the session `context` the app sends. That context is **parsed out of the app's own
+  `CaptionGlossary.kt`** by `app_context.py` (domain sentence + boosted terms + accepted
+  renderings) rather than restated here, so the eval cannot drift from what ships.
+- Scored as chrF against the **same ideal** as everything else: DeepL's translation of the
+  verified reference. Three columns per language:
+  - **in-band (context)** — what ships;
+  - **in-band (no context)** — the same audio with the context withheld, so the glossary's
+    contribution is measured rather than assumed (`--variant both` records the pair);
+  - **via DeepL** — Soniox transcript → DeepL, the two-stage alternative. A large gap over
+    in-band means Soniox's *translation* is the weak link for that language; parity means the
+    language (or translating a stream before the sentence ends) is the limit.
+- Needs `scripts/translate.py --target <LANG>` to have run for the same language first — that
+  is where the ideal comes from. Soniox codes are lowercase (`hu`), DeepL's are not (`HU`);
+  `config.deepl_target()` maps between them.
+- chrF is character-n-gram based, so it does not punish an agglutinative language for
+  inflecting differently the way BLEU would. **Absolute values are not comparable across
+  languages** — the comparisons within one row are.
 
 **Translation fidelity (ASR → DeepL)**
 - Each provider's transcript is translated with DeepL and compared to the translation

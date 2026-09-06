@@ -50,6 +50,85 @@ class SonioxProvider(Provider):
             raw_response={"text": res.text} # simplified raw response
         )
 
+    def transcribe_stream_translated(
+        self,
+        wav_path: str,
+        target_lang: str,
+        context: dict = None,
+    ) -> StreamResult:
+        """Stream a clip with Soniox's in-band translation on, exactly as the app does.
+
+        Live only — the caller (scripts/record_translate.py) is a spending script and the
+        scorecard replays the fixture it writes.
+
+        This is deliberately a mirror of `SonioxClient.kt`, not a cleaner reimplementation:
+        the same `stt-rt-v5` model, the same one-way translation block, the same session
+        `context`, and the same token selection. Soniox sends the original *and* the
+        translation over one socket, distinguished only by `translation_status`, so the app
+        keeps the translated tokens and drops the rest — score anything else and the number
+        is not about the captions anyone sees.
+        """
+        api_key = os.environ.get("SONIOX_API_KEY")
+        if not api_key:
+            raise ValueError("SONIOX_API_KEY is not set")
+
+        url = "wss://stt-rt.soniox.com/transcribe-websocket"
+        config_obj = {
+            "api_key": api_key,
+            "model": "stt-rt-v5",
+            "audio_format": "pcm_s16le",
+            "sample_rate": 16000,
+            "num_channels": 1,
+            "language_hints": ["en"],
+            "translation": {"type": "one_way", "target_language": target_lang},
+        }
+        if context:
+            config_obj["context"] = context
+
+        state = {"committed": "", "events": [], "final_words": []}
+
+        def on_message(data, t):
+            if data.get("error_code"):
+                raise RuntimeError(f"Soniox error {data.get('error_code')}: {data.get('error_message')}")
+            tail = ""
+            finalized_any = False
+            for tok in data.get("tokens", []):
+                # The app's selectCaptionText(): translated tokens are the caption, the
+                # originals are not.
+                if tok.get("translation_status") != "translation":
+                    continue
+                text = tok.get("text", "")
+                if tok.get("is_final"):
+                    state["committed"] += text
+                    if text.strip():
+                        state["final_words"].append(
+                            FinalWord(word=text.strip(), start_s=tok.get("start_ms", 0) / 1000.0, final_t_recv=t)
+                        )
+                    finalized_any = True
+                else:
+                    tail += text
+            state["events"].append(
+                StreamEvent(
+                    t_recv=t,
+                    display_text=(state["committed"] + tail).strip(),
+                    is_final_update=finalized_any,
+                )
+            )
+
+        duration_s = run_ws_stream(
+            url, wav_path, on_message,
+            init_message=json.dumps(config_obj),
+            close_message="",  # empty text frame signals end-of-audio to Soniox
+        )
+
+        return StreamResult(
+            final_text=state["committed"].strip(),
+            events=state["events"],
+            final_words=state["final_words"],
+            audio_duration_s=duration_s,
+            model=f"stt-rt-v5+translate:{target_lang}",
+        )
+
     def _transcribe_stream_live(self, wav_path: str) -> StreamResult:
         api_key = os.environ.get("SONIOX_API_KEY")
         if not api_key:

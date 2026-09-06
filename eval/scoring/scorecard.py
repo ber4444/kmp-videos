@@ -19,6 +19,15 @@ def _load_translation(kind, clip_id, target_lang):
     with open(path, "r") as f:
         return json.load(f).get("text", "")
 
+def _inband_languages():
+    """Language codes with recorded in-band translation, from either variant's fixtures."""
+    langs = set()
+    for base in (config.INBAND_DIR, config.INBAND_NOCONTEXT_DIR):
+        if os.path.isdir(base):
+            langs.update(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
+    return sorted(langs)
+
+
 def generate_scorecard(allow_unverified: bool = False):
     with open(config.MANIFEST_PATH, 'r') as f:
         manifest = json.load(f)
@@ -36,6 +45,11 @@ def generate_scorecard(allow_unverified: bool = False):
     # Translation fidelity (ASR -> DeepL) results
     target_lang = config.TRANSLATE_TARGET_LANG
     translation_by_provider = defaultdict(list)  # provider -> [{clip_id, metrics}]
+
+    # Soniox in-band translation (what the app ships), per language and variant.
+    # lang -> {"context": [...], "nocontext": [...], "via_deepl": [...]}
+    inband_langs = _inband_languages()
+    inband = defaultdict(lambda: defaultdict(list))
     
     for entry in manifest["entries"]:
         clip_id = entry["id"]
@@ -99,6 +113,32 @@ def generate_scorecard(allow_unverified: bool = False):
             if ref_translation is not None and hyp_translation is not None:
                 fidelity = calculate_translation_fidelity(ref_translation, hyp_translation)
                 translation_by_provider[provider].append({"clip_id": clip_id, "metrics": fidelity})
+
+        # Soniox in-band translation, scored per language against the DeepL translation of
+        # the verified reference — the same ideal both paths are measured against, so the
+        # in-band and via-DeepL columns are directly comparable.
+        for lang in inband_langs:
+            ideal = _load_translation("ref", clip_id, config.deepl_target(lang))
+            if ideal is None:
+                continue
+            for variant, base in (("context", config.INBAND_DIR),
+                                  ("nocontext", config.INBAND_NOCONTEXT_DIR)):
+                path = os.path.join(base, lang, f"{clip_id}.json")
+                if not os.path.exists(path):
+                    continue
+                with open(path, "r") as f:
+                    caption = StreamResult(**json.load(f)).final_text
+                inband[lang][variant].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, caption),
+                })
+            # The alternative path for the same language: Soniox transcript -> DeepL.
+            via_deepl = _load_translation("soniox", clip_id, config.deepl_target(lang))
+            if via_deepl is not None:
+                inband[lang]["via_deepl"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, via_deepl),
+                })
 
     # Generate Markdown
     md = []
@@ -207,6 +247,49 @@ def generate_scorecard(allow_unverified: bool = False):
             src_wer = avg_metric(src_runs, "wer_norm") if src_runs else 0.0
             md.append(f"| {p} | {len(runs)} | {chrf:.1f} | {twer:.3f} | {src_wer:.3f} |")
         md.append("\n")
+
+    # Soniox in-band translation — the captions the app actually shows.
+    if inband:
+        md.append("## In-Band Translation Quality (Soniox, per language)\n")
+        md.append("What the player actually renders: Soniox translating on the same socket, "
+                  "streamed and paced in real time, with the app's own session context "
+                  "(domain sentence + glossary, read from `CaptionGlossary.kt`). Every column "
+                  "is chrF against the **same ideal** — DeepL's translation of the verified "
+                  "reference — so they are directly comparable.\n")
+        md.append("- **In-band (context)** — what ships today.\n"
+                  "- **In-band (no context)** — same audio, context withheld. The gap is what "
+                  "the glossary and domain sentence are worth for this language.\n"
+                  "- **Via DeepL** — Soniox transcript translated by DeepL instead. If this is "
+                  "far above in-band, Soniox's translation is the weak link for that language "
+                  "and a two-stage path is worth its cost; if it is level, the language (or "
+                  "streaming without full-sentence context) is the limit, not the provider.\n")
+        md.append("| Target | Clips | In-band chrF (context) | In-band chrF (no context) | Δ context | Via DeepL chrF | Δ vs in-band |")
+        md.append("|---|---|---|---|---|---|---|")
+        for lang in sorted(inband):
+            runs = inband[lang]["context"]
+            no_ctx = inband[lang]["nocontext"]
+            via = inband[lang]["via_deepl"]
+            if not runs and not no_ctx:
+                continue
+            ctx_chrf = avg_metric(runs, "trans_chrf") if runs else None
+            noctx_chrf = avg_metric(no_ctx, "trans_chrf") if no_ctx else None
+            via_chrf = avg_metric(via, "trans_chrf") if via else None
+            n = len(runs) or len(no_ctx)
+
+            def cell(v):
+                return f"{v:.1f}" if v is not None else "n/a"
+
+            delta_ctx = (f"{ctx_chrf - noctx_chrf:+.1f}"
+                         if ctx_chrf is not None and noctx_chrf is not None else "n/a")
+            delta_via = (f"{via_chrf - ctx_chrf:+.1f}"
+                         if via_chrf is not None and ctx_chrf is not None else "n/a")
+            md.append(f"| {lang} | {n} | {cell(ctx_chrf)} | {cell(noctx_chrf)} | {delta_ctx} | "
+                      f"{cell(via_chrf)} | {delta_via} |")
+        md.append("\nchrF is 0–100, higher is better; it is character-n-gram based, so it does "
+                  "not punish a morphologically rich language for inflecting differently than "
+                  "the reference the way BLEU would. Absolute values are not comparable across "
+                  "languages (a chrF of 55 means different things in Hungarian and Spanish) — "
+                  "the comparisons within a row are.\n")
 
     md.append("## Worst 5 Clips by Provider (WER Norm)\n")
     for p in providers:

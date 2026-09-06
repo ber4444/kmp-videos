@@ -38,3 +38,20 @@ TRANSLATE_TARGET_LANG = os.environ.get("EVAL_TRANSLATE_TARGET", "DE")
 # DeepL bills per source character; cap chars per invocation (free tier = 500k/month).
 MAX_TRANSLATE_CHARS = 300_000
 TRANSLATIONS_DIR = os.path.join(FIXTURES_DIR, "translations")
+
+# Soniox's own in-band translation (what the app actually ships), recorded by
+# scripts/record_translate.py and scored against the DeepL translation of the verified
+# reference. One subdirectory per Soniox language code. The -nocontext arm is the same audio
+# with the session context withheld, so the glossary's contribution is measurable rather
+# than assumed.
+INBAND_DIR = os.path.join(FIXTURES_DIR, "soniox-translate")
+INBAND_NOCONTEXT_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-nocontext")
+
+# Soniox language code -> DeepL target code, for the pairs whose spelling differs. Everything
+# else is the code upper-cased ("hu" -> "HU"), which is what DeepL expects.
+DEEPL_TARGET_OVERRIDES = {"pt": "PT-BR", "en": "EN-US", "zh": "ZH", "no": "NB"}
+
+
+def deepl_target(soniox_lang: str) -> str:
+    """The DeepL target code naming the same language as this Soniox code."""
+    return DEEPL_TARGET_OVERRIDES.get(soniox_lang, soniox_lang.upper())
