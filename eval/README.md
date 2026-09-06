@@ -32,7 +32,7 @@ Everything except the two spending scripts runs offline from `fixtures/` and cos
 | Record **batch** | `python scripts/record.py` | 💲 live | writes `fixtures/{provider}[-boost]/` |
 | Record **streaming** | `python scripts/record_stream.py [--max-clips N]` | 💲 live | real-time paced websocket sessions → `fixtures/{provider}-stream/` |
 | Translate | `python scripts/translate.py [--target DE]` | 💲 live | DeepL-translates each hypothesis + the reference → `fixtures/translations/`; needs `DEEPL_API_KEY` |
-| Record **in-band translation** | `python scripts/record_translate.py --targets hu[,ru] [--variant both]` | 💲 live | Soniox translating on the socket, as the app does → `fixtures/soniox-translate[-nocontext]/{lang}/`; needs `SONIOX_API_KEY` |
+| Record **in-band translation** | `python scripts/record_translate.py --targets hu[,ru] [--variant all]` | 💲 live | Soniox translating on the socket, as the app does → `fixtures/soniox-translate[-nocontext\|-batch]/{lang}/`; `--variant all` adds the context ablation + the batch ceiling; needs `SONIOX_API_KEY` |
 | Score | `python scoring/scorecard.py` | free | regenerates `reports/scorecard.md` from fixtures |
 
 `./run_eval.sh` chains the free steps + batch record + score, skipping work whose
@@ -66,9 +66,16 @@ fixtures already exist.
   - **in-band (context)** — what ships;
   - **in-band (no context)** — the same audio with the context withheld, so the glossary's
     contribution is measured rather than assumed (`--variant both` records the pair);
+  - **batch (full context)** — the same model and context through the async API, which reads
+    the whole clip before answering. **Δ streaming** is what committing a translation before
+    the sentence ends costs. This is the column that says whether poor captions in a
+    late-resolving language (Hungarian: case suffixes, detachable prefixes, focus-driven word
+    order) are *recoverable in the client* — hold the non-final tail, or re-translate the line
+    when the sentence lands — or whether the model is already at its ceiling and only a
+    different engine moves it. It is also the cheap arm: no real-time pacing;
   - **via DeepL** — Soniox transcript → DeepL, the two-stage alternative. A large gap over
-    in-band means Soniox's *translation* is the weak link for that language; parity means the
-    language (or translating a stream before the sentence ends) is the limit.
+    *batch* means Soniox's *translation* is the weak link for that language; parity with batch
+    means the language is simply hard and what is left is the streaming penalty.
 - Needs `scripts/translate.py --target <LANG>` to have run for the same language first — that
   is where the ideal comes from. Soniox codes are lowercase (`hu`), DeepL's are not (`HU`);
   `config.deepl_target()` maps between them.

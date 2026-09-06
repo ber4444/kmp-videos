@@ -46,6 +46,10 @@ TRANSLATIONS_DIR = os.path.join(FIXTURES_DIR, "translations")
 # than assumed.
 INBAND_DIR = os.path.join(FIXTURES_DIR, "soniox-translate")
 INBAND_NOCONTEXT_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-nocontext")
+# The same translation off the async API, which sees the whole clip before answering: the
+# ceiling for this model on this language, and the baseline the real-time arm's streaming
+# penalty is measured from.
+INBAND_BATCH_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-batch")
 
 # Soniox language code -> DeepL target code, for the pairs whose spelling differs. Everything
 # else is the code upper-cased ("hu" -> "HU"), which is what DeepL expects.

@@ -22,7 +22,7 @@ def _load_translation(kind, clip_id, target_lang):
 def _inband_languages():
     """Language codes with recorded in-band translation, from either variant's fixtures."""
     langs = set()
-    for base in (config.INBAND_DIR, config.INBAND_NOCONTEXT_DIR):
+    for base in (config.INBAND_DIR, config.INBAND_NOCONTEXT_DIR, config.INBAND_BATCH_DIR):
         if os.path.isdir(base):
             langs.update(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
     return sorted(langs)
@@ -132,6 +132,17 @@ def generate_scorecard(allow_unverified: bool = False):
                     "clip_id": clip_id,
                     "metrics": calculate_translation_fidelity(ideal, caption),
                 })
+            # The full-context ceiling: the same model on the same audio, async, so nothing
+            # is committed before the sentence ends.
+            batch_path = os.path.join(config.INBAND_BATCH_DIR, lang, f"{clip_id}.json")
+            if os.path.exists(batch_path):
+                with open(batch_path, "r") as f:
+                    batch_text = TranscriptResult(**json.load(f)).text
+                inband[lang]["batch"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, batch_text),
+                })
+
             # The alternative path for the same language: Soniox transcript -> DeepL.
             via_deepl = _load_translation("soniox", clip_id, config.deepl_target(lang))
             if via_deepl is not None:
@@ -259,32 +270,43 @@ def generate_scorecard(allow_unverified: bool = False):
         md.append("- **In-band (context)** — what ships today.\n"
                   "- **In-band (no context)** — same audio, context withheld. The gap is what "
                   "the glossary and domain sentence are worth for this language.\n"
+                  "- **Batch (full context)** — the same model and context through the async "
+                  "API, which reads the whole clip before answering. **Δ streaming** is the "
+                  "price of committing a translation before the sentence ends. A large one "
+                  "says the captions are losable to latency policy — hold the tail, or "
+                  "re-translate the line when the sentence lands — and a small one says the "
+                  "model is already doing its best on this language and no client change "
+                  "will move it.\n"
                   "- **Via DeepL** — Soniox transcript translated by DeepL instead. If this is "
-                  "far above in-band, Soniox's translation is the weak link for that language "
-                  "and a two-stage path is worth its cost; if it is level, the language (or "
-                  "streaming without full-sentence context) is the limit, not the provider.\n")
-        md.append("| Target | Clips | In-band chrF (context) | In-band chrF (no context) | Δ context | Via DeepL chrF | Δ vs in-band |")
-        md.append("|---|---|---|---|---|---|---|")
+                  "far above *batch*, Soniox's translation is the weak link for that language "
+                  "and a two-stage path is worth its cost; if it is level with batch, the "
+                  "language is simply hard and the remaining gap is the streaming one.\n")
+        md.append("| Target | Clips | In-band chrF (context) | In-band chrF (no context) | Δ context | "
+                  "Batch chrF (full context) | Δ streaming | Via DeepL chrF | Δ vs in-band |")
+        md.append("|---|---|---|---|---|---|---|---|---|")
         for lang in sorted(inband):
             runs = inband[lang]["context"]
             no_ctx = inband[lang]["nocontext"]
+            batch = inband[lang]["batch"]
             via = inband[lang]["via_deepl"]
-            if not runs and not no_ctx:
+            if not runs and not no_ctx and not batch:
                 continue
             ctx_chrf = avg_metric(runs, "trans_chrf") if runs else None
             noctx_chrf = avg_metric(no_ctx, "trans_chrf") if no_ctx else None
+            batch_chrf = avg_metric(batch, "trans_chrf") if batch else None
             via_chrf = avg_metric(via, "trans_chrf") if via else None
-            n = len(runs) or len(no_ctx)
+            n = len(runs) or len(no_ctx) or len(batch)
 
             def cell(v):
                 return f"{v:.1f}" if v is not None else "n/a"
 
-            delta_ctx = (f"{ctx_chrf - noctx_chrf:+.1f}"
-                         if ctx_chrf is not None and noctx_chrf is not None else "n/a")
-            delta_via = (f"{via_chrf - ctx_chrf:+.1f}"
-                         if via_chrf is not None and ctx_chrf is not None else "n/a")
-            md.append(f"| {lang} | {n} | {cell(ctx_chrf)} | {cell(noctx_chrf)} | {delta_ctx} | "
-                      f"{cell(via_chrf)} | {delta_via} |")
+            def delta(better, worse):
+                return f"{better - worse:+.1f}" if better is not None and worse is not None else "n/a"
+
+            md.append(f"| {lang} | {n} | {cell(ctx_chrf)} | {cell(noctx_chrf)} | "
+                      f"{delta(ctx_chrf, noctx_chrf)} | {cell(batch_chrf)} | "
+                      f"{delta(batch_chrf, ctx_chrf)} | {cell(via_chrf)} | "
+                      f"{delta(via_chrf, ctx_chrf)} |")
         md.append("\nchrF is 0–100, higher is better; it is character-n-gram based, so it does "
                   "not punish a morphologically rich language for inflecting differently than "
                   "the reference the way BLEU would. Absolute values are not comparable across "

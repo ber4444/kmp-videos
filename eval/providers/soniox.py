@@ -5,6 +5,28 @@ from .base import Provider, TranscriptResult, WordInfo, StreamResult, StreamEven
 from .streaming import run_ws_stream
 from soniox.client import SonioxClient
 
+TRANSLATION_STATUS = "translation"
+
+
+def translated_text(tokens) -> str:
+    """The caption text out of a translated Soniox result.
+
+    Soniox returns the original *and* the translation in one token list, tagged only by
+    `translation_status` — on the batch API exactly as on the socket. A result's own `.text`
+    therefore contains both languages spliced together, so scoring it would score neither.
+    This is the batch-side twin of `selectCaptionText()` in SonioxClient.kt, and the reason
+    the eval reads tokens rather than the convenient field.
+
+    Accepts SDK token objects or plain dicts (fixtures replay as dicts).
+    """
+    def field(tok, name):
+        return tok.get(name) if isinstance(tok, dict) else getattr(tok, name, None)
+
+    return "".join(
+        field(t, "text") or "" for t in tokens if field(t, "translation_status") == TRANSLATION_STATUS
+    ).strip()
+
+
 class SonioxProvider(Provider):
     @property
     def name(self) -> str:
@@ -48,6 +70,44 @@ class SonioxProvider(Provider):
             text=text,
             words=words,
             raw_response={"text": res.text} # simplified raw response
+        )
+
+    def transcribe_batch_translated(
+        self,
+        wav_path: str,
+        target_lang: str,
+        context: dict = None,
+    ) -> TranscriptResult:
+        """Translate a clip with the async API, which sees the whole file before answering.
+
+        This is the ceiling for Soniox's own translation of this language on this material:
+        same model family, same session context, no incremental commitment. The gap between
+        it and the real-time arm is what streaming costs — a translator that must emit
+        Hungarian before the clause is finished has less to work with than one holding the
+        whole sentence, and that penalty is not the same size in every language.
+
+        Live only; the caller is a spending script and the scorecard replays the fixture.
+        """
+        api_key = os.environ.get("SONIOX_API_KEY")
+        if not api_key:
+            raise ValueError("SONIOX_API_KEY is not set")
+
+        from soniox.api.stt import CreateTranscriptionConfig
+
+        client = SonioxClient(api_key=api_key)
+        config = CreateTranscriptionConfig(
+            language_hints=["en"],
+            translation={"type": "one_way", "target_language": target_lang},
+            context=context or None,
+        )
+        res = client.stt.transcribe_and_wait_with_tokens(
+            file=wav_path, model="stt-async-v5", config=config
+        )
+        text = translated_text(res.tokens)
+        return TranscriptResult(
+            text=text,
+            words=[],  # word timings are meaningless for a translation; chrF is all this arm feeds
+            raw_response={"model": "stt-async-v5", "target_language": target_lang, "text": text},
         )
 
     def transcribe_stream_translated(
