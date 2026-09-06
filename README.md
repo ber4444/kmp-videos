@@ -93,7 +93,9 @@ The player's caption button is a menu whose first row ("No translation") runs no
 whose second is the device's own language — resolved per session, and skipped when the device
 already speaks English or is set to one of the few languages Soniox does not cover — and
 whose remaining rows are plain English captions plus the 22 languages this audience reads, for
-anyone whose system language is not the one they read comfortably.
+anyone whose system language is not the one they read comfortably. Every video starts on the
+first row: captions are metered, so a language picked once is not left running on everything
+watched after it.
 Deepgram's streaming API has no translation, so it could only ever caption in English —
 the reason it was switched off rather than kept as a runtime alternative. Its client still
 compiles and the provider switcher still exists in the source (`CaptionProviderButton`), but

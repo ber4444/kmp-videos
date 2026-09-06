@@ -280,8 +280,11 @@ dropdown (`CaptionLanguageMenu`, commonMain, next to the other player controls):
   told the target in the config frame that opens the socket, so a live stream cannot be
   re-pointed. `CaptionLanguage.deviceTarget()` still picks the default row, and nothing else
   reads it any more.
-- The selection is per-player-screen (in-memory, like the provider); persisting it is the same
-  follow-up as step 1.4.
+- **The selection resets to "No translation" on every video** — `rememberCaptionController` is
+  keyed by the video's URL, so it does not even survive playing a second video on a reused
+  player screen. This is deliberate and is not the missing-persistence follow-up in step 1.4:
+  a caption session streams the whole soundtrack to a metered service, so a language picked
+  once must not quietly keep billing on every video after it. Re-picking is one tap.
 - Android holds the controls up while the menu is open (`ControlsAutoHide(menuOpen = …)`) — the
   menu is drawn inside the control bar, and three seconds is not enough to read twenty-odd rows.
 

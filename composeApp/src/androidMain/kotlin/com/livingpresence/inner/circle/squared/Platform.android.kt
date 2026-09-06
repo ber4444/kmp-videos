@@ -238,7 +238,9 @@ private fun ExoPlayerScreen(
 
     // Phase 8: on-device transcription (CC). The RenderersFactory in the service
     // taps PCM; captions render via CaptionOverlay below.
-    val captionController = rememberCaptionController()
+    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
+    // every one, whatever language the viewer picked on the last.
+    val captionController = rememberCaptionController(videoKey = url)
 
     var isScrubbing by remember(player) { mutableStateOf(false) }
     var sliderFraction by remember(player) { mutableStateOf(0f) }

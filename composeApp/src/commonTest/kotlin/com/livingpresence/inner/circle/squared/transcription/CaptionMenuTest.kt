@@ -24,7 +24,8 @@ class CaptionMenuTest {
     @Test
     fun theFirstRowTurnsCaptionsOffEntirely() {
         // Not "captions in the spoken language": no session, no socket, no audio leaving
-        // the device. It is also where a fresh player starts.
+        // the device. It is also where every video starts — captions are metered, so the
+        // default has to be the row that costs nothing, on the second video as on the first.
         val off = russianDevice.first()
         assertEquals("No translation", off.label)
         assertEquals(false, off.captionsOn)

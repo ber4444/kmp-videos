@@ -67,14 +67,22 @@ internal class CaptionController(
  * restarts it when the chosen language or the provider changes, since the target language
  * travels in Soniox's config frame and a live session cannot be re-pointed); stops on "No
  * translation" or when the screen leaves.
+ *
+ * **Every video starts on "No translation", including for a viewer who picked a language on
+ * the last one.** Captions are metered — a session streams the whole soundtrack to Soniox for
+ * as long as it runs — so a choice must not follow the viewer from video to video and quietly
+ * bill them for one they never asked to have captioned. That is what [videoKey] is for: pass
+ * whatever identifies the video on this screen (its URL), and the selection resets when it
+ * changes, rather than depending on the player screen happening to leave the composition
+ * between videos. Re-picking a language is one tap; an hour of unwatched captions is not.
  */
 @Composable
-internal fun rememberCaptionController(): CaptionController {
+internal fun rememberCaptionController(videoKey: Any?): CaptionController {
     val router = remember { CaptionAudioRouter.get() }
     // The device language is read once per composition — it cannot change without the app
     // being recreated — and decides only which row sits second, not what the menu offers.
     val options = remember { captionMenuOptions(CaptionLanguage.deviceTarget()) }
-    var selected by remember { mutableStateOf(defaultCaptionOption(options)) }
+    var selected by remember(videoKey) { mutableStateOf(defaultCaptionOption(options)) }
     val provider by TranscriptionSettings.provider.collectAsState()
 
     // A row with captions on → start (or re-point) the stream; "No translation" → stop.
