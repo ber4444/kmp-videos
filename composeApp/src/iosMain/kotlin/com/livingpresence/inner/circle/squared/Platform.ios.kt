@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,10 +52,13 @@ import platform.AVFoundation.AVAssetImageGenerator
 import platform.AVFoundation.AVPlayerLayer
 import platform.AVFoundation.AVURLAsset
 import platform.AVKit.AVPictureInPictureController
+import platform.AVKit.AVPictureInPictureControllerDelegateProtocol
 import platform.CoreMedia.CMTime
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
+import platform.Foundation.NSError
 import platform.Foundation.NSURL
+import platform.darwin.NSObject
 import platform.UIKit.UIView
 import platform.UIKit.UIImageView
 import platform.UIKit.UIImage
@@ -292,17 +293,9 @@ actual fun PlatformPlayerScreen(
                                             onDisableVideo = {}
                                         )
                                     },
-                                    trailingControls = {
-                                        if (pipController != null) {
-                                            TextButton(onClick = {
-                                                if (pipController.isPictureInPictureActive()) {
-                                                    pipController.stopPictureInPicture()
-                                                } else {
-                                                    pipController.startPictureInPicture()
-                                                }
-                                            }) { Text("PiP", color = Color.White) }
-                                        }
-                                    },
+                                    // No PiP button. iOS enters Picture in Picture by
+                                    // itself when the user leaves the app, exactly as
+                                    // Android does — see rememberPipController.
                                 )
                             }
                         )
@@ -356,19 +349,62 @@ actual fun PlatformPlayerScreen(
 }
 
 /**
- * AVPictureInPictureController for the player layer, or null if the platform
- * doesn't support PiP (e.g. simulator without the capability). Background audio
- * (`AVAudioSession(.playback)`, configured in [configureBackgroundAudio]) and an
- * `UIBackgroundModes: audio` Info.plist entry (set in the host Xcode project)
- * are prerequisites for PiP to actually engage.
+ * AVPictureInPictureController for the player layer, or null where PiP is not
+ * supported.
+ *
+ * **Automatic, not a button.** `canStartPictureInPictureAutomaticallyFromInline`
+ * is what makes iOS behave the way Android already does: leaving the app while a
+ * video plays hands it to the system, with nothing to tap. Until it was set, the
+ * only way in was a manual "PiP" control in the player overlay — a control that
+ * existed to compensate for this flag being unset, so it went when the flag
+ * arrived.
+ *
+ * Background audio (`AVAudioSession(.playback)`, configured in
+ * [configureBackgroundAudio]) and an `UIBackgroundModes: audio` Info.plist entry
+ * are prerequisites for PiP to engage at all; both are already in place.
+ *
+ * **The Simulator does not implement Picture in Picture.** `isPictureInPictureSupported()`
+ * still answers true there, so this returns a controller that will never produce a
+ * PiP window — which is why this feature can only be judged on a device, and why
+ * [PipStartFailureLogger] exists rather than leaving a silent no-op.
  */
 @Composable
-private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureController? =
-    if (AVPictureInPictureController.isPictureInPictureSupported()) {
-        remember(layer) { AVPictureInPictureController(playerLayer = layer) }
-    } else {
-        null
+private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureController? {
+    if (!AVPictureInPictureController.isPictureInPictureSupported()) {
+        return null
     }
+    return remember(layer) {
+        AVPictureInPictureController(playerLayer = layer).apply {
+            canStartPictureInPictureAutomaticallyFromInline = true
+            // Held by the controller as a weak delegate, so the logger has to
+            // outlive this block — hence an object rather than a local.
+            setDelegate(PipStartFailureLogger)
+        }
+    }
+}
+
+/**
+ * Reports why PiP refused to start.
+ *
+ * Without a delegate, `startPictureInPicture` and the automatic path both fail
+ * silently: no window appears and nothing says why, which is indistinguishable
+ * from the feature not being wired up at all. That ambiguity cost a debugging
+ * session — the Simulator's unsupported-but-reported-supported behaviour looks
+ * exactly like a real bug — so the failure is now on the console.
+ */
+private object PipStartFailureLogger : NSObject(), AVPictureInPictureControllerDelegateProtocol {
+
+    override fun pictureInPictureController(
+        pictureInPictureController: AVPictureInPictureController,
+        failedToStartPictureInPictureWithError: NSError,
+    ) {
+        println(
+            "PiP failed to start: ${failedToStartPictureInPictureWithError.localizedDescription} " +
+                "(domain=${failedToStartPictureInPictureWithError.domain}, " +
+                "code=${failedToStartPictureInPictureWithError.code})",
+        )
+    }
+}
 
 /**
  * Activates the `.playback` audio session so audio continues when the app is
