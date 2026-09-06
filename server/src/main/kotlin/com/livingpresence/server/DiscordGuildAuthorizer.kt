@@ -44,6 +44,20 @@ import kotlinx.serialization.json.Json
 class DiscordGuildAuthorizer(
     private val httpClient: HttpClient,
     private val guildId: String,
+    /**
+     * Review accounts, which caption without being Apollo members.
+     *
+     * The same snowflakes `DiscordFeedPolicyResolver` confines to the demo feed:
+     * an account handed to app-store review has to be able to *use* the feature,
+     * or the reviewer's only experience of captions is an error. It is checked
+     * only after the guild check has already failed, so the common path is
+     * unchanged.
+     *
+     * This does put the Soniox bill behind an account given to strangers. What
+     * bounds it is what bounds every other caller — the per-client rate limit and
+     * the one-hour session cap — not this list being short.
+     */
+    private val testUserIds: Set<String> = emptySet(),
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val apiBase: String = DISCORD_API_BASE,
@@ -87,11 +101,46 @@ class DiscordGuildAuthorizer(
             json.decodeFromString<List<Guild>>(response.bodyAsText())
         }.getOrNull() ?: return AuthorizationDecision.Denied(DISCORD_UNREACHABLE)
 
-        return if (guilds.any { it.id == guildId }) {
-            AuthorizationDecision.Allowed
-        } else {
-            AuthorizationDecision.Denied(NOT_A_MEMBER)
+        if (guilds.any { it.id == guildId }) {
+            return AuthorizationDecision.Allowed
         }
+        // Not a member. The review accounts still caption — see [testUserIds] —
+        // and asking who this is only now keeps a member's mint at one Discord
+        // call, which is the case that happens on every caption reconnect.
+        if (testUserIds.isNotEmpty() && isReviewAccount(token)) {
+            return AuthorizationDecision.Allowed
+        }
+        return AuthorizationDecision.Denied(NOT_A_MEMBER)
+    }
+
+    /**
+     * Whether the token's owner is a configured review account.
+     *
+     * Reads `/users/@me` directly rather than borrowing [DiscordFeedPolicyResolver]'s
+     * copy of this. The two checks answer different questions — who may spend the
+     * Soniox account, and where an account's videos are — and are deliberately
+     * independent, so that a deployment can answer them differently and neither
+     * starts failing because of the other's configuration. Fifteen duplicated
+     * lines is the cheaper half of that trade.
+     *
+     * Unreachable or unparseable reads as "not a review account", which lands on
+     * the [NOT_A_MEMBER] denial the guild check already reached.
+     */
+    private suspend fun isReviewAccount(token: String): Boolean {
+        val response = try {
+            httpClient.get("$apiBase/users/@me") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }
+        } catch (e: Throwable) {
+            return false
+        }
+        if (!response.status.isSuccess()) {
+            return false
+        }
+        val id = runCatching {
+            json.decodeFromString<User>(response.bodyAsText()).id
+        }.getOrNull() ?: return false
+        return id in testUserIds
     }
 
     private suspend fun cached(key: Int): AuthorizationDecision? = cacheLock.withLock {
@@ -116,6 +165,9 @@ class DiscordGuildAuthorizer(
 
     @Serializable
     private data class Guild(val id: String)
+
+    @Serializable
+    private data class User(val id: String)
 
     companion object {
         const val DISCORD_API_BASE = "https://discord.com/api/v10"
