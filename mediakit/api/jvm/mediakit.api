@@ -124,6 +124,7 @@ public final class com/livingpresence/mediakit/MediaKitConfig {
 
 public final class com/livingpresence/mediakit/MediaKitConfig$Companion {
 	public final fun eventNumberIn (Ljava/lang/String;)Ljava/lang/Integer;
+	public final fun forStreamUrl (Ljava/lang/String;)Lcom/livingpresence/mediakit/MediaKitConfig;
 	public final fun getDefault ()Lcom/livingpresence/mediakit/MediaKitConfig;
 	public final fun getDefaultHost ()Ljava/lang/String;
 	public final fun setDefaultHost (Ljava/lang/String;)V

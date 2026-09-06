@@ -83,4 +83,49 @@ class MediaKitConfigTest {
         // probes nowhere rather than reaching a stale one.
         assertEquals("", MediaKitConfig.defaultHost)
     }
+
+    /**
+     * The case this exists for: a caller issued no host at all. `Default` then
+     * builds a hostless, unresolvable URL, and every sibling-rendition lookup —
+     * the ABR ladder, and the audio-only track live captions read — silently
+     * finds nothing. The played URL carries the host regardless.
+     */
+    @Test
+    fun forStreamUrl_takesTheHostFromTheUrlWhenNoDefaultIsSet() {
+        val previous = MediaKitConfig.defaultHost
+        try {
+            MediaKitConfig.defaultHost = ""
+            val url = "https://stream.example:443/live/event15/playlist.m3u8?DVR"
+
+            val config = MediaKitConfig.forStreamUrl(url)
+
+            assertEquals("https://stream.example:443", config?.host)
+            assertEquals(
+                "https://stream.example:443/live/event15_aac/playlist.m3u8?DVR",
+                config?.renditionUrl(15, RenditionTier.AUDIO),
+            )
+        } finally {
+            MediaKitConfig.defaultHost = previous
+        }
+    }
+
+    @Test
+    fun forStreamUrl_readsTheHostOfARenditionOrSegmentUrlToo() {
+        assertEquals(
+            "https://a.example",
+            MediaKitConfig.forStreamUrl("https://a.example/live/event3_360p/chunklist.m3u8")?.host,
+        )
+    }
+
+    /** A manifest extra with an arbitrary path has no event to resolve siblings for. */
+    @Test
+    fun forStreamUrl_isNullForANonEventUrl() {
+        assertNull(MediaKitConfig.forStreamUrl("https://a.example/vod/a-talk/playlist.m3u8?DVR"))
+    }
+
+    /** A relative URL names no host, so there is nothing to derive. */
+    @Test
+    fun forStreamUrl_isNullWhenTheUrlItselfCarriesNoHost() {
+        assertNull(MediaKitConfig.forStreamUrl("/live/event15/playlist.m3u8?DVR"))
+    }
 }

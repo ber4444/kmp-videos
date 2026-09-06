@@ -113,7 +113,13 @@ actual fun PlatformPlayerScreen(
         LaunchedEffect(url) {
             val eventNumber = parseEventNumber(url)
             if (eventNumber != null) {
-                val ladderResolver = com.livingpresence.mediakit.LadderResolver(createHttpClient(), com.livingpresence.mediakit.MediaKitConfig.Default)
+                // Resolve siblings against the host of the URL being played, not
+                // the configured default. An account restricted to a manifest is
+                // issued no host, so Default would build an unresolvable URL and
+                // silently find no ladder — and therefore no captions.
+                val config = com.livingpresence.mediakit.MediaKitConfig.forStreamUrl(url)
+                    ?: com.livingpresence.mediakit.MediaKitConfig.Default
+                val ladderResolver = com.livingpresence.mediakit.LadderResolver(createHttpClient(), config)
                 val ladder = try { ladderResolver.resolve(eventNumber) } catch (e: Exception) { null }
                 renditions = ladder?.renditions
             }
@@ -122,8 +128,10 @@ actual fun PlatformPlayerScreen(
         // Live captions read the audio-only `_aac` rendition over HTTP instead of
         // tapping the player: MTAudioProcessingTap does not work for HLS, so a tap
         // on the playing item installs cleanly and then never fires. See
-        // [CaptionSegmentFeeder]. Only numbered events have that sibling rendition,
-        // so manifest extras (which resolve no ladder) get no captions.
+        // [CaptionSegmentFeeder]. Only `/live/event…` streams have that sibling, so
+        // a manifest entry pointing anywhere else resolves no ladder and gets no
+        // captions — while one that *is* a numbered event captions like any other,
+        // which is what the demo feed relies on.
         val captionHttp = remember { createHttpClient() }
         val audioChunklistUrl = remember(renditions) {
             renditions?.firstOrNull { it.isAudioOnly }?.chunklistUri
@@ -367,12 +375,13 @@ private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureContr
     if (!AVPictureInPictureController.isPictureInPictureSupported()) {
         return null
     }
-    return remember(layer) {
+    // The controller holds its delegate *weakly*, so the logger has to be
+    // retained alongside it — remembered on the same key, released together.
+    val delegate = remember(layer) { PipStartFailureLogger() }
+    return remember(layer, delegate) {
         AVPictureInPictureController(playerLayer = layer).apply {
             canStartPictureInPictureAutomaticallyFromInline = true
-            // Held by the controller as a weak delegate, so the logger has to
-            // outlive this block — hence an object rather than a local.
-            setDelegate(PipStartFailureLogger)
+            setDelegate(delegate)
         }
     }
 }
@@ -385,8 +394,13 @@ private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureContr
  * from the feature not being wired up at all. That ambiguity cost a debugging
  * session — the Simulator's unsupported-but-reported-supported behaviour looks
  * exactly like a real bug — so the failure is now on the console.
+ *
+ * **A class, not an `object`.** As a singleton this crashed Kotlin/Native's code
+ * generator outright — `NativeCodeGeneratorException` in `$init_global()` — while
+ * still compiling clean, so the break only appeared when the framework was
+ * *linked*. Compiling an iOS change is not evidence that it builds.
  */
-private object PipStartFailureLogger : NSObject(), AVPictureInPictureControllerDelegateProtocol {
+private class PipStartFailureLogger : NSObject(), AVPictureInPictureControllerDelegateProtocol {
 
     override fun pictureInPictureController(
         pictureInPictureController: AVPictureInPictureController,

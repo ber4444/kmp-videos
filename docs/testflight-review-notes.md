@@ -44,9 +44,9 @@ exemption exists (see [server/README.md](../server/README.md#feed-policy)).
 > 3. **Rotation and resize** — rotate to fullscreen; cycle fit / fill / zoom.
 > 4. **Background and PiP** — swipe up mid-playback; audio should continue, and
 >    Picture in Picture should pick up the video.
-> 5. **Captions** — turn on CC. Captions appear a beat behind the audio and are
->    written in the device language. (Try changing the device language and
->    reopening a video; the same English audio should caption in the new one.)
+> 5. **Captions** — turn on CC, then seek to **2:34**. The demo video is silent
+>    until then, so captions switched on earlier correctly show nothing; text
+>    appears once the speech starts and is written in the device language.
 > 6. **Downloads** — download a non-live video, then re-open it with the device in
 >    Airplane Mode.
 

@@ -15,6 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,12 +123,23 @@ private fun EventFeed(
     onDownload: ((EventInfo) -> Unit)?,
     onRemoveDownload: ((Int) -> Unit)?,
 ) {
+    // Inset as *content* padding rather than as a modifier: the grid then fills
+    // the window and its tiles scroll under the status bar, instead of the
+    // viewport shrinking to a letterboxed strip. A flat 16.dp put the first row
+    // under the clock on any device that draws edge to edge.
+    val safeArea = WindowInsets.safeDrawing.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 220.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(
+            start = GRID_GUTTER + safeArea.calculateStartPadding(layoutDirection),
+            top = GRID_GUTTER + safeArea.calculateTopPadding(),
+            end = GRID_GUTTER + safeArea.calculateEndPadding(layoutDirection),
+            bottom = GRID_GUTTER + safeArea.calculateBottomPadding(),
+        ),
+        horizontalArrangement = Arrangement.spacedBy(GRID_GUTTER),
+        verticalArrangement = Arrangement.spacedBy(GRID_GUTTER),
     ) {
         items(events, key = { it.eventNumber }) { event ->
             LiveEventTile(
@@ -373,3 +390,6 @@ private fun formatDuration(durationMs: Long): String {
 
 private fun pad2(value: Long): String =
     if (value < 10L) "0$value" else value.toString()
+
+/** Gutter between tiles, and the minimum margin around the grid. */
+private val GRID_GUTTER = 16.dp
