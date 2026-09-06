@@ -128,8 +128,10 @@ actual fun PlatformPlayerScreen(
         // Live captions read the audio-only `_aac` rendition over HTTP instead of
         // tapping the player: MTAudioProcessingTap does not work for HLS, so a tap
         // on the playing item installs cleanly and then never fires. See
-        // [CaptionSegmentFeeder]. Only numbered events have that sibling rendition,
-        // so manifest extras (which resolve no ladder) get no captions.
+        // [CaptionSegmentFeeder]. Only `/live/event…` streams have that sibling, so
+        // a manifest entry pointing anywhere else resolves no ladder and gets no
+        // captions — while one that *is* a numbered event captions like any other,
+        // which is what the demo feed relies on.
         val captionHttp = remember { createHttpClient() }
         val audioChunklistUrl = remember(renditions) {
             renditions?.firstOrNull { it.isAudioOnly }?.chunklistUri
