@@ -133,11 +133,20 @@ class PreviewFrameEngine(
         return null
     }
 
-    /** Cheapest-first rendition URLs to try for a poster frame of [streamUrl]. */
+    /**
+     * Cheapest-first rendition URLs to try for a poster frame of [streamUrl].
+     *
+     * Sized against the host of [streamUrl] rather than [config]. The configured
+     * default is empty for an account that was issued no host — every review
+     * account — and the candidates were then hostless and unresolvable, producing
+     * no frame and a grey placeholder where the poster should be. Falling back to
+     * the URL itself means the worst case is a full-size grab, not none.
+     */
     private fun frameCandidates(streamUrl: String): List<String> {
         val eventNumber = MediaKitConfig.eventNumberIn(streamUrl) ?: return listOf(streamUrl)
+        val streamConfig = MediaKitConfig.forStreamUrl(streamUrl) ?: return listOf(streamUrl)
         return listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
-            .map { tier -> config.renditionUrl(eventNumber, tier) }
+            .map { tier -> streamConfig.renditionUrl(eventNumber, tier) }
     }
 
     /** Cached scrub-preview frame for [eventNumber] at [positionMs], or null. */

@@ -55,6 +55,8 @@ class PreviewFrameEngine {
         eventNumber: Int,
         timeMs: Long,
         streamUrl: String = MediaKitConfig.Default.eventUrl(eventNumber),
+        // NB: callers that have a URL should pass it — the default cannot serve an
+        // account that was issued no host. See frameCandidates.
     ): ImageBitmap? = withContext(Dispatchers.IO) {
         val fileUrl = cacheDir.URLByAppendingPathComponent("${eventNumber}_${timeMs}.jpg")!!
 
@@ -71,11 +73,20 @@ class PreviewFrameEngine {
         null
     }
 
-    /** Mirrors Android: try the cheapest rendition but do not require it. */
+    /**
+     * Mirrors Android: try the cheapest rendition but do not require it.
+     *
+     * Sized against the host of [streamUrl] rather than the configured default.
+     * The default is empty for an account issued no host — every review account —
+     * and the candidates were then hostless, unresolvable, and silently produced
+     * no frame at all: a grey placeholder where the poster should be. Falling back
+     * to the URL itself means the worst case is a full-size frame grab, not none.
+     */
     private fun frameCandidates(streamUrl: String): List<String> {
         val eventNumber = MediaKitConfig.eventNumberIn(streamUrl) ?: return listOf(streamUrl)
+        val config = MediaKitConfig.forStreamUrl(streamUrl) ?: return listOf(streamUrl)
         return listOf(RenditionTier.P160, RenditionTier.P360, RenditionTier.P720)
-            .map { MediaKitConfig.Default.renditionUrl(eventNumber, it) }
+            .map { config.renditionUrl(eventNumber, it) }
     }
 
     private suspend fun captureFrame(url: String, timeMs: Long): UIImage? =

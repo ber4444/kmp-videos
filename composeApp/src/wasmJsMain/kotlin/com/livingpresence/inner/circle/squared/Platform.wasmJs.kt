@@ -121,8 +121,11 @@ actual fun LiveEventThumbnail(
             document.body?.appendChild(video)
             // The cheap 160p sibling where there is one; a feed extra plays its
             // own playlist, muted, as its own preview.
+            // Against the host of streamUrl, not the configured default: an
+            // account issued no host would otherwise get a hostless URL and no
+            // preview at all.
             val url = MediaKitConfig.eventNumberIn(streamUrl)
-                ?.let { MediaKitConfig.Default.renditionUrl(it, RenditionTier.P160) }
+                ?.let { MediaKitConfig.forStreamUrl(streamUrl)?.renditionUrl(it, RenditionTier.P160) }
                 ?: streamUrl
             hls = attachHls(video, url)
         }

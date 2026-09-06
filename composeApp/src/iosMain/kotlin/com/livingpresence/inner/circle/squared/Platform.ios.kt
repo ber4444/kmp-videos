@@ -375,12 +375,13 @@ private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureContr
     if (!AVPictureInPictureController.isPictureInPictureSupported()) {
         return null
     }
-    return remember(layer) {
+    // The controller holds its delegate *weakly*, so the logger has to be
+    // retained alongside it — remembered on the same key, released together.
+    val delegate = remember(layer) { PipStartFailureLogger() }
+    return remember(layer, delegate) {
         AVPictureInPictureController(playerLayer = layer).apply {
             canStartPictureInPictureAutomaticallyFromInline = true
-            // Held by the controller as a weak delegate, so the logger has to
-            // outlive this block — hence an object rather than a local.
-            setDelegate(PipStartFailureLogger)
+            setDelegate(delegate)
         }
     }
 }
@@ -393,8 +394,13 @@ private fun rememberPipController(layer: AVPlayerLayer): AVPictureInPictureContr
  * from the feature not being wired up at all. That ambiguity cost a debugging
  * session — the Simulator's unsupported-but-reported-supported behaviour looks
  * exactly like a real bug — so the failure is now on the console.
+ *
+ * **A class, not an `object`.** As a singleton this crashed Kotlin/Native's code
+ * generator outright — `NativeCodeGeneratorException` in `$init_global()` — while
+ * still compiling clean, so the break only appeared when the framework was
+ * *linked*. Compiling an iOS change is not evidence that it builds.
  */
-private object PipStartFailureLogger : NSObject(), AVPictureInPictureControllerDelegateProtocol {
+private class PipStartFailureLogger : NSObject(), AVPictureInPictureControllerDelegateProtocol {
 
     override fun pictureInPictureController(
         pictureInPictureController: AVPictureInPictureController,
