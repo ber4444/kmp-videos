@@ -22,7 +22,9 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
   a hidden tile — there is nothing to reach. The session persists across launches
   via a refresh token — stored in `SharedPreferences` on Android, the Keychain on
   iOS, `localStorage` on web — and membership is **re-verified on every launch**,
-  so leaving Apollo revokes access at the next start rather than never. See
+  so leaving Apollo revokes access at the next start rather than never. A **Sign
+  out** control on the feed erases it on demand, dropping the refresh token, the
+  in-memory access token and the issued stream host together. See
   [Where the feed comes from](#where-the-feed-comes-from).
 - **Adaptive streaming.** Genuine client-side ABR synthesized from four
   unadvertised sibling renditions, with viewport-aware track selection so the

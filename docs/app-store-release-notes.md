@@ -12,9 +12,9 @@ demo account itself is documented once, in the TestFlight notes — it is the sa
 account here, and its credentials still belong in App Store Connect rather than in
 this repository.
 
-Two settings that belong in the *binary* are missing today and cannot be fixed from
-the App Store Connect web UI. They are section 0, first, because a build without
-them is a build you cannot submit.
+Two of these settings belong in the *binary* rather than in the App Store Connect
+web UI. They are section 0, first, because a build without them is a build you
+cannot submit.
 
 ---
 
@@ -22,18 +22,18 @@ them is a build you cannot submit.
 
 `iosApp/Info.plist` is **generated** by `xcodegen generate` from
 [`iosApp/project.yml`](../iosApp/project.yml), which silently discards anything not
-declared in that spec. Every change below goes in `project.yml`; hand-editing
-`Info.plist` survives exactly until the next build.
+declared in that spec. Every plist change below goes in `project.yml`;
+hand-editing `Info.plist` survives exactly until the next build.
 
-| Setting | Where | Today | Needs to be |
+| Setting | Where | Value | Note |
 |---|---|---|---|
-| `ITSAppUsesNonExemptEncryption` | `project.yml` → `info.properties` | **absent** | `false` |
-| `PrivacyInfo.xcprivacy` | `iosApp/ics_ios/` | **absent** | present, declaring `NSUserDefaults` |
-| `CFBundleShortVersionString` | `project.yml` | `1.2` | the public version number |
-| `CFBundleVersion` | `project.yml` | `3` | higher than the last build ASC accepted |
-| `PRODUCT_BUNDLE_IDENTIFIER` | `project.yml` | `com.livingpresence.inner.circle.squared` | must equal the ASC record and `codemagic.yaml`'s `ios_signing` |
-| `TARGETED_DEVICE_FAMILY` | `project.yml` | `1,2` — iPhone **and iPad** | a decision; see below |
-| `IPHONEOS_DEPLOYMENT_TARGET` | `project.yml` | `16.0` | drives the "Compatibility" line on the listing |
+| `ITSAppUsesNonExemptEncryption` | `project.yml` → `info.properties` | `false` | See below |
+| `PrivacyInfo.xcprivacy` | `iosApp/ics_ios/` | declares `NSUserDefaults` | See below |
+| `CFBundleShortVersionString` | `project.yml` | `1.2` | The public version number |
+| `CFBundleVersion` | `project.yml` | `3` | Must be higher than the last build ASC accepted |
+| `PRODUCT_BUNDLE_IDENTIFIER` | `project.yml` | `com.livingpresence.inner.circle.squared` | Must equal the ASC record and `codemagic.yaml`'s `ios_signing` |
+| `TARGETED_DEVICE_FAMILY` | `project.yml` | `1,2` — iPhone **and iPad** | A decision; see below |
+| `IPHONEOS_DEPLOYMENT_TARGET` | `project.yml` | `16.0` | Drives the "Compatibility" line on the listing |
 
 ### Export compliance
 
@@ -42,16 +42,7 @@ flagged **Missing Compliance** and cannot be attached to a version until the
 question is answered by hand — once per build, forever. The declaration is a
 one-line answer to a question this app has an easy answer to: its only cryptography
 is the HTTPS/TLS the OS provides and the SHA-256 in the PKCE challenge. Both are
-exempt.
-
-```yaml
-        # Answers App Store Connect's export-compliance question at upload time
-        # rather than parking every build in "Missing Compliance". The only
-        # cryptography here is the OS's own HTTPS/TLS and the SHA-256 of the PKCE
-        # challenge — both exempt, so no French encryption declaration is needed
-        # either.
-        ITSAppUsesNonExemptEncryption: false
-```
+exempt, so there is no French encryption declaration to make either.
 
 ### Privacy manifest
 
@@ -68,47 +59,23 @@ Nothing else in the iOS source hits the list. `PreviewFrameEngine.ios.kt` uses
 `NSFileManager`, but only `URLsForDirectory`, `createDirectoryAtURL` and
 `fileExistsAtPath` — none of which are required-reason APIs. No analytics, crash
 reporting or advertising SDK is embedded, so no third-party manifest or SDK
-signature is in play either.
+signature is in play either. **If either file grows a new call — disk space, file
+timestamps, system boot time — the manifest grows with it or the next upload
+bounces.**
 
-Create `iosApp/ics_ios/PrivacyInfo.xcprivacy`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>NSPrivacyTracking</key>
-	<false/>
-	<key>NSPrivacyTrackingDomains</key>
-	<array/>
-	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
-	<key>NSPrivacyAccessedAPITypes</key>
-	<array>
-		<dict>
-			<key>NSPrivacyAccessedAPIType</key>
-			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
-			<key>NSPrivacyAccessedAPITypeReasons</key>
-			<array>
-				<string>CA92.1</string>
-			</array>
-		</dict>
-	</array>
-</dict>
-</plist>
-```
-
-`project.yml`'s target already takes `sources: - path: ics_ios`, and its only
-`excludes` entry is `Info.plist`, so the file is picked up as a bundle resource with
-no spec change. Confirm it landed — `unzip -l` the IPA and look for
+[`iosApp/ics_ios/PrivacyInfo.xcprivacy`](../iosApp/ics_ios/PrivacyInfo.xcprivacy)
+is hand-maintained rather than generated: `project.yml` describes the target's
+`Info.plist` only. It reaches the bundle because the target takes
+`sources: - path: ics_ios` and excludes nothing but `Info.plist`, so the file is
+copied as a resource. Confirm it landed — `unzip -l` the IPA and look for
 `PrivacyInfo.xcprivacy` at the bundle root — because a manifest that did not get
 copied is indistinguishable from one that was never written, until the upload
 bounces.
 
-The three `NSPrivacy*` values above are the machine-readable form of the App
-Privacy answers in [section 5](#5-app-privacy-the-nutrition-labels). They have to
-agree. An empty `NSPrivacyCollectedDataTypes` and a nutrition label claiming
-collection (or the reverse) is a contradiction shipped inside the binary.
+Its three `NSPrivacy*` values are the machine-readable form of the App Privacy
+answers in [section 5](#5-app-privacy-the-nutrition-labels). They have to agree. An
+empty `NSPrivacyCollectedDataTypes` and a nutrition label claiming collection (or
+the reverse) is a contradiction shipped inside the binary.
 
 ### Universal binary means iPad is a promise
 
@@ -413,9 +380,11 @@ this is where a rejection arrives.
 >
 > **No purchases, no account creation.** The app contains no in-app purchases,
 > subscriptions, or paid content, and creates no account of its own — sign-in is to
-> the user's existing Discord account. The app collects no data; see the privacy
-> policy at https://ber4444.github.io/kmp-videos/privacy/, and the full source at
-> https://github.com/ber4444/kmp-videos.
+> the user's existing Discord account, which the user manages at discord.com. A
+> **Sign out** control in the top-end corner of the feed erases the session from the
+> device, and deleting the app does the same. The app collects no data; see the
+> privacy policy at https://ber4444.github.io/kmp-videos/privacy/, and the full
+> source at https://github.com/ber4444/kmp-videos.
 
 **Attachment:** optional. A short screen recording of the sign-in and of background
 audio is the cheapest insurance against a reviewer who cannot get past the gate.
@@ -461,15 +430,19 @@ The rule applies to apps that let users *create* an account. This app creates no
 it authenticates an account the user already has at Discord — so the in-app deletion
 requirement does not attach.
 
-Two loose ends worth closing before someone else finds them. **There is no in-app
-sign-out**: the stored session is cleared only when Discord rejects the refresh
-token or the account is refused, and no UI calls `sessionStore.clear()`. Meanwhile
-[the privacy policy](privacy/index.html) says "Signing out erases the stored
-session". One of those two should change. If the question is asked before it is
-fixed, the true answer is that deleting the app erases the session — the first-run
-Keychain purge in `DiscordSession.ios.kt` makes that true even though iOS keeps
-Keychain items across an uninstall — and the Discord account itself is managed at
-discord.com.
+The answer to give, if it is asked: there is a **Sign out** control in the top-end
+corner of the feed, which erases the stored session from the device. Deleting the
+app erases it too — the first-run Keychain purge in `DiscordSession.ios.kt` makes
+that true even though iOS keeps Keychain items across an uninstall. The Discord
+account itself is the user's, and is managed at discord.com.
+
+Sign-out drops all three things a session consists of, in that order: the refresh
+token off the device, the access token out of memory, and `FeedConfig.streamHost`
+back to empty, so nothing can build a playlist URL for an account that has left. The
+feed those addresses produced goes with them — see `MainViewModel.clearFeed`, which
+also cancels any load in flight, because a load started for the departing account
+must not land in the next one's gallery. That matters more here than it would in
+most apps: a review account and a member are shown different catalogues.
 
 ### 1.2 — User-generated content
 
@@ -508,12 +481,15 @@ Shoot them from the demo account (section 3).
 
 ## 8. Pre-submission checklist
 
-- [ ] `ITSAppUsesNonExemptEncryption: false` added to `project.yml`
-- [ ] `PrivacyInfo.xcprivacy` added, and verified present in the IPA with `unzip -l`
+- [ ] `PrivacyInfo.xcprivacy` verified present in the IPA with `unzip -l`
+- [ ] `PrivacyInfo.xcprivacy` still lists every required-reason API the iOS source
+      reaches, if either `DiscordSession.ios.kt` or `PreviewFrameEngine.ios.kt` changed
 - [ ] `CFBundleShortVersionString` / `CFBundleVersion` bumped in `project.yml`
 - [ ] iPad decision made — universal with 13" screenshots, or `TARGETED_DEVICE_FAMILY: "1"`
 - [ ] Build installed from TestFlight on a real iPhone *and*, if universal, a real iPad
 - [ ] Demo account verified end-to-end on that build, on a device that has never signed in
+- [ ] Sign out, then sign back in as the demo account: the feed must rebuild rather
+      than reappear, and the gate must not restore the session it just erased
 - [ ] Background audio and PiP confirmed working on the exact build being submitted
 - [ ] Screenshots captured from the demo account, both required sizes
 - [ ] Privacy Policy URL resolves: <https://ber4444.github.io/kmp-videos/privacy/>

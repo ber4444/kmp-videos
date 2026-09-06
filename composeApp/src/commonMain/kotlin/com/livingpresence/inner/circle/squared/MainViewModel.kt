@@ -50,6 +50,25 @@ class MainViewModel(
         _uiState.update { it.copy(isGalleryVisible = false) }
     }
 
+    /**
+     * Drops the feed on sign-out, so the next account never sees the last one's.
+     *
+     * [loadVideos] deliberately keeps [MainUiState.availableEvents] until a reload
+     * succeeds — a refresh should not blank the grid it is refreshing — which is
+     * exactly wrong across a change of account: the reload the landing screen
+     * fires on connect would draw the previous account's tiles behind the new
+     * account's spinner. Whose feed is on screen is not a cosmetic question here,
+     * since a review account and a member are shown different catalogues.
+     *
+     * Any load in flight is cancelled for the same reason: its result was fetched
+     * for the account that is leaving.
+     */
+    fun clearFeed() {
+        loadJob?.cancel()
+        loadJob = null
+        _uiState.value = MainUiState()
+    }
+
     private fun loadVideos(forceRefresh: Boolean = false) {
         val currentState = _uiState.value
         if (!forceRefresh && (currentState.isLoadingVideos || currentState.availableEvents.isNotEmpty())) {

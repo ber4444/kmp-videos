@@ -6,11 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
@@ -27,9 +32,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -42,6 +50,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.savedstate.read
+import com.livingpresence.inner.circle.squared.discord.DiscordIdentity
+import com.livingpresence.inner.circle.squared.discord.rememberDiscordSessionStore
 import com.livingpresence.mediakit.EventInfo
 import com.livingpresence.mediakit.ExtraVideoCatalog
 import com.livingpresence.mediakit.MediaKitConfig
@@ -98,6 +108,7 @@ fun App() {
                 }
 
                 composable(route = AppRoute.Gallery) {
+                    val sessionStore = rememberDiscordSessionStore()
                     GalleryScreen(
                         uiState = uiState,
                         onRetry = mainViewModel::retryLoadingVideos,
@@ -105,6 +116,27 @@ fun App() {
                             mainViewModel.playVideo(event.eventNumber)
                             onEventClick(event.eventNumber) {
                                 navController.navigate(AppRoute.player(event.eventNumber))
+                            }
+                        },
+                        onSignOut = {
+                            // Credentials first, and all of them: the refresh token
+                            // off the device, the access token out of memory, and
+                            // the stream host back to empty so nothing can build a
+                            // playlist URL for an account that has left. Then the
+                            // feed those addresses produced.
+                            sessionStore.clear()
+                            DiscordIdentity.clear()
+                            FeedConfig.streamHost = ""
+                            mainViewModel.clearFeed()
+                            // Same shape as the connect navigation, in reverse:
+                            // drop the gallery so backing out of the gate cannot
+                            // return to a feed this session is no longer entitled
+                            // to. The landing route reads the session at
+                            // construction, and the store is empty by now, so it
+                            // comes up on the connect button rather than trying to
+                            // restore what was just cleared.
+                            navController.navigate(AppRoute.Landing) {
+                                popUpTo(AppRoute.Gallery) { inclusive = true }
                             }
                         },
                     )
@@ -208,14 +240,18 @@ fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * Full-screen gallery of available events. Hosts the [LiveEventsGallery] feed
- * with a top bar offering a back/close affordance.
+ * Full-screen gallery of available events. Hosts the [LiveEventsGallery] feed,
+ * with the offline fallback in front of it and [SignOutButton] over it.
+ *
+ * @param onSignOut Erase the session and return to the gate. Confirmed by
+ *   [SignOutButton] before it is called, so this runs only on a deliberate tap.
  */
 @Composable
 fun GalleryScreen(
     uiState: MainUiState,
     onRetry: () -> Unit,
     onPlayEvent: (EventInfo) -> Unit,
+    onSignOut: () -> Unit,
 ) {
     val downloadController = rememberDownloadController()
     val downloadStates by downloadController.states.collectAsState()
@@ -263,6 +299,76 @@ fun GalleryScreen(
                 { event -> downloadController.enqueue(event) }
             } else null,
             onRemoveDownload = if (downloadController.isSupported) downloadController::remove else null,
+        )
+
+        SignOutButton(
+            onConfirm = onSignOut,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
+
+/**
+ * Sign-out, floating over the feed's top-end corner.
+ *
+ * It floats because there is nothing to hang it on: the feed is a full-bleed
+ * grid that scrolls under the status bar, and giving it a top bar to host one
+ * button would cost the edge-to-edge layout the rest of the app is built around.
+ * It carries its own scrim for the same reason the landing screen does — what is
+ * behind it is photographs.
+ *
+ * Confirmed rather than immediate. It is a small target directly above a grid of
+ * tappable tiles, and the cost of a mis-tap is not a mis-navigation but a full
+ * authorization round trip out to the browser and back.
+ */
+@Composable
+private fun SignOutButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+    var confirming by remember { mutableStateOf(false) }
+
+    TextButton(
+        onClick = { confirming = true },
+        // The grid insets itself with content padding so its tiles can scroll
+        // under the system bars. This must not: it is pinned, so it takes the
+        // inset as real padding or it sits under the clock.
+        modifier = modifier
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.Black.copy(alpha = 0.45f)),
+    ) {
+        Text(
+            text = "Sign out",
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Sign out of Discord?") },
+            text = {
+                Text(
+                    "This erases your session from this device. You will need to " +
+                        "connect to Discord again to reach the feed. Videos you " +
+                        "have downloaded stay on your device.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        onConfirm()
+                    },
+                ) {
+                    Text("Sign out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
 }
