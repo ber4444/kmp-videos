@@ -22,8 +22,8 @@ android {
         applicationId = "com.livingpresence.inner.circle.squared"
         minSdk = 23
         targetSdk = 36
-        versionCode = 7015
-        versionName = "8.1.3"
+        versionCode = 7016
+        versionName = "8.1.4"
     }
 
     buildFeatures {

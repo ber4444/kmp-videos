@@ -84,16 +84,3 @@ Tick **Sign-in required** and supply the demo Discord account's email and passwo
 > a video reports itself unavailable, it has ended — the recorded entries in the feed
 > are always playable.
 
----
-
-## Before submitting
-
-- [ ] The demo Discord account's snowflake is in `TEST_USER_IDS` on the token
-      service, and `DEMO_VIDEOS_URL` points at its manifest:
-      `fly secrets list --app apollo-videos-tokens`
-- [ ] That manifest resolves and lists at least one **recorded** (non-live) video,
-      so a reviewer always has something that plays.
-- [ ] Sign in with the demo account on a real build and confirm the feed is the demo
-      list — the app is a hard dependency on the token service now, so a bad deploy
-      shows a reviewer an empty gallery.
-- [ ] `CFBundleShortVersionString` / `CFBundleVersion` bumped in `iosApp/project.yml`.
