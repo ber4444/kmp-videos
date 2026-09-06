@@ -54,6 +54,7 @@ $dokka.location:com.livingpresence.mediakit/MediaKitConfig.Companion/DEFAULT_MAX
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig.Companion/Default/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-companion/-default.html
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig.Companion/defaultHost/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-companion/default-host.html
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig.Companion/eventNumberIn/#kotlin.String/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-companion/event-number-in.html
+$dokka.location:com.livingpresence.mediakit/MediaKitConfig.Companion/forStreamUrl/#kotlin.String/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-companion/for-stream-url.html
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig///PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/index.html
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig/MediaKitConfig/#kotlin.String#kotlin.Int/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-media-kit-config.html
 $dokka.location:com.livingpresence.mediakit/MediaKitConfig/MediaKitConfig/#kotlin.String/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-media-kit-config/-media-kit-config.html
