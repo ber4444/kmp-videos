@@ -155,7 +155,11 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     val eventNumber = parseEventNumber(url)
     val scope = rememberCoroutineScope()
     val httpClient = remember { HttpClient(Js) }
-    val ladderResolver = remember { LadderResolver(httpClient, MediaKitConfig.Default) }
+    // Against the played URL's host rather than the configured default — an
+    // account restricted to a manifest is issued no host, and Default would then
+    // build an unresolvable URL and silently find no ladder.
+    val streamConfig = remember(url) { MediaKitConfig.forStreamUrl(url) ?: MediaKitConfig.Default }
+    val ladderResolver = remember(streamConfig) { LadderResolver(httpClient, streamConfig) }
     
     var videoElement by remember { mutableStateOf<HTMLVideoElement?>(null) }
     var isPlaying by remember { mutableStateOf(false) }

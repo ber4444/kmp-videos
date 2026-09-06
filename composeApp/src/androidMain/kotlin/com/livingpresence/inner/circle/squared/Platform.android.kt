@@ -130,8 +130,13 @@ actual fun PlatformPlayerScreen(
 
     // Resolve the ABR ladder (if any) just-in-time, producing a media-item URI
     // (data: URI for the synthesized multivariant playlist, or the plain URL).
-    val mediaSourceBuilder = remember { LadderMediaSourceBuilder(context, MediaKitConfig.Default) }
-    val ladderResolver = remember(httpClient) { LadderResolver(httpClient, MediaKitConfig.Default) }
+    // Sibling renditions resolve against the host of the URL being played, not
+    // the configured default. An account restricted to a manifest is issued no
+    // host, so Default would build an unresolvable URL and silently find no
+    // ladder — and with it no audio-only track for live captions to read.
+    val streamConfig = remember(url) { MediaKitConfig.forStreamUrl(url) ?: MediaKitConfig.Default }
+    val mediaSourceBuilder = remember(streamConfig) { LadderMediaSourceBuilder(context, streamConfig) }
+    val ladderResolver = remember(httpClient, streamConfig) { LadderResolver(httpClient, streamConfig) }
     var itemResult by remember(url) { mutableStateOf<LadderMediaSourceBuilder.ItemResult?>(null) }
 
     // Bumped to resolve the ladder again from scratch. Re-resolving is what

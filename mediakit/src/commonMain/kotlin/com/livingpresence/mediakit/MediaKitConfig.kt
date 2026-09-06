@@ -82,6 +82,30 @@ public data class MediaKitConfig(
         public fun eventNumberIn(url: String): Int? =
             EVENT_SEGMENT.find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
+        /**
+         * A config whose host is read out of [url] itself, or null when [url] is
+         * not an absolute numbered-event stream.
+         *
+         * [Default] answers "the host this app was told about", which is not the
+         * same question as "the host this video is on", and the two come apart in
+         * two real cases: a feed entry served from somewhere other than the
+         * configured host, and a caller that was issued no host at all. The second
+         * is not hypothetical — an account restricted to a manifest gets exactly
+         * that, and every sibling-rendition lookup for it (the ABR ladder, the
+         * audio-only track live captions read) would otherwise build a hostless,
+         * unresolvable URL and quietly find nothing.
+         *
+         * Deriving from the URL sidesteps both, and cannot widen access: the URL
+         * is one the caller was already handed and is already playing.
+         */
+        public fun forStreamUrl(url: String): MediaKitConfig? {
+            if (!url.contains(EVENT_PATH)) return null
+            val host = url.substringBefore(EVENT_PATH)
+            return if (host.isBlank()) null else MediaKitConfig(host)
+        }
+
+        private const val EVENT_PATH = "/live/event"
+
         private val EVENT_SEGMENT = Regex("""/live/event(\d+)""")
     }
 }

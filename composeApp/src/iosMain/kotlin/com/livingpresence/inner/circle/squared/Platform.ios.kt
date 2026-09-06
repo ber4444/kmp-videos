@@ -112,7 +112,13 @@ actual fun PlatformPlayerScreen(
         LaunchedEffect(url) {
             val eventNumber = parseEventNumber(url)
             if (eventNumber != null) {
-                val ladderResolver = com.livingpresence.mediakit.LadderResolver(createHttpClient(), com.livingpresence.mediakit.MediaKitConfig.Default)
+                // Resolve siblings against the host of the URL being played, not
+                // the configured default. An account restricted to a manifest is
+                // issued no host, so Default would build an unresolvable URL and
+                // silently find no ladder — and therefore no captions.
+                val config = com.livingpresence.mediakit.MediaKitConfig.forStreamUrl(url)
+                    ?: com.livingpresence.mediakit.MediaKitConfig.Default
+                val ladderResolver = com.livingpresence.mediakit.LadderResolver(createHttpClient(), config)
                 val ladder = try { ladderResolver.resolve(eventNumber) } catch (e: Exception) { null }
                 renditions = ladder?.renditions
             }
