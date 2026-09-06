@@ -11,6 +11,16 @@ import kotlinx.coroutines.launch
 /** Message shown when the account is not a member of the Apollo guild. */
 const val NOT_ON_APOLLO_MESSAGE: String = "User must be on the Apollo server"
 
+/**
+ * What `:server` said about an account presenting a token.
+ *
+ * [UNKNOWN] is deliberately not a refusal. The check is server-side now, so an
+ * outage would otherwise clear the stored session of every member on their next
+ * launch — locking them out of an app they are still entitled to use, and
+ * requiring a fresh consent screen to get back in.
+ */
+enum class DiscordAdmission { ADMITTED, REFUSED, UNKNOWN }
+
 private const val NOT_CONFIGURED_MESSAGE =
     "Discord sign-in is not configured for this build."
 private const val UNVERIFIED_MESSAGE =
@@ -55,6 +65,21 @@ class DiscordConnectionViewModel(
     private val api: DiscordApi,
     private val sessionStore: DiscordSessionStore = NoOpDiscordSessionStore,
     private val broker: DiscordAuthBroker = DiscordAuthBroker,
+    /**
+     * The Apollo membership check, which this app does not perform.
+     *
+     * It used to: the client read the account's guild list and compared it to a
+     * configured snowflake. That decided what the UI showed and nothing more —
+     * the stream host and the manifest URL it unlocked were compiled into every
+     * build, so the check was advice a patched client could ignore. `:server`
+     * makes it now, and answers by handing over those addresses or withholding
+     * them, which is a decision no client can talk itself out of.
+     *
+     * Required rather than defaulted: there is no safe stand-in. A default that
+     * admitted everyone would silently remove the gate, and one that refused
+     * everyone would silently break sign-in.
+     */
+    private val admit: suspend (accessToken: String) -> DiscordAdmission,
 ) : ViewModel() {
 
     /** The session found at construction, if any. Consumed once by [restoreSession]. */
@@ -185,11 +210,13 @@ class DiscordConnectionViewModel(
     }
 
     /**
-     * Checks Apollo membership with [token] and, when the user is a member,
-     * stores the session so the next launch skips the consent screen.
+     * Puts [token] to the admission check and, when the account is let in, stores
+     * the session so the next launch skips the consent screen.
      *
-     * Nothing is stored for a non-member: there is no access to resume, and a
-     * saved token would only be a credential sitting on disk for no reason.
+     * Nothing is stored for an account that is turned away: there is no access to
+     * resume, and a saved token would only be a credential sitting on disk for no
+     * reason. An account whose standing is merely *unknown* keeps what it had —
+     * see [DiscordAdmission].
      *
      * @param fallbackRefreshToken kept when Discord omits a rotated token from
      *   the response, so a refresh never leaves the session without one.
@@ -199,16 +226,21 @@ class DiscordConnectionViewModel(
         fallbackRefreshToken: String? = null,
     ): DiscordConnectionState {
         val user = api.currentUser(token.accessToken)
-        val guilds = api.currentUserGuilds(token.accessToken)
-        if (!isApolloMember(guilds)) {
-            sessionStore.clear()
-            DiscordIdentity.clear()
-            return DiscordConnectionState.NotOnApolloServer
+        when (admit(token.accessToken)) {
+            DiscordAdmission.REFUSED -> {
+                sessionStore.clear()
+                DiscordIdentity.clear()
+                return DiscordConnectionState.NotOnApolloServer
+            }
+            // Leave the session alone and let the user retry: this is the same
+            // "we could not tell" that a Discord outage produces, and it must not
+            // become an eviction.
+            DiscordAdmission.UNKNOWN -> return DiscordConnectionState.Failed(UNREACHABLE_MESSAGE)
+            DiscordAdmission.ADMITTED -> Unit
         }
-        // Held for the session so the caption path can prove membership to :server,
-        // which re-checks it server-side — this gate decides what the UI shows, not
-        // who may spend the Soniox account. Recorded only after the check passes, so
-        // a non-member's token is never retained.
+        // Held for the session so the caption path can present it to :server, which
+        // re-checks it there. Recorded only after admission, so the token of an
+        // account that was turned away is never retained.
         DiscordIdentity.remember(token.accessToken)
         val refreshToken = token.refreshToken ?: fallbackRefreshToken
         if (refreshToken != null) {

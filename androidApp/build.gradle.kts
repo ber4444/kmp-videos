@@ -22,8 +22,8 @@ android {
         applicationId = "com.livingpresence.inner.circle.squared"
         minSdk = 23
         targetSdk = 36
-        versionCode = 7015
-        versionName = "8.1.3"
+        versionCode = 7016
+        versionName = "8.1.4"
     }
 
     buildFeatures {
@@ -100,26 +100,19 @@ androidComponents {
         val sonioxTokenUrl = transcriptionSecrets.getProperty("SONIOX_TOKEN_URL", "")
         variant.buildConfigFields?.put("SONIOX_TOKEN_URL", com.android.build.api.variant.BuildConfigField("String", "\"$sonioxTokenUrl\"", "Base URL of the Soniox temporary-key service"))
 
-        // Discord OAuth config for the landing screen's Apollo gate. Not secrets
-        // (the client id is public and the guild id is a snowflake), but kept in
-        // the same gitignored file so a fork configures its own Discord app.
+        // Discord OAuth client id for the landing screen's Apollo gate. Public by
+        // design, but kept in the same gitignored file so a fork configures its
+        // own Discord app. The guild snowflake lives in :server, which is what
+        // actually checks membership.
         val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
         variant.buildConfigFields?.put("DISCORD_CLIENT_ID", com.android.build.api.variant.BuildConfigField("String", "\"$discordClientId\"", "Discord OAuth2 client id"))
 
-        val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
-        variant.buildConfigFields?.put("APOLLO_GUILD_ID", com.android.build.api.variant.BuildConfigField("String", "\"$apolloGuildId\"", "Snowflake of the Apollo Discord guild"))
 
-        // Scheme + authority of the stream server. Deliberately absent from the
-        // source tree — every playlist URL is built from it — so it rides in the
-        // same gitignored file. Empty → the feed resolves nowhere.
-        val streamHost = transcriptionSecrets.getProperty("STREAM_HOST", "")
-        variant.buildConfigFields?.put("STREAM_HOST", com.android.build.api.variant.BuildConfigField("String", "\"$streamHost\"", "Scheme + authority of the stream server"))
-
-        // Raw URL of the extra-videos manifest (a secret gist). Not a credential,
-        // but unlisted: it rides in the same gitignored file so the private list
-        // stays out of this repository. Empty → the feed is events only.
-        val extraVideosUrl = transcriptionSecrets.getProperty("EXTRA_VIDEOS_URL", "")
-        variant.buildConfigFields?.put("EXTRA_VIDEOS_URL", com.android.build.api.variant.BuildConfigField("String", "\"$extraVideosUrl\"", "Raw URL of the extra-videos manifest"))
+        // No STREAM_HOST or EXTRA_VIDEOS_URL field. Keeping them out of
+        // secrets.properties kept them out of this repository; it never kept them
+        // out of the APK, where a BuildConfig string is a readable constant in the
+        // dex. :server now issues both per account, so a build carries neither and
+        // a non-member is never told where the streams are. See FeedConfig.
     }
 }
 

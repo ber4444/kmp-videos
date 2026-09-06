@@ -56,6 +56,53 @@ class ServerConfigTest {
         )
     }
 
+    /**
+     * Unlike the guild id, an unset allowlist has an unambiguous safe meaning —
+     * "no account is exempt" — so it is a default rather than a boot failure.
+     */
+    @Test
+    fun noReviewAccountsIsTheDefault() {
+        val config = ServerConfig.fromEnvironment { configured(it) }
+
+        assertEquals(emptySet(), config.testUserIds)
+        assertEquals("", config.demoVideosUrl)
+    }
+
+    /**
+     * Unset means "hand out nothing", which surfaces as an empty gallery. Unlike
+     * the guild id there is no reading of these under which the gate quietly opens,
+     * so they are defaults rather than boot failures.
+     */
+    @Test
+    fun anUnconfiguredFeedHandsOutNothing() {
+        val config = ServerConfig.fromEnvironment { configured(it) }
+
+        assertEquals("", config.streamHost)
+        assertEquals("", config.extraVideosUrl)
+    }
+
+    /** A trailing slash would double up when the app appends `/live/event…`. */
+    @Test
+    fun theStreamHostIsTrimmedOfItsTrailingSlash() {
+        val config = ServerConfig.fromEnvironment {
+            if (it == "STREAM_HOST") " https://stream.example:443/ " else configured(it)
+        }
+
+        assertEquals("https://stream.example:443", config.streamHost)
+    }
+
+    @Test
+    fun parsesACommaSeparatedReviewAccountList() {
+        val config = ServerConfig.fromEnvironment {
+            when (it) {
+                "TEST_USER_IDS" -> " 100000000000000001, 200000000000000002 ,, "
+                else -> configured(it)
+            }
+        }
+
+        assertEquals(setOf("100000000000000001", "200000000000000002"), config.testUserIds)
+    }
+
     @Test
     fun parsesACommaSeparatedOriginList() {
         val config = ServerConfig.fromEnvironment {

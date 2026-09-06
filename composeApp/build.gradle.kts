@@ -278,17 +278,11 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
     // Discord OAuth config for the landing screen's Apollo gate — public values,
     // carried in the same file so a fork configures its own Discord application.
     val discordClientId = transcriptionSecrets.getProperty("DISCORD_CLIENT_ID", "")
-    val apolloGuildId = transcriptionSecrets.getProperty("APOLLO_GUILD_ID", "")
-    // Raw URL of the extra-videos manifest (a secret gist) — see FeedConfig.
-    val extraVideosUrl = transcriptionSecrets.getProperty("EXTRA_VIDEOS_URL", "")
-    // Scheme + authority of the stream server — see MediaKitConfig.defaultHost.
-    val streamHost = transcriptionSecrets.getProperty("STREAM_HOST", "")
+    // No EXTRA_VIDEOS_URL or STREAM_HOST here: :server issues both per account,
+    // and this bundle is served to anyone who opens the page. See FeedConfig.
     // Track key values so the task re-runs when they change.
     inputs.property("sonioxTokenUrl", sonioxTokenUrl)
     inputs.property("discordClientId", discordClientId)
-    inputs.property("apolloGuildId", apolloGuildId)
-    inputs.property("extraVideosUrl", extraVideosUrl)
-    inputs.property("streamHost", streamHost)
     doLast {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\${'$'}")
         val dir = outputDir.get().asFile
@@ -301,9 +295,6 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
             internal object TranscriptionKeys {
                 const val SONIOX_TOKEN_URL = "${esc(sonioxTokenUrl)}"
                 const val DISCORD_CLIENT_ID = "${esc(discordClientId)}"
-                const val APOLLO_GUILD_ID = "${esc(apolloGuildId)}"
-                const val EXTRA_VIDEOS_URL = "${esc(extraVideosUrl)}"
-                const val STREAM_HOST = "${esc(streamHost)}"
             }
             """.trimIndent() + "\n"
         )
@@ -319,15 +310,17 @@ val generateWebTranscriptionKeys = tasks.register("generateWebTranscriptionKeys"
 val iosSecretKeys = listOf(
     "SONIOX_TOKEN_URL",
     "DISCORD_CLIENT_ID",
-    "APOLLO_GUILD_ID",
-    "STREAM_HOST",
-    "EXTRA_VIDEOS_URL",
 )
 val generateIosSecretsXcconfig = tasks.register("generateIosSecretsXcconfig") {
     description = "Writes iosApp/Secrets.xcconfig from the gitignored secrets.properties."
     val outputFile = rootProject.file("iosApp/Secrets.xcconfig")
     outputs.file(outputFile)
-    val values = iosSecretKeys.associateWith { transcriptionSecrets.getProperty(it, "") }
+    // The environment wins over the file so a CI job can supply these without
+    // writing a secrets.properties first — Codemagic currently does write one,
+    // but nothing about the task should require it to.
+    val values = iosSecretKeys.associateWith {
+        System.getenv(it) ?: transcriptionSecrets.getProperty(it, "")
+    }
     // Track the values so the task re-runs when secrets.properties changes.
     values.forEach { (key, value) -> inputs.property(key, value) }
     doLast {

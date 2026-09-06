@@ -81,6 +81,10 @@ fun App() {
                 composable(route = AppRoute.Landing) {
                     LandingRoute(
                         onConnected = {
+                            // The feed depends on who just connected — :server
+                            // confines a review account to its own manifest — and
+                            // the first load ran before anyone was signed in.
+                            mainViewModel.retryLoadingVideos()
                             // Drop the landing page from the back stack: once the
                             // Apollo check has passed, backing into the gate again
                             // would only offer to re-authorize.
@@ -151,22 +155,14 @@ fun App() {
 
 @Composable
 private fun rememberMainViewModel(): MainViewModel {
-    val manifestStore = rememberManifestStore()
-    val videoRepository = remember(manifestStore) {
+    val videoRepository = remember {
         val httpClient = createHttpClient()
+        // No catalogues are built here: the stream host and the manifest URL are
+        // issued per account by :server, so neither address exists until someone
+        // has connected. See VideoRepository.
         VideoRepository(
             httpClient = httpClient,
-            // No manifest configured for this build → the feed is exactly the
-            // numbered events, with no extra request made.
-            extras = if (FeedConfig.hasExtraVideos) {
-                ExtraVideoCatalog(
-                    httpClient = httpClient,
-                    manifestUrl = FeedConfig.extraVideosManifestUrl,
-                    store = manifestStore,
-                )
-            } else {
-                null
-            },
+            policyClient = FeedPolicyClient(httpClient),
         )
     }
     // NOTE: previously used lifecycle-viewmodel-compose's `viewModel()` against a

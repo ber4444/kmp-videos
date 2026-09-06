@@ -1,7 +1,8 @@
-# Soniox temporary-key service
+# Token and feed-policy service
 
-A single-route Ktor service whose only job is to hold the Soniox API key so the
-apps don't have to.
+A small Ktor service holding what the apps must not carry themselves: the Soniox
+API key, the addresses the video feed is built from, and the list of accounts
+whose feed differs from everyone else's.
 
 ## Why it exists
 
@@ -29,12 +30,18 @@ opens a socket, and what it gets back is bounded four ways — the key is
 
 ```
 POST /v1/soniox/temporary-key   ->  201 {"api_key": "...", "expires_at": "..."}
+GET  /v1/feed/policy            ->  200 {"stream_host": "...", "manifest_url": "..."}
 GET  /health                    ->  200 {"status": "ok"}
 ```
 
 Failure modes the client distinguishes: `429` (rate limited — retry), `502`
 (Soniox refused *our* key — retry, and check the logs), `403` (this caller is not
 allowed one — stop).
+
+`/v1/feed/policy` answers "where are this account's videos". Both fields are
+addresses, not permissions: the apps hold no stream host and no manifest URL of
+their own, so an account handed neither cannot reach the catalogue at all. This
+route **is** the Apollo membership check — see [Feed policy](#feed-policy).
 
 ## Deploy
 
@@ -83,6 +90,10 @@ its environment, so a missing secret fails the deploy rather than serving errors
 |---|---|---|
 | `SONIOX_API_KEY` | — | Required. Fails startup if unset. |
 | `APOLLO_GUILD_ID` | — | Required. Snowflake of the guild whose members may mint. Fails startup if unset. |
+| `STREAM_HOST` | *(empty)* | Scheme + authority of the stream server, no trailing slash. Handed to members only. Empty means members see no numbered events. |
+| `EXTRA_VIDEOS_URL` | *(empty)* | Raw URL of the members' extras manifest. Handed to members only. |
+| `TEST_USER_IDS` | *(empty)* | Comma-separated Discord **user** snowflakes given `DEMO_VIDEOS_URL` and no stream host. Empty means no account is exempt. |
+| `DEMO_VIDEOS_URL` | *(empty)* | Raw URL of the manifest those accounts see. Required if `TEST_USER_IDS` is set; without it those accounts are refused. |
 | `PORT` | `8080` | |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated browser origins for CORS. Empty blocks every web origin; the native apps are unaffected. Set this only if you serve the wasmJs build. |
 | `KEY_TTL_SECONDS` | `60` | Only has to cover the WebSocket connect. |
@@ -94,9 +105,16 @@ its environment, so a missing secret fails the deploy rather than serving errors
 
 Keys are minted **only for members of the Apollo Discord guild**. The caller sends
 the Discord access token the app already holds from the landing-screen gate, and
-`DiscordGuildAuthorizer` asks Discord which guilds that token can see. The client's
-own membership check decides what the UI shows; it is not a constraint on anyone
-calling this endpoint directly, which is why the check is repeated here.
+`DiscordGuildAuthorizer` asks Discord which guilds that token can see.
+
+This is a second, independent membership check, not a duplicate of the feed
+route's. The two answer different questions — who may spend the Soniox account,
+and where an account's videos are — and a deployment could reasonably answer them
+differently, so neither is allowed to depend on the other's configuration.
+
+**A review account is not minted for.** It passes the feed gate and fails this
+one, so captions report an error for it. Letting it through would put the Soniox
+bill behind an account that exists to be handed to strangers.
 
 It **fails closed** — a rejected token, a non-member, and a Discord outage all
 deny — and matches on the guild snowflake only, never the name, since guild names
@@ -107,15 +125,60 @@ because a long video's reconnects would otherwise become a stream of Discord cal
 only mean "mint for everyone", and a service that silently stops checking identity
 looks healthy while standing open.
 
-## Tests
+## Feed policy
+
+`/v1/feed/policy` decides where an account's videos are, and answers with the
+addresses themselves:
+
+| Caller | Response |
+|---|---|
+| Listed in `TEST_USER_IDS` | `200 {"stream_host": "", "manifest_url": "<DEMO_VIDEOS_URL>"}` |
+| An Apollo member | `200 {"stream_host": "<STREAM_HOST>", "manifest_url": "<EXTRA_VIDEOS_URL>"}` |
+| Neither | `403` |
+
+**This is the Apollo membership check.** It used to run in the client, comparing
+the account's guild list to a snowflake — while `STREAM_HOST` and
+`EXTRA_VIDEOS_URL` were compiled into every build. Membership therefore decided
+what the UI *showed*, and the addresses it guarded shipped to anyone who could
+unzip an APK, read an `Info.plist` out of an IPA, or view-source the web bundle.
+Here the addresses *are* the answer: a non-member is not told where the streams
+are, which is a decision a patched client cannot reverse.
+
+A review account is given a manifest and **no stream host**, so the numbered
+events are not filtered out of its gallery — there is no URL for it to build.
+
+Properties covered by `FeedPolicyRouteTest`:
+
+- **Snowflakes only, never usernames.** Discord usernames can be changed and a
+  released one can be re-registered, so a username in the allowlist would be an
+  exemption inherited by whoever claims it next.
+- **Identity is checked before membership.** A listed account gets no stream host
+  even if it is on Apollo — the guild call is skipped for it entirely — so one
+  added to the server later keeps the demo feed rather than gaining the real
+  catalogue.
+- **A half-applied config cannot widen the feed.** A listed account with no
+  `DEMO_VIDEOS_URL` is refused rather than falling through to the membership
+  check.
+- **A refusal leaks nothing**, including the host it is refusing access to.
+
+Like the caption route it fails closed and caches per token for five minutes.
 
 ```bash
-./gradlew :server:test
+fly secrets set STREAM_HOST=https://your-host.example:443 \
+  EXTRA_VIDEOS_URL=https://gist.githubusercontent.com/…/raw/extras.txt \
+  TEST_USER_IDS=1545912350056390857 \
+  DEMO_VIDEOS_URL=https://gist.githubusercontent.com/…/raw/videos.txt \
+  --app apollo-videos-tokens
 ```
 
-Covers the request options that do the bounding, the rule that neither the
-long-lived key nor a Soniox error body may reach a response, per-client rate
-limiting, and that a denied caller costs no Soniox call. The authorizer suite adds
-the gate itself: members minted, non-members and expired tokens refused, a Discord
-outage failing closed, the cache not confusing two users, and a revoked membership
-being re-checked once the cache expires.
+Use gist raw URLs **without** the revision hash (`…/raw/videos.txt`, not
+`…/raw/<sha>/videos.txt`). The pinned form freezes the manifest at one revision,
+which costs the whole point of hosting the list outside the app.
+
+### Availability
+
+Moving the check here makes this service a dependency of playback, not just of
+captions. The apps distinguish the two failure modes so an outage is not an
+eviction: a `403` is terminal and clears the stored session, while an
+unreachable service leaves the session intact and surfaces a retry. Nobody is
+locked out permanently by a bad deploy, but nobody watches anything during one.

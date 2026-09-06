@@ -3,23 +3,27 @@ package com.livingpresence.inner.circle.squared
 import com.livingpresence.mediakit.MediaKitConfig
 
 /**
- * Where the feed's extra videos are listed.
+ * Where the feed's streams live, for the account currently connected.
  *
- * Mirrors `TranscriptionSecrets` / `DiscordConfig`: each platform host injects
- * the value at startup (Android `BuildConfig`, the wasm bundle's generated keys,
- * the iOS `Info.plist`) from the gitignored `secrets.properties`, so `commonMain`
- * stays free of build plumbing and a fork points at its own list.
+ * Unlike `TranscriptionSecrets` and `DiscordConfig`, nothing here is injected at
+ * startup by a platform host. Both of this object's former build-time values —
+ * the stream host and the extras manifest URL — are issued by `:server` per
+ * account, and `VideoRepository` assigns what it was given once a policy has been
+ * read.
  *
- * The manifest is a plain-text file — one playlist URL per line — hosted outside
- * the repository (a *secret* gist works well) so the list can change without an
- * app release. Empty disables the feature: the feed is then exactly the numbered
- * events.
+ * That is the Apollo membership check. It used to be a client-side comparison
+ * against a guild snowflake, deciding what the UI *showed* while these addresses
+ * shipped inside every build, extractable with `unzip` by anyone regardless of
+ * whether they were a member. Withholding an address is a decision a patched
+ * client cannot reverse; hiding a tile was not.
  *
- * PRIVACY: a secret gist is unlisted, not access-controlled. Anyone with the raw
- * URL can read it, and the URL ships inside the app, where it is extractable.
- * That is fine for keeping recordings out of search results and out of this
- * repository's history; it is not a substitute for signed URLs or a backend that
- * authorizes each viewer.
+ * A review account is issued a manifest and no host, so for it the numbered
+ * events are unreachable rather than merely unlisted.
+ *
+ * PRIVACY: a manifest hosted in a secret gist is unlisted, not access-controlled
+ * — anyone with the raw URL can read it. It no longer ships inside the app, only
+ * reaching an account that has been admitted, but recordings that need real
+ * privacy still want signed URLs or a backend that authorizes each viewer.
  */
 object FeedConfig {
 
@@ -27,22 +31,17 @@ object FeedConfig {
      * Scheme and authority of the stream server, e.g. `https://your-host:443`.
      *
      * A pass-through to [MediaKitConfig.defaultHost], which is what actually
-     * builds every playlist URL. It lives here so the platform hosts have one
-     * place to inject build-time configuration — `:androidApp` sees only
-     * `:composeApp`, not the SDK behind it.
+     * builds every playlist URL. It lives here so one place tracks what the
+     * connected account was issued — `:androidApp` sees only `:composeApp`, not
+     * the SDK behind it.
      *
-     * Empty until a host assigns it: probes then resolve nowhere and the feed
-     * comes back empty, rather than reaching a stale hardcoded server.
+     * Empty until `:server` names one, and set back to empty for an account
+     * issued none: probes then resolve nowhere and the numbered events come back
+     * empty, rather than reaching a server this account was never given.
      */
     var streamHost: String
         get() = MediaKitConfig.defaultHost
         set(value) {
             MediaKitConfig.defaultHost = value
         }
-
-    /** Raw URL of the extras manifest. Empty → no extras are fetched. */
-    var extraVideosManifestUrl: String = ""
-
-    /** Whether this build was given a manifest to fetch. */
-    val hasExtraVideos: Boolean get() = extraVideosManifestUrl.isNotBlank()
 }

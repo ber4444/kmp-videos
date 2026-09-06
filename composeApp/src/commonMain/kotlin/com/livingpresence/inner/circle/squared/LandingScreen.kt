@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.livingpresence.inner.circle.squared.discord.DiscordAdmission
 import com.livingpresence.inner.circle.squared.discord.DiscordApi
 import com.livingpresence.inner.circle.squared.discord.DiscordAuthBroker
 import com.livingpresence.inner.circle.squared.discord.DiscordConnectionState
@@ -95,9 +96,29 @@ private fun rememberDiscordConnectionViewModel(): DiscordConnectionViewModel {
     // lifecycle-viewmodel-compose factory requires a SavedStateRegistryOwner,
     // which the app's manual ViewModelStoreOwner does not provide (fatal under
     // Kotlin/Wasm). This ViewModel holds no SavedState either.
-    val api = remember { DiscordApi(createHttpClient()) }
+    val httpClient = remember { createHttpClient() }
+    val api = remember(httpClient) { DiscordApi(httpClient) }
+    val feedPolicy = remember(httpClient) { FeedPolicyClient(httpClient) }
     val sessionStore = rememberDiscordSessionStore()
-    return remember(api, sessionStore) { DiscordConnectionViewModel(api, sessionStore) }
+    return remember(api, sessionStore, feedPolicy) {
+        DiscordConnectionViewModel(
+            api = api,
+            sessionStore = sessionStore,
+            // The gate is the feed: :server answers by handing over the stream
+            // host and manifest URL, or by refusing. A build with no endpoint
+            // configured has nothing to admit anyone *to*, so it reads as a
+            // refusal rather than as an open door.
+            admit = { token ->
+                when (val result = feedPolicy.fetch(token)) {
+                    is FeedPolicyResult.Resolved -> DiscordAdmission.ADMITTED
+                    is FeedPolicyResult.Absent -> when (result.reason) {
+                        FeedPolicyAbsence.UNAVAILABLE -> DiscordAdmission.UNKNOWN
+                        else -> DiscordAdmission.REFUSED
+                    }
+                }
+            },
+        )
+    }
 }
 
 /**

@@ -40,9 +40,10 @@ targets:
         # Soniox API key it used to carry now lives only in :server.
         SONIOX_TOKEN_URL: "$(SONIOX_TOKEN_URL)"
         DISCORD_CLIENT_ID: "$(DISCORD_CLIENT_ID)"
-        APOLLO_GUILD_ID: "$(APOLLO_GUILD_ID)"
-        STREAM_HOST: "$(STREAM_HOST)"
-        EXTRA_VIDEOS_URL: "$(EXTRA_VIDEOS_URL)"
+        # No STREAM_HOST or EXTRA_VIDEOS_URL. Info.plist ships in cleartext
+        # inside the .app, so an address declared here is an address every
+        # installed copy carries regardless of who signs in. :server issues both
+        # per account instead — see FeedConfig in :composeApp.
         # Discord OAuth2 redirect: discord-<APP_ID>:/authorize/callback, the only
         # mobile shape Discord's portal accepts. DISCORD_REDIRECT_SCHEME is derived
         # from DISCORD_CLIENT_ID by generateIosSecretsXcconfig, so the registration
@@ -55,8 +56,8 @@ targets:
         # Bumped per release. App Store Connect rejects an upload whose
         # CFBundleVersion is not higher than the last one it accepted, and nothing
         # in codemagic.yaml derives these, so they are maintained here by hand.
-        CFBundleShortVersionString: "1.1"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "1.2"
+        CFBundleVersion: "3"
         # The home-screen and Settings name. CFBundleName still follows
         # PRODUCT_NAME (ICSApp), which is what the target, the .app and the
         # README's xcodebuild commands are keyed to; CFBundleDisplayName is the
