@@ -23,6 +23,10 @@ import kotlin.test.assertTrue
  * an Apollo member never reaches [SonioxTokenService], and therefore never costs a
  * Soniox call.
  */
+private const val REVIEWER_ID = "100000000000000001"
+private const val REVIEWER_TOKEN = "reviewer-token"
+private const val MEMBER_TOKEN = "member-token"
+
 class DiscordGuildAuthorizerTest {
 
     @Test
@@ -142,6 +146,100 @@ class DiscordGuildAuthorizerTest {
         now += DiscordGuildAuthorizer.CACHE_TTL_MS + 1
         assertEquals(HttpStatusCode.Forbidden, post(token = "member-token"))
     }
+
+    /**
+     * A review account is not on Apollo, so the guild check turns it away — and it
+     * still has to caption, or the reviewer's only experience of the feature is an
+     * error.
+     */
+    @Test
+    fun aReviewAccountIsMintedForWithoutBeingAnApolloMember() = testApplication {
+        val discord = discordFor(memberOf = emptyList())
+        application {
+            module(
+                testConfig(),
+                httpClient = soniox(),
+                authorizer = DiscordGuildAuthorizer(discord, TEST_GUILD_ID, testUserIds = setOf(REVIEWER_ID)),
+            )
+        }
+
+        assertEquals(HttpStatusCode.Created, post(token = REVIEWER_TOKEN))
+    }
+
+    @Test
+    fun anAccountThatIsNeitherAMemberNorAReviewerIsStillRefused() = testApplication {
+        val discord = discordFor(memberOf = emptyList())
+        var minted = 0
+        application {
+            module(
+                testConfig(),
+                httpClient = soniox { minted++ },
+                authorizer = DiscordGuildAuthorizer(discord, TEST_GUILD_ID, testUserIds = setOf(REVIEWER_ID)),
+            )
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, post(token = "outsider-token"))
+        assertEquals(0, minted, "a non-member must not cost a Soniox call")
+    }
+
+    /**
+     * The identity read happens only after the guild check fails, so the path taken
+     * on every caption reconnect still costs one Discord call.
+     */
+    @Test
+    fun aMemberIsNotAskedWhoTheyAre() = testApplication {
+        val calls = mutableListOf<HttpRequestData>()
+        val discord = discordFor(memberOf = listOf(TEST_GUILD_ID), captured = calls)
+        application {
+            module(
+                testConfig(),
+                httpClient = soniox(),
+                authorizer = DiscordGuildAuthorizer(discord, TEST_GUILD_ID, testUserIds = setOf(REVIEWER_ID)),
+            )
+        }
+
+        assertEquals(HttpStatusCode.Created, post(token = MEMBER_TOKEN))
+
+        assertTrue(calls.none { it.url.encodedPath.endsWith("/@me") })
+        assertEquals(1, calls.size)
+    }
+
+    /** With no review accounts configured, `/users/@me` is never requested at all. */
+    @Test
+    fun anEmptyAllowlistNeverReachesForAnIdentity() = testApplication {
+        val calls = mutableListOf<HttpRequestData>()
+        val discord = discordFor(memberOf = emptyList(), captured = calls)
+        application {
+            module(testConfig(), httpClient = soniox(), authorizer = authorizer(discord))
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, post(token = "outsider-token"))
+        assertTrue(calls.none { it.url.encodedPath.endsWith("/@me") })
+    }
+
+    /**
+     * Answers `/users/@me/guilds` with [memberOf] and `/users/@me` with an id
+     * derived from the bearer token, so one engine plays both accounts.
+     */
+    private fun discordFor(
+        memberOf: List<String>,
+        captured: MutableList<HttpRequestData> = mutableListOf(),
+    ) = HttpClient(
+        MockEngine { request ->
+            captured += request
+            val body = if (request.url.encodedPath.endsWith("/guilds")) {
+                memberOf.joinToString(prefix = "[", postfix = "]") { """{"id":"$it"}""" }
+            } else {
+                val reviewer = request.headers[HttpHeaders.Authorization] == "Bearer $REVIEWER_TOKEN"
+                """{"id":"${if (reviewer) REVIEWER_ID else "300000000000000003"}"}"""
+            }
+            respond(
+                content = ByteReadChannel(body),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        },
+    )
 
     private suspend fun io.ktor.server.testing.ApplicationTestBuilder.post(token: String) =
         client.post(TEMPORARY_KEY_PATH) {

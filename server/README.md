@@ -92,7 +92,7 @@ its environment, so a missing secret fails the deploy rather than serving errors
 | `APOLLO_GUILD_ID` | — | Required. Snowflake of the guild whose members may mint. Fails startup if unset. |
 | `STREAM_HOST` | *(empty)* | Scheme + authority of the stream server, no trailing slash. Handed to members only. Empty means members see no numbered events. |
 | `EXTRA_VIDEOS_URL` | *(empty)* | Raw URL of the members' extras manifest. Handed to members only. |
-| `TEST_USER_IDS` | *(empty)* | Comma-separated Discord **user** snowflakes given `DEMO_VIDEOS_URL` and no stream host. Empty means no account is exempt. |
+| `TEST_USER_IDS` | *(empty)* | Comma-separated Discord **user** snowflakes given `DEMO_VIDEOS_URL` and no stream host, and minted caption keys without Apollo membership. Empty means no account is exempt. |
 | `DEMO_VIDEOS_URL` | *(empty)* | Raw URL of the manifest those accounts see. Required if `TEST_USER_IDS` is set; without it those accounts are refused. |
 | `PORT` | `8080` | |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated browser origins for CORS. Empty blocks every web origin; the native apps are unaffected. Set this only if you serve the wasmJs build. |
@@ -112,9 +112,18 @@ route's. The two answer different questions — who may spend the Soniox account
 and where an account's videos are — and a deployment could reasonably answer them
 differently, so neither is allowed to depend on the other's configuration.
 
-**A review account is not minted for.** It passes the feed gate and fails this
-one, so captions report an error for it. Letting it through would put the Soniox
-bill behind an account that exists to be handed to strangers.
+**A review account *is* minted for**, by way of `TEST_USER_IDS`. An account handed
+to app-store review has to be able to use the feature, not just see the button;
+the alternative was a reviewer whose only experience of captions is an error.
+
+The identity read that decides this happens **only after the guild check has
+already failed**, so a member's mint still costs one Discord call — which matters,
+because that is the path taken on every caption reconnect through a long video.
+An empty `TEST_USER_IDS` never reaches for an identity at all.
+
+This does put the Soniox bill behind an account given to strangers. What bounds it
+is what bounds every other caller — the per-client rate limit and the one-hour
+session cap — rather than the list being short.
 
 It **fails closed** — a rejected token, a non-member, and a Discord outage all
 deny — and matches on the guild snowflake only, never the name, since guild names

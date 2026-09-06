@@ -48,7 +48,11 @@ fun main() {
 fun Application.module(
     config: ServerConfig,
     httpClient: HttpClient = HttpClient(CIO),
-    authorizer: Authorizer = DiscordGuildAuthorizer(httpClient, config.apolloGuildId),
+    authorizer: Authorizer = DiscordGuildAuthorizer(
+        httpClient = httpClient,
+        guildId = config.apolloGuildId,
+        testUserIds = config.testUserIds,
+    ),
     feedPolicy: FeedPolicyResolver = DiscordFeedPolicyResolver(
         httpClient = httpClient,
         guildId = config.apolloGuildId,
