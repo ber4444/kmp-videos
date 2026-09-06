@@ -207,32 +207,41 @@ played on.
   `WebSocketTranscriberReconnectTest` (androidHostTest) which drives the whole loop over a
   fake transport on virtual time.
 
-## Domain glossary: `context.terms` + `context.translation_terms` (added after translation shipped)
+## Domain context: `context.text` + `terms` + `translation_terms` (added after translation shipped)
 The talks are full of vocabulary a general model has never been trained to expect, and the
-failure is two-sided: the ASR mis-hears the English, and even when it hears it correctly the
-translator renders it literally instead of using the term the tradition already settled on.
-Soniox takes both fixes in one optional `context` object on the config frame (verified
-against soniox.com/docs/stt/concepts/context):
+failure is three-sided: the ASR resolves ordinary words (*the work*, *school*, *centers*,
+*essence*) in their everyday sense, mis-hears the invented ones outright, and even when it
+hears one correctly the translator renders it literally instead of using the term the
+tradition already settled on. Soniox takes all three fixes in one optional `context` object on
+the config frame (verified against soniox.com/docs/stt/concepts/context):
 
 ```json
 { "context": {
+    "text": "These recordings are lectures on the Fourth Way, the esoteric teaching of Peter Ouspensky…",
     "terms": ["Uncreated light", "Influence C", "Four wordless breaths"],
     "translation_terms": [{ "source": "Uncreated light", "target": "Несотворённый Свет" }]
 } }
 ```
 
+- `text` — free text naming what the recordings *are*: the Fourth Way, the teaching of Peter
+  Ouspensky. One sentence (`CaptionGlossary.DOMAIN`), the same on **every** session, since the
+  whole library is one subject. It disambiguates rather than describes — naming the teaching is
+  a cheaper fix than boosting every ordinary word used here in a technical sense, and it carries
+  into the translation, where the same ambiguity would otherwise come back.
 - `terms` — uncommon/invented words, pinning spelling and casing. Sent on **every** session,
   translated or not; getting the English right is the precondition for translating it.
 - `translation_terms` — `{source, target}` pairs, only meaningful when translating, and only
   for the one language the session is writing in.
-- The other two sections (`general` key-values, free-text `text`) are unused so far.
+- The remaining section (`general` key-values) is unused so far.
 - Whole object caps at ~8,000 tokens (~10,000 chars); over that the API **rejects the
-  session**, which `WebSocketTranscriber` would see as an error and retry forever.
+  session**, which `WebSocketTranscriber` would see as an error and retry forever. The domain
+  sentence counts against that cap and `CaptionGlossaryTest` counts it in.
 
-`CaptionGlossary` (commonMain) holds the table: one `TERMS` list plus one source→target map
-per language (`hu`, `ru` today), wired in by `LiveTranscriber.createClient` from the same
-target the caption menu selected (the device's language by default — see the caption menu
-section below). A language with no glossary still gets `terms` and Soniox's own translation. `CaptionGlossaryTest` guards
+`CaptionGlossary` (commonMain) holds all three: the `DOMAIN` sentence, one `TERMS` list, and
+one source→target map per language (`hu`, `ru` today), wired in by `LiveTranscriber.createClient`
+from the same target the caption menu selected (the device's language by default — see the
+caption menu section below). A language with no glossary still gets `text`, `terms` and
+Soniox's own translation. `CaptionGlossaryTest` guards
 the invariants that hand-editing breaks — every language rendering exactly the terms in
 `TERMS`, and the size staying under the cap.
 

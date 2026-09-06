@@ -114,8 +114,10 @@ class LiveTranscriber(
             apiKey = { keys.fetch() },
             languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
             translateTo = translateTo,
-            // The event vocabulary: `terms` every session, the accepted translations
-            // only for the language this one is actually writing in.
+            // What the lectures are, then their vocabulary: the domain sentence and `terms`
+            // on every session, the accepted translations only for the language this one is
+            // actually writing in.
+            domain = CaptionGlossary.DOMAIN,
             terms = CaptionGlossary.TERMS,
             translationTerms = CaptionGlossary.translationTermsFor(translateTo),
         )
