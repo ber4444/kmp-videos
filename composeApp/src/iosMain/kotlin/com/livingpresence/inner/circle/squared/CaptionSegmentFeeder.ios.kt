@@ -41,7 +41,7 @@ internal class CaptionSegmentFeeder(private val http: HttpClient) {
     /**
      * Pull [chunklistUrl] and feed its audio to [CaptionAudioRouter] until the
      * calling coroutine is cancelled — which is what stops captions, since the
-     * caller ties this to the toggle.
+     * caller ties this to the caption menu's selection.
      *
      * @param positionSeconds the player's current position, read fresh each pass.
      */

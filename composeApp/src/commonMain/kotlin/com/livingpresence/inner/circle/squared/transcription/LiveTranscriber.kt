@@ -19,10 +19,12 @@ import kotlinx.coroutines.launch
  * to: capture audio, resample it to 16 kHz mono s16le, and call [feedPcm]; then
  * observe [captions]/[status]/[error] for the overlay/UI.
  *
- * The events are spoken in English, but the captions follow the *device* language: on
- * Soniox they come back already translated, so a Russian phone reads Russian. See
- * [CaptionLanguage] for how the locale is resolved and when translation is skipped.
- * Deepgram has no translation on its streaming API, so it stays English-only.
+ * The events are spoken in English, but the captions follow the language the viewer chose in
+ * the caption menu — the device's own by default: on Soniox they come back already
+ * translated, so a Russian phone reads Russian off English audio. See [CaptionLanguage] for
+ * how the locale is resolved and when translation is skipped, and [captionMenuOptions] for
+ * the rows the viewer picks from. Deepgram has no translation on its streaming API, so it
+ * stays English-only whatever is selected.
  *
  * This is the piece the Android `CaptionAudioRouter` and the iOS/web taps all reuse —
  * only the audio capture differs per platform.
@@ -41,6 +43,8 @@ class LiveTranscriber(
 
     @Volatile private var active: StreamingTranscriber? = null
     @Volatile private var activeProvider: TranscriptionProvider? = null
+    /** The `target_language` the running session was opened with; null = not translating. */
+    @Volatile private var activeTarget: String? = null
     private var mirrorJob: Job? = null
 
     private val _captions = MutableStateFlow<List<CaptionCue>>(emptyList())
@@ -52,13 +56,21 @@ class LiveTranscriber(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    /** Starts (or switches to) [provider]. Idempotent for the already-active provider. */
-    fun enable(provider: TranscriptionProvider) {
-        if (activeProvider == provider && active != null) return
+    /**
+     * Starts (or switches to) [provider], writing captions in [translateTo] — the language
+     * the viewer picked in the caption menu, or null to leave them in the spoken language.
+     *
+     * Idempotent for a session that is already running with the same provider *and* the same
+     * target: changing the language means a new session, because Soniox is told the target in
+     * the config frame that opens the socket and a live stream cannot be re-pointed.
+     */
+    fun enable(provider: TranscriptionProvider, translateTo: String?) {
+        if (activeProvider == provider && activeTarget == translateTo && active != null) return
         stopActive()
-        val client = createClient(provider)
+        val client = createClient(provider, translateTo)
         active = client
         activeProvider = provider
+        activeTarget = translateTo
         mirrorJob = scope.launch {
             launch { client.captions.collect { _captions.value = it } }
             launch { client.status.collect { _status.value = it } }
@@ -85,26 +97,27 @@ class LiveTranscriber(
         active?.stop()
         active = null
         activeProvider = null
+        activeTarget = null
     }
 
-    private fun createClient(provider: TranscriptionProvider): StreamingTranscriber = when (provider) {
+    private fun createClient(
+        provider: TranscriptionProvider,
+        translateTo: String?,
+    ): StreamingTranscriber = when (provider) {
         // Unreachable from the UI, and no longer carries a key: the app ships none.
         TranscriptionProvider.DEEPGRAM ->
             DeepgramClient(apiKey = { TranscriptionSecrets.DEEPGRAM_UNCONFIGURED })
-        // Resolved per session rather than once per process, so a language changed in
-        // system settings takes effect the next time captions are switched on — and so
-        // that each session gets its own single-use key from :server.
-        TranscriptionProvider.SONIOX -> {
-            val target = CaptionLanguage.deviceTarget()
-            SonioxClient(
-                apiKey = { keys.fetch() },
-                languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
-                translateTo = target,
-                // The event vocabulary: `terms` every session, the accepted translations
-                // only for the language this one is actually writing in.
-                terms = CaptionGlossary.TERMS,
-                translationTerms = CaptionGlossary.translationTermsFor(target),
-            )
-        }
+        // Built per session rather than once per process, so switching language takes effect
+        // on the next session — and so that each session gets its own single-use key
+        // from :server.
+        TranscriptionProvider.SONIOX -> SonioxClient(
+            apiKey = { keys.fetch() },
+            languageHints = CaptionLanguage.SPOKEN_LANGUAGES,
+            translateTo = translateTo,
+            // The event vocabulary: `terms` every session, the accepted translations
+            // only for the language this one is actually writing in.
+            terms = CaptionGlossary.TERMS,
+            translationTerms = CaptionGlossary.translationTermsFor(translateTo),
+        )
     }
 }

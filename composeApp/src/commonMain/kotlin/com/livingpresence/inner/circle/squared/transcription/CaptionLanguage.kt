@@ -54,6 +54,46 @@ internal object CaptionLanguage {
         "uk" to "Ukrainian", "ur" to "Urdu", "vi" to "Vietnamese", "cy" to "Welsh",
     )
 
+    /**
+     * The languages the caption menu offers, in the order it lists them, after the viewer's
+     * own. Roughly by how much of this audience speaks them rather than alphabetically: the
+     * point of the list is that someone who does *not* want their system language can find
+     * theirs quickly, and the head of it covers most of those people.
+     *
+     * Only codes [SUPPORTED] has may appear here — an unsupported `target_language` is
+     * rejected by Soniox with an `error_message` that [WebSocketTranscriber] cannot tell from
+     * a dropped socket, so it would reconnect and fail for the whole video instead of
+     * showing anything. `CaptionMenuTest` pins that. Armenian belongs on this list by
+     * audience and is missing for exactly that reason: Soniox has no model for it.
+     *
+     * English is not here because it is not a translation — the spoken language gets its own
+     * row from [captionMenuOptions], which runs Soniox with translation off.
+     */
+    val MENU_LANGUAGES = listOf(
+        "ru", // Russian
+        "it", // Italian
+        "es", // Spanish
+        "de", // German
+        "fr", // French
+        "pt", // Portuguese
+        "gu", // Gujarati
+        "hi", // Hindi
+        "mr", // Marathi
+        "zh", // Chinese (Mandarin)
+        "nl", // Dutch
+        "ar", // Arabic
+        "el", // Greek
+        "ro", // Romanian
+        "hu", // Hungarian
+        "tr", // Turkish
+        "ja", // Japanese
+        "uk", // Ukrainian
+        "sl", // Slovenian
+        "be", // Belarusian
+        "cs", // Czech
+        "he", // Hebrew
+    )
+
     /** What the events are spoken in: the ASR hint, and the languages needing no translation. */
     val SPOKEN_LANGUAGES = listOf("en")
 

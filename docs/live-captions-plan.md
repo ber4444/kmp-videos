@@ -231,8 +231,8 @@ against soniox.com/docs/stt/concepts/context):
 
 `CaptionGlossary` (commonMain) holds the table: one `TERMS` list plus one source→target map
 per language (`hu`, `ru` today), wired in by `LiveTranscriber.createClient` from the same
-`CaptionLanguage.deviceTarget()` that picks the translation language. A device whose language
-has no glossary still gets `terms` and Soniox's own translation. `CaptionGlossaryTest` guards
+target the caption menu selected (the device's language by default — see the caption menu
+section below). A language with no glossary still gets `terms` and Soniox's own translation. `CaptionGlossaryTest` guards
 the invariants that hand-editing breaks — every language rendering exactly the terms in
 `TERMS`, and the size staying under the cap.
 
@@ -243,6 +243,38 @@ primary is used and the alternate kept in a `//` comment — Soniox takes exactl
 per source. Correct these against the accepted-terms list, not by ear; the three entries that
 deliberately depart from it (Hungarian `Felsőbb` rather than `Magasabb`, to pair with the
 list's own `Alsóbb én`) carry the list's wording in a comment.
+
+## Caption language menu (replaced the CC toggle)
+The player button was a toggle between "off" and "captions in the device's language", which
+is the right default and a bad ceiling: anyone whose system language is not the one they read
+comfortably — a Hungarian speaker on a German phone — had no way to say so. It is now a
+dropdown (`CaptionLanguageMenu`, commonMain, next to the other player controls):
+
+1. **No translation** — captions off entirely. No socket, no session key, no audio leaving the
+   device. Where every player starts.
+2. **"<Language> translation"** — the device's own language, i.e. what the old toggle did.
+   Skipped on a device whose language is the spoken one or one Soniox has no model for.
+3. **"English captions"** — the spoken language, transcribed and not translated (`translateTo`
+   null, not `"en"`: translating English into English pays a round trip for the same words).
+   This is what an English device gets in slot 2.
+4. The rest of `CaptionLanguage.MENU_LANGUAGES` — 22 languages, in audience order, the device's
+   own skipped so it is never offered twice.
+
+- The rows are built in `captionMenuOptions` (commonMain, Compose-free) so the wording and the
+  ordering are asserted in `CaptionMenuTest` rather than buried in a `DropdownMenu`.
+- Every offered code must be in `CaptionLanguage.SUPPORTED`; a target Soniox rejects comes back
+  as an `error_message` that `WebSocketTranscriber` cannot tell from a dropped socket, so it
+  would reconnect and fail for the whole video. `CaptionMenuTest` pins that. **Armenian is on
+  the requested list and is not offered for exactly this reason** — Soniox has no model for it.
+- The target now travels from the menu through `CaptionAudioRouter.enable(provider, translateTo)`
+  into `LiveTranscriber.enable`, which restarts the session when the language changes: Soniox is
+  told the target in the config frame that opens the socket, so a live stream cannot be
+  re-pointed. `CaptionLanguage.deviceTarget()` still picks the default row, and nothing else
+  reads it any more.
+- The selection is per-player-screen (in-memory, like the provider); persisting it is the same
+  follow-up as step 1.4.
+- Android holds the controls up while the menu is open (`ControlsAutoHide(menuOpen = …)`) — the
+  menu is drawn inside the control bar, and three seconds is not enough to read twenty-odd rows.
 
 ## VOD path (separate, not in this doc)
 Recorded events should get **batch** transcription (once per asset) → WebVTT served as
