@@ -1,6 +1,7 @@
 package com.livingpresence.inner.circle.squared
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -173,15 +175,34 @@ private fun rememberMainViewModel(): MainViewModel {
     return remember(videoRepository) { MainViewModel(videoRepository) }
 }
 
+/** Brand red. Legible on either ground, so it is the same in both schemes. */
+private val BrandRed = Color(0xFFEF5350)
+
 @Composable
 fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Color(0xFFEF5350),
+    // Only `background`, `onBackground` and `error` are read anywhere, and the
+    // first two only by GalleryScreen and the feed's empty state — so following
+    // the system setting here moves the feed's ground and nothing else. It has
+    // to move: the app draws edge to edge, and in dark mode the platform styles
+    // the status bar icons light, which left a white clock on the white feed.
+    // `primary`/`onPrimary` back the shared buttons and stay put across schemes.
+    val colorScheme = if (isSystemInDarkTheme()) {
+        darkColorScheme(
+            primary = BrandRed,
+            onPrimary = Color.White,
+            background = Color(0xFF121212),
+            onBackground = Color(0xFF80CBC4),
+        )
+    } else {
+        lightColorScheme(
+            primary = BrandRed,
             onPrimary = Color.White,
             background = Color.White,
             onBackground = Color(0xFF00695C),
-        ),
+        )
+    }
+    MaterialTheme(
+        colorScheme = colorScheme,
         content = content,
     )
 }

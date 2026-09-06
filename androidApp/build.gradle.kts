@@ -64,6 +64,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            // Drops resources no code path reaches — `ypf.png` (492 KB) is
+            // packaged today and referenced from nowhere. Safe here because no
+            // resource is looked up by name (no Resources.getIdentifier call in
+            // the app), so R8's static reference graph is the whole picture.
+            isShrinkResources = true
             signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

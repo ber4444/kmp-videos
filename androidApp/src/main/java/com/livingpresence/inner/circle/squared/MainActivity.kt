@@ -13,7 +13,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.core.view.WindowCompat
 import com.livingpresence.inner.circle.squared.discord.DiscordAuthBroker
 import java.util.concurrent.atomic.AtomicReference
 
@@ -57,8 +56,10 @@ class MainActivity : ComponentActivity() {
         // links straight into a cold-started task), so check it before composing.
         deliverDiscordRedirect(intent)
 
+        // enableEdgeToEdge() already clears decor fitting (and sets the cutout
+        // mode and transparent bars); calling WindowCompat.setDecorFitsSystemWindows
+        // after it was redundant, and that API is deprecated as of API 35.
         enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
             val pipController = object : PipController {

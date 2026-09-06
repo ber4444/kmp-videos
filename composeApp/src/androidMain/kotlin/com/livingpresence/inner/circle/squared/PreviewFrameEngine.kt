@@ -110,7 +110,7 @@ class PreviewFrameEngine(
         bitmapCache.get(eventNumber)?.let { return it }
 
         // Tier 2: disk. A disk hit is promoted into memory so the next read is free.
-        val fromDisk = diskCache.read(eventNumber)
+        val fromDisk = diskCache.read(eventNumber, width, height)
         if (fromDisk != null) {
             bitmapCache.put(eventNumber, fromDisk)
             return fromDisk
@@ -509,18 +509,47 @@ private class DiskFrameCache(
 
     private val diskMutex = Mutex()
 
-    /** Decodes the cached JPEG for [eventNumber], or null on miss/decode error. */
-    suspend fun read(eventNumber: Int): Bitmap? = withContext(Dispatchers.IO) {
+    /**
+     * Decodes the cached JPEG for [eventNumber], or null on miss/decode error.
+     *
+     * Downsampled to [reqWidth]×[reqHeight] rather than decoded at full size.
+     * Today's files are written at the requested size already, so `inSampleSize`
+     * normally lands on 1 — but the cache is keyed on the event number alone, so
+     * a file written for a larger request (or by an older build, or after the
+     * capture size changes) would otherwise be decoded at whatever resolution it
+     * happens to hold. The bounds pass costs no pixel memory.
+     */
+    suspend fun read(eventNumber: Int, reqWidth: Int, reqHeight: Int): Bitmap? = withContext(Dispatchers.IO) {
         diskMutex.withLock {
             val file = fileFor(eventNumber)
             if (!file.exists()) return@withLock null
             runCatching {
-                BitmapFactory.decodeFile(file.absolutePath)?.also {
+                val path = file.absolutePath
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(path, bounds)
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, reqWidth, reqHeight)
+                }
+                BitmapFactory.decodeFile(path, options)?.also {
                     // Touch lastModified so reads count as LRU access.
                     file.setLastModified(System.currentTimeMillis())
                 }
             }.getOrNull()
         }
+    }
+
+    /**
+     * Largest power-of-two subsample that still covers [reqWidth]×[reqHeight].
+     * Returns 1 when the bounds pass failed (`outWidth` is -1 on a corrupt file)
+     * or the source is already no larger than requested.
+     */
+    private fun sampleSizeFor(srcWidth: Int, srcHeight: Int, reqWidth: Int, reqHeight: Int): Int {
+        if (srcWidth <= 0 || srcHeight <= 0 || reqWidth <= 0 || reqHeight <= 0) return 1
+        var sample = 1
+        while (srcWidth / (sample * 2) >= reqWidth && srcHeight / (sample * 2) >= reqHeight) {
+            sample *= 2
+        }
+        return sample
     }
 
     /** Compresses [bitmap] to JPEG and writes it, then prunes to [maxBytes]. */
