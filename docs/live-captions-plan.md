@@ -264,10 +264,15 @@ small, and roughly the same size.**
 | | Hungarian | Russian |
 |---|---|---|
 | In-band, what ships | **54.4** | **53.2** |
-| Glossary / domain context (`Δ context`) | +2.5 | +2.0 |
+| Glossary / domain context (`Δ context`) | +2.5 | +0.6 |
 | Every latency-buying scheme (`Δ streaming`) | +2.1 | +2.0 |
 | Switching translation engine (`Δ two-stage`) | +2.8 | +5.1 |
 | Different-engine floor | **68.1** | **66.2** |
+
+The one lever that is *not* consistent across languages is the glossary: worth +2.5 in
+Hungarian and +0.6 in Russian, on the same audio with the same 49 accepted renderings. So
+"extend `TERMS`" is not a general answer — it has to be justified per language, and in
+Russian it currently earns almost nothing.
 
 **Buying latency will not help.** A real-time translator must emit the target language before
 the clause is finished, which costs more in a language that resolves meaning late. The
@@ -296,9 +301,10 @@ billing, a key path through `:server` and a privacy-policy line; ~3–5 chrF doe
 only 66–68 when its engine does not match the ideal's, and every ASR-fed path lands at 53–58
 regardless of which engine translates. So ~13 points are lost to ASR error against ~2–5 for
 every translation-side choice combined. **The words Soniox hears are the bottleneck, not the
-words it picks when translating them.** The glossary is the only lever that attacks that, and
-at +2.0/+2.5 it is already joint-largest — extending `TERMS` is better value than any
-architectural change on the translation side.
+words it picks when translating them.** The glossary is the only lever that attacks that
+directly, which is why it is worth extending in Hungarian — but its Russian result (+0.6)
+shows that is not automatic, and neither is it large. Nothing measured so far recovers the
+ASR gap; a better-heard transcript is the open problem.
 
 Caveats: the ideals are machine translations, not human ones, so absolute values are soft —
 a human reference would settle those. The *comparisons* are paired per-clip and consistent
