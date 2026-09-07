@@ -28,7 +28,9 @@ Decision (with the maintainer):
 - **VOD events → batch subtitles** (out of scope for this doc; see "VOD path" note at
   bottom). Not needed for the live streaming feature.
 - **Translation**: optional. Soniox includes real-time translation in-band; DeepL can
-  be added later as a post-process. Not mandatory for MVP.
+  be added later as a post-process. Not mandatory for MVP. **Measured 2026-09-07 and the
+  post-process is not worth building** — see "Translation quality: what was measured"
+  below. In-band stays.
 - **Platforms**: Android + iOS **mandatory**, web **optional**.
 - **API keys**: gitignored config file → per-platform build wiring → runtime holder.
   Keys must never be committed and never hard-coded in shared code.
@@ -252,6 +254,57 @@ primary is used and the alternate kept in a `//` comment — Soniox takes exactl
 per source. Correct these against the accepted-terms list, not by ear; the three entries that
 deliberately depart from it (Hungarian `Felsőbb` rather than `Magasabb`, to pair with the
 list's own `Alsóbb én`) carry the list's wording in a comment.
+
+## Translation quality: what was measured (2026-09-07)
+
+Hungarian and Russian captions read poorly, and there were three candidate explanations.
+All three were measured in `eval/` at n=21 paired clips per language. **All three levers are
+small, and roughly the same size.**
+
+| | Hungarian | Russian |
+|---|---|---|
+| In-band, what ships | **54.4** | **53.2** |
+| Glossary / domain context (`Δ context`) | +2.5 | +2.0 |
+| Every latency-buying scheme (`Δ streaming`) | +2.1 | +2.0 |
+| Switching translation engine (`Δ two-stage`) | +2.8 | +5.1 |
+| Different-engine floor | **68.1** | **66.2** |
+
+**Buying latency will not help.** A real-time translator must emit the target language before
+the clause is finished, which costs more in a language that resolves meaning late. The
+`batch` arm removes that constraint entirely — the async API reads the whole clip before
+answering — and it is worth ~2 chrF in both languages. Batch has strictly more context than
+any endpointing or buffering scheme can offer, so that ~2 is the **ceiling** on all of them:
+holding the non-final tail, re-translating on sentence end, or Soniox's
+`enable_endpoint_detection`. Measured directly, endpoint detection changed flicker by 0.000
+and chrF by −0.1.
+
+**There is also no flicker to fix.** The translated arm's flicker is **0.000**: Soniox sends
+translated tokens only as `is_final`, so the caption never rewrites what it already showed.
+(The untranslated stream flickers at 0.228 — the difference is the translation, not the
+measurement.) A client-side no-flicker buffering design would be solving a problem this
+configuration does not have.
+
+**Switching translation engine buys ~3–5 points, not the ~20 the scorecard used to claim.**
+That figure was an artifact: every arm is scored against DeepL's translation of the
+reference, and the Soniox→DeepL arm *was* DeepL output, so it was rewarded for sharing an
+engine with the answer key. Scoring one hypothesis against two different engines' ideals
+prices the bonus at **+19.4** in Hungarian and **+18.1** in Russian — essentially the whole
+reported lead, reproduced in two unrelated languages. A second MT vendor costs per-character
+billing, a key path through `:server` and a privacy-policy line; ~3–5 chrF does not buy that.
+
+**What is left is the transcript.** A flawless translation of the *perfect* reference scores
+only 66–68 when its engine does not match the ideal's, and every ASR-fed path lands at 53–58
+regardless of which engine translates. So ~13 points are lost to ASR error against ~2–5 for
+every translation-side choice combined. **The words Soniox hears are the bottleneck, not the
+words it picks when translating them.** The glossary is the only lever that attacks that, and
+at +2.0/+2.5 it is already joint-largest — extending `TERMS` is better value than any
+architectural change on the translation side.
+
+Caveats: the ideals are machine translations, not human ones, so absolute values are soft —
+a human reference would settle those. The *comparisons* are paired per-clip and consistent
+across two languages. An earlier n=5 read of these deltas had two of them at different
+magnitudes and one at the opposite sign; 5 clips of 60s audio is not enough here.
+`scripts/calibrate_metric.py --score-only` regenerates the calibration free from fixtures.
 
 ## Caption language menu (replaced the CC toggle)
 The player button was a toggle between "off" and "captions in the device's language", which

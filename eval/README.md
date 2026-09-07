@@ -125,6 +125,18 @@ Only report numbers from runs that actually executed. If a step could not run (m
 key, missing clip), the scorecard cell reads `n/a (not run)` — never an estimate.
 Anything aspirational in docs gets one explicit "not wired yet" sentence.
 
+## Translation headline (real run, n=21 per language)
+
+**Every lever is small; the transcript is the bottleneck.** In-band ships at 54.4 (hu) /
+53.2 (ru) against a different-engine floor of 68.1 / 66.2. Of that ~13-point gap, the
+glossary is worth +2.5/+2.0, *every* latency-buying scheme is capped at +2.1/+2.0 (the batch
+ceiling bounds client buffering and vendor endpointing alike), and switching translation
+engine is worth +2.8/+5.1. The ~+19.7 that once appeared to favour a two-stage path was the
+same-engine bonus, priced at +19.4 (hu) and +18.1 (ru) by
+[`scripts/calibrate_metric.py`](scripts/calibrate_metric.py). Endpoint detection moved
+flicker by 0.000 — the translated arm never flickers, because Soniox sends translated tokens
+only as final.
+
 ## Current headline (real run)
 
 Deepgram is **meaningfully worse than Soniox** on this material — ~45% higher normalized
