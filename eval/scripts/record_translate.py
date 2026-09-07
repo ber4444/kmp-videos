@@ -18,6 +18,12 @@ but *what moves it*:
   its own, separated from what the model can do with this language at all — the difference
   between "captions could be better if we bought latency" and "no client change will fix
   this". It is also the cheap arm: no real-time pacing, so it runs as fast as the API answers.
+- `endpointed` — real time, with Soniox's own endpoint detection on so it finalizes at
+  utterance boundaries instead of mid-clause. Measured on **flicker and finalization
+  latency, not chrF**: `batch` already bounds what any latency-buying mechanism can do for
+  quality, and on Hungarian that bound was ~1 chrF. Captions that stop rewriting themselves
+  are worth having anyway, and this is the cheapest way to get them — one config field
+  instead of a client-side buffering design.
 
 Scoring against `translate(verified reference)` happens in scoring/scorecard.py; that
 DeepL "ideal" has to exist for the same language first (`scripts/translate.py --target HU`).
@@ -32,15 +38,16 @@ import config
 from app_context import soniox_context
 from providers import SonioxProvider
 
-VARIANTS = ("context", "nocontext", "batch")
+VARIANTS = ("context", "nocontext", "batch", "endpointed")
 
-# Only the two real-time arms are paced at wall-clock; batch answers as fast as it answers.
-STREAMED_VARIANTS = ("context", "nocontext")
+# Every arm but batch is paced at wall-clock; batch answers as fast as it answers.
+STREAMED_VARIANTS = ("context", "nocontext", "endpointed")
 
 FIXTURE_DIRS = {
     "context": lambda: config.INBAND_DIR,
     "nocontext": lambda: config.INBAND_NOCONTEXT_DIR,
     "batch": lambda: config.INBAND_BATCH_DIR,
+    "endpointed": lambda: config.INBAND_ENDPOINTED_DIR,
 }
 
 
@@ -59,7 +66,14 @@ def main():
                              "'all' adds the batch ceiling")
     parser.add_argument("--max-clips", type=int, default=None)
     parser.add_argument("--force", action="store_true", help="Bypass the billed-audio cap")
+    parser.add_argument("--endpoint-config", default=None,
+                        help="JSON overriding config.ENDPOINTING_CONFIG for the endpointed arm, "
+                             "e.g. '{\"enable_endpoint_detection\": true, "
+                             "\"max_endpoint_delay_ms\": 3000}'")
     args = parser.parse_args()
+
+    endpoint_config = json.loads(args.endpoint_config) if args.endpoint_config \
+        else config.ENDPOINTING_CONFIG
 
     if not os.environ.get("SONIOX_API_KEY"):
         print("Error: SONIOX_API_KEY is not set. Add it to eval/.env.")
@@ -120,7 +134,10 @@ def main():
                             wav_path,
                             target_lang=lang,
                             # The nocontext arm is the ablation: same audio, nothing told.
-                            context=context if variant == "context" else None,
+                            # The endpointed arm keeps the context and changes only when
+                            # Soniox decides a caption is finished.
+                            context=None if variant == "nocontext" else context,
+                            endpointing=endpoint_config if variant == "endpointed" else None,
                         )
                         caption, detail = result.final_text, f"{len(result.events)} events"
                     with open(fix_path, "w") as f:

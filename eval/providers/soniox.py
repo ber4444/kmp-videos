@@ -115,6 +115,7 @@ class SonioxProvider(Provider):
         wav_path: str,
         target_lang: str,
         context: dict = None,
+        endpointing: dict = None,
     ) -> StreamResult:
         """Stream a clip with Soniox's in-band translation on, exactly as the app does.
 
@@ -144,6 +145,12 @@ class SonioxProvider(Provider):
         }
         if context:
             config_obj["context"] = context
+        # Endpoint detection: let Soniox finalize at utterance boundaries instead of
+        # whenever its buffer says so. The app sends none of these today. Passed through
+        # verbatim rather than wrapped in named parameters because the exact field set is
+        # the vendor's and the point of the arm is to find out what they do.
+        if endpointing:
+            config_obj.update(endpointing)
 
         state = {"committed": "", "events": [], "final_words": []}
 
@@ -187,6 +194,8 @@ class SonioxProvider(Provider):
             final_words=state["final_words"],
             audio_duration_s=duration_s,
             model=f"stt-rt-v5+translate:{target_lang}",
+            # Everything but the key, so the fixture says what produced it.
+            session_config={k: v for k, v in config_obj.items() if k != "api_key"},
         )
 
     def _transcribe_stream_live(self, wav_path: str) -> StreamResult:

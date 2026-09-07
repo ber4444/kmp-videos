@@ -50,6 +50,19 @@ INBAND_NOCONTEXT_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-nocontext")
 # ceiling for this model on this language, and the baseline the real-time arm's streaming
 # penalty is measured from.
 INBAND_BATCH_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-batch")
+# The real-time arm with Soniox's own endpoint detection on, so it finalizes at utterance
+# boundaries instead of mid-clause. The batch arm already bounds what this can do for
+# *quality* (it has the whole clip and beats streaming by ~1 chrF), so this arm is scored
+# on flicker and finalization latency: a no-flicker caption is a display win worth having
+# even when the words are identical.
+INBAND_ENDPOINTED_DIR = os.path.join(FIXTURES_DIR, "soniox-translate-endpointed")
+
+# Sent as the endpointing arm's extra config. Only the toggle is on by default: the
+# remaining knobs (max_endpoint_delay_ms, endpoint_sensitivity,
+# endpoint_latency_adjustment_level) are per-model capabilities, so a value this model does
+# not support is a session error rather than a silently ignored field. Override with
+# `record_translate.py --endpoint-config '{"max_endpoint_delay_ms": 3000}'`.
+ENDPOINTING_CONFIG = {"enable_endpoint_detection": True}
 
 # Soniox language code -> DeepL target code, for the pairs whose spelling differs. Everything
 # else is the code upper-cased ("hu" -> "HU"), which is what DeepL expects.
