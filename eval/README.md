@@ -125,6 +125,29 @@ Only report numbers from runs that actually executed. If a step could not run (m
 key, missing clip), the scorecard cell reads `n/a (not run)` — never an estimate.
 Anything aspirational in docs gets one explicit "not wired yet" sentence.
 
+## Transcript headline (real run, n=21)
+
+**Telling Soniox the vocabulary in advance is worth more than every translation-side lever
+combined.** Same audio, same model, only the session `context` changes
+([`scripts/record_asr_context.py`](scripts/record_asr_context.py)):
+
+| Context | WER | Caption chrF (hu) |
+|---|---|---|
+| none | 0.242 | 54.9 |
+| the app's 49-term glossary | 0.205 | 57.0 (+2.0) |
+| this clip's distinctive vocabulary | 0.192 | 59.7 (+4.7) |
+| this clip's full reference prose | 0.103 | 63.7 (+8.8) |
+
+Against a different-engine floor of 68.1, the last row closes about two-thirds of the gap —
+where latency, engine choice and the static glossary are each worth 2–3. The `oracle-*` rows
+are not shippable (their vocabulary comes from the reference); they bound what any advance
+supply of vocabulary could do, slide OCR included. Note that a *word list* gets only a third
+of it: the rest comes from knowing the phrasing.
+
+Also fixed here: Soniox keyterm boosting was a commented-out guess at a `speech_context`
+field the SDK does not have, so the `-boost` arm silently re-ran the baseline and the
+scorecard reported Soniox boosting as worthless. It is worth −0.037 WER.
+
 ## Translation headline (real run, n=21 per language)
 
 **Every lever is small; the transcript is the bottleneck.** In-band ships at 54.4 (hu) /

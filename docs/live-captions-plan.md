@@ -297,14 +297,43 @@ prices the bonus at **+19.4** in Hungarian and **+18.1** in Russian — essentia
 reported lead, reproduced in two unrelated languages. A second MT vendor costs per-character
 billing, a key path through `:server` and a privacy-policy line; ~3–5 chrF does not buy that.
 
-**What is left is the transcript.** A flawless translation of the *perfect* reference scores
-only 66–68 when its engine does not match the ideal's, and every ASR-fed path lands at 53–58
-regardless of which engine translates. So ~13 points are lost to ASR error against ~2–5 for
-every translation-side choice combined. **The words Soniox hears are the bottleneck, not the
-words it picks when translating them.** The glossary is the only lever that attacks that
-directly, which is why it is worth extending in Hungarian — but its Russian result (+0.6)
-shows that is not automatic, and neither is it large. Nothing measured so far recovers the
-ASR gap; a better-heard transcript is the open problem.
+**What is left is the transcript** — and unlike the levers above, it moves. A flawless
+translation of the *perfect* reference scores only 66–68 when its engine does not match the
+ideal's, and every ASR-fed path lands at 53–58 regardless of which engine translates. So ~13
+points are lost to ASR error against ~2–5 for every translation-side choice combined. **The
+words Soniox hears are the bottleneck, not the words it picks when translating them.**
+
+## Fixing the transcript: what vocabulary is worth (2026-09-08)
+
+Same audio, same async model, only the session `context` changes. WER is normalized; chrF is
+the Hungarian caption through the translated batch path, against the usual DeepL ideal.
+
+| Context given to Soniox | WER | Caption chrF | Δ chrF |
+|---|---|---|---|
+| Nothing | 0.242 | 54.9 | — |
+| The app's 49-term glossary | 0.205 | 57.0 | **+2.0** |
+| This clip's distinctive vocabulary (`oracle-terms`) | 0.192 | 59.7 | **+4.7** |
+| This clip's full reference prose (`oracle-full`) | 0.103 | 63.7 | **+8.8** |
+
+The `oracle-*` arms draw their vocabulary from the verified reference, so they are not
+shippable — they bound what *any* scheme for supplying vocabulary in advance could achieve,
+including slide OCR, a per-lecture term list, or a speaker-supplied glossary.
+
+Three things follow:
+
+1. **Telling Soniox the words is worth more than everything else combined.** +8.8 chrF
+   against +2.0/+2.1/+2.8 for glossary, latency and engine choice. It closes roughly
+   two-thirds of the 13-point gap to the floor, and Entity F1 reaches 1.000.
+2. **Terminology alone is not where most of it lives.** Going from the generic 49-term
+   glossary to this clip's own rare vocabulary is only +2.7; going the rest of the way to
+   the actual prose is another +4.0. A word list gets a third of the available win — the
+   rest comes from knowing the *phrasing*, not just the terms.
+3. **So slide OCR pays in proportion to how much of the slide is read aloud.** Slides that
+   carry headings and terminology land near `oracle-terms` (+4.7); passages read verbatim
+   from the screen approach `oracle-full` (+8.8). Both beat every alternative already
+   measured, so this is the lever worth building.
+
+Reproduce free from fixtures: `python scripts/record_asr_context.py --score-only`.
 
 Caveats: the ideals are machine translations, not human ones, so absolute values are soft —
 a human reference would settle those. The *comparisons* are paired per-clip and consistent
