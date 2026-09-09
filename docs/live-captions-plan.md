@@ -74,10 +74,14 @@ before `feedPcm` (reuse the anti-aliased resampler already in `TranscriptionEngi
 
 ## Current status
 
-**Phases 0, 1, 2 DONE** — shared core + full Android wiring compile and install on device;
-the router receives tapped audio. **End-to-end captions unverified pending a real API key.**
-**Next: Phase 3 (iOS).** Nothing committed yet — all uncommitted on `feature/platform-parity`
-alongside the on-device Whisper pipeline (kept as an optional offline tier / "why cloud" story).
+**Phases 0–3 DONE** — shared core, Android wiring, and iOS wiring all compile; captions ship
+on both platforms with the language menu, and the key is server-side (PR #74/#77). What is
+left is **Phase 4 (Wasm)** and **Phase 5 (docs/ADR)**, plus caption-choice persistence, which
+is deliberately unbuilt: the selection resets per video so a metered caption session cannot
+carry silently into a video nobody asked to caption.
+
+**Still unverified end-to-end on any platform**: captions have never been watched working
+against a real live event. Everything below is compile- and unit-verified only.
 
 Build commands used (set `ANDROID_HOME=~/Library/Android/sdk`):
 `./gradlew :composeApp:compileCommonMainKotlinMetadata` (shared), `:androidApp:installDebug` (device).
@@ -115,8 +119,8 @@ Build commands used (set `ANDROID_HOME=~/Library/Android/sdk`):
   **verified against the live service** — the eval harness has since run several hundred
   calls through both the socket and the async API, including the `context`, `translation`
   and token-`translation_status` fields this client sends and reads.
-- [ ] 1.9 Shared caption overlay — DEFERRED. Android `CaptionOverlay.kt` (androidMain) still
-  works for Android; move to commonMain when doing iOS (Phase 3) so both share it.
+- [x] 1.9 Shared caption overlay — `CaptionOverlay.kt` now lives in `commonMain` with no
+  androidMain copy, so Android and iOS render the same composable (see 3.3).
 
 All of `commonMain` compiles (`:composeApp:compileCommonMainKotlinMetadata`). `HttpClient { install(WebSockets) }`
 resolves the per-platform engine (android/darwin/js already in deps) with no engine arg.
@@ -141,19 +145,31 @@ resolves the per-platform engine (android/darwin/js already in deps) with no eng
   confirm captions + the Deepgram/Soniox switch. Also re-verify the Soniox endpoint/fields
   against current docs — SonioxClient is written from research, not run against the service.**
 
-### Phase 3 — iOS wiring (structural; verify in Xcode)
+### Phase 3 — iOS wiring — DONE (compiles; end-to-end needs a live event)
 - Shared refactor done (helps iOS/web): provider selection + caption mirroring hoisted into
   `commonMain` `LiveTranscriber`; `CaptionAudioRouter` is now just Android capture+resample
   delegating to it. iOS/web instantiate `LiveTranscriber`, do their own tap, call `feedPcm`.
-- **NOTE:** `:composeApp:compileKotlinIosSimulatorArm64` currently FAILS, but on
-  **pre-existing** errors in `iosMain/Platform.ios.kt` (`DisposableEffect`/`onDispose`/
-  `AVURLAsset`/`AVAssetImageGenerator` unresolved) that are UNRELATED to this feature (I never
-  touched that file). The shared `transcription/` code compiled past those (no errors reference
-  it). Fix the iOS player build first, then this feature's shared code is iOS-ready.
-- [ ] 3.1 `MTAudioProcessingTap` on the AVPlayerItem audio mix → resample to 16k mono s16 →
-  `LiveTranscriber.feedPcm`.
-- [ ] 3.2 Key provisioning via xcconfig/Info.plist → `TranscriptionSecrets` (set at app launch).
-- [ ] 3.3 Caption overlay over the AVPlayer view (move `CaptionOverlay` to commonMain, step 1.9).
+- `:composeApp:compileKotlinIosSimulatorArm64` **passes** (warnings only). The earlier note
+  here said it failed on pre-existing `Platform.ios.kt` errors; that was fixed since.
+- [x] 3.1 Audio capture — **not** via `MTAudioProcessingTap`, which cannot work: the tap is
+  unsupported for HLS, so an audio mix installed on the playing item is accepted without
+  error and its process callback is never invoked (muxed *and* `_aac`-alone). Instead
+  [`CaptionSegmentFeeder`](../composeApp/src/iosMain/kotlin/com/livingpresence/inner/circle/squared/CaptionSegmentFeeder.ios.kt)
+  pulls the audio-only `_aac` rendition over plain HTTP — ~51 kbps, and its segments are HLS
+  "packed audio" (ID3 header + raw ADTS AAC) that `AVPlayerBridge.decodeAudioSegment` decodes
+  with no demuxer. Feeding is paced against the playhead so captions track what is on screen,
+  and a playhead/feed gap over 10 s is treated as a seek and re-anchors the cursor.
+  `onPcm` in `iosMain/CaptionAudioRouter.kt` downmixes to mono 16-bit and hands to `feedMono`.
+- [x] 3.2 Provisioning via Info.plist → `TranscriptionSecrets` at launch —
+  [`iosApp/project.yml`](../iosApp/project.yml) sets `SONIOX_TOKEN_URL`, and
+  `MainViewController.kt` reads it into `TranscriptionSecrets.sonioxTokenEndpoint`. Per the
+  supersession note at the top this carries the **token-service URL, not an API key**.
+- [x] 3.3 Caption overlay over the AVPlayer view — `Platform.ios.kt` renders `CaptionOverlay`
+  along the bottom edge as on Android, driven by `rememberCaptionController(videoKey = url)`
+  so the selection resets per video, with the menu in `PlayerControlsOverlay`.
+- **Not verified end-to-end.** Captions need a `/live/event…` stream with an `_aac` sibling
+  rendition; a stream without one silently produces no captions by design. Nothing here has
+  been watched working against a real live event.
 
 ### Phase 4 — Web (optional)
 - [ ] 4.1 WebAudio `AudioWorklet` PCM tap → `feedPcm` via `ktor-client-js`.
