@@ -30,6 +30,14 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Live & recorded playback.** Live-vs-VOD is inferred from playlist inspection;
   live events expose a LIVE badge and jump-to-live, and the seek bar tracks a
   growing Wowza nDVR window without drift.
+- **Live captions, translated in-band.** Real-time captions for live events, in the
+  viewer's choice of 22 languages off the same English audio. These are **cloud
+  streamed**: while captions are on, the *media's* audio leaves the device for
+  Soniox — never the microphone, for which the app holds no permission. On-device
+  recognition was tried first and could not do it (see
+  [ADR 0001](./docs/adr/0001-cloud-streaming-asr-for-live-captions.md)). Captions are
+  off by default and reset to off on every video, because the service is metered.
+  The app ships no transcription key: `:server` mints a single-use one per session.
 - **Thumbnail feed with scrub preview.** Poster tiles and a scrub-preview bubble 
   are powered by an ExoPlayer frame engine on Android, and native `AVAssetImageGenerator` 
   on iOS, avoiding the overhead of N full per-tile players.
@@ -57,7 +65,7 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 | Feature | Android | iOS | Web (Wasm) |
 | :--- | :---: | :---: | :---: |
 | **Live STT Captions** (Soniox WebSockets, keys minted by [`:server`](./server)) | ✅ | ✅ | ✅ |
-| **Device-Language Captions** (Soniox in-band translation) | ✅ | ✅ | ✅ |
+| **Translated Captions** (Soniox in-band; device language, or any of 22 picked from a menu) | ✅ | ✅ | ✅ |
 | **ABR Ladder Synthesis** (from sibling renditions) | ✅ | ✅ | ✅ |
 | **Viewport-Aware ABR** (auto-caps to screen size) | ✅ | ✅ | ✅ |
 | **Manual Quality Override** (Auto, 720p, audio, etc) | ✅ | ✅ | ✅ |
@@ -87,10 +95,15 @@ re-running the comparison is the point of keeping it. Run
 
 Soniox also decides the caption *language*. The events are spoken in English, but Soniox
 translates in-band — translated tokens arrive on the same websocket, chunk by chunk, at no
-extra cost — so the captions are written in whatever language the device is set to: a
+extra cost — so the captions can be written in whatever language the viewer reads: a
 Russian phone reads Russian off the same English audio, with no second service in the path.
-The locale is resolved per session and falls back to untranslated English when the device
-already speaks English or is set to one of the few languages Soniox does not cover.
+The player's caption button is a menu whose first row ("No translation") runs nothing at all,
+whose second is the device's own language — resolved per session, and skipped when the device
+already speaks English or is set to one of the few languages Soniox does not cover — and
+whose remaining rows are plain English captions plus the 22 languages this audience reads, for
+anyone whose system language is not the one they read comfortably. Every video starts on the
+first row: captions are metered, so a language picked once is not left running on everything
+watched after it.
 Deepgram's streaming API has no translation, so it could only ever caption in English —
 the reason it was switched off rather than kept as a runtime alternative. Its client still
 compiles and the provider switcher still exists in the source (`CaptionProviderButton`), but

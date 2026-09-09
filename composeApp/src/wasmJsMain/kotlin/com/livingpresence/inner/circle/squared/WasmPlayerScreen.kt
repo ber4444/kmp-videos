@@ -170,7 +170,9 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
 
     var renditions by remember { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
     var showStats by remember { mutableStateOf(false) }
-    val captionController = rememberCaptionController()
+    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
+    // every one, whatever language the viewer picked on the last.
+    val captionController = rememberCaptionController(videoKey = url)
 
     // The Compose surface on web is a single opaque skiko canvas, so (unlike the
     // native players) controls can't be drawn translucently over the HTML <video>.

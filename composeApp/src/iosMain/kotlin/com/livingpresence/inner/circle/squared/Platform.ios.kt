@@ -106,7 +106,9 @@ actual fun PlatformPlayerScreen(
     var isScrubbing by remember(url) { mutableStateOf(false) }
     var showVideoControls by remember(url) { mutableStateOf(true) }
 
-    val captionController = rememberCaptionController()
+    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
+    // every one, whatever language the viewer picked on the last.
+    val captionController = rememberCaptionController(videoKey = url)
     var showStats by remember(url) { mutableStateOf(false) }
     var renditions by remember(url) { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
 

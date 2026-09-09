@@ -32,6 +32,8 @@ Everything except the two spending scripts runs offline from `fixtures/` and cos
 | Record **batch** | `python scripts/record.py` | 💲 live | writes `fixtures/{provider}[-boost]/` |
 | Record **streaming** | `python scripts/record_stream.py [--max-clips N]` | 💲 live | real-time paced websocket sessions → `fixtures/{provider}-stream/` |
 | Translate | `python scripts/translate.py [--target DE]` | 💲 live | DeepL-translates each hypothesis + the reference → `fixtures/translations/`; needs `DEEPL_API_KEY` |
+| Record **in-band translation** | `python scripts/record_translate.py --targets hu[,ru] [--variant all]` | 💲 live | Soniox translating on the socket, as the app does → `fixtures/soniox-translate[-nocontext\|-batch\|-endpointed]/{lang}/`; `--variant all` adds the context ablation, the batch ceiling and the endpointing arm; needs `SONIOX_API_KEY` |
+| **Calibrate the metric** | `python scripts/calibrate_metric.py --target hu` | 💲 cents | translates the reference with a second engine to measure how much of any score is engine resemblance rather than quality → `reports/metric_calibration.{lang}.md`; needs `GEMINI_API_KEY` |
 | Score | `python scoring/scorecard.py` | free | regenerates `reports/scorecard.md` from fixtures |
 
 `./run_eval.sh` chains the free steps + batch record + score, skipping work whose
@@ -54,6 +56,49 @@ fixtures already exist.
 - **Finalization latency (med / p95)** — per word, wall-clock time from spoken to
   finalized. Measured against each provider's **self-reported** word timestamps;
   forced-alignment ground truth (plan Phase 5) is intentionally **not wired yet**.
+
+**In-band translation (Soniox, per language)**
+- What the player actually shows: Soniox translating on the same websocket, real-time paced,
+  with the session `context` the app sends. That context is **parsed out of the app's own
+  `CaptionGlossary.kt`** by `app_context.py` (domain sentence + boosted terms + accepted
+  renderings) rather than restated here, so the eval cannot drift from what ships.
+- Scored as chrF against the **same ideal** as everything else: DeepL's translation of the
+  verified reference. Columns per language:
+  - **in-band (context)** — what ships;
+  - **in-band (no context)** — the same audio with the context withheld, so the glossary's
+    contribution is measured rather than assumed (`--variant both` records the pair);
+  - **batch (full context)** — the same model and context through the async API, which reads
+    the whole clip before answering. **Δ streaming** is what committing a translation before
+    the sentence ends costs, and it is the ceiling on *every* latency-buying mechanism there
+    is: client-side sentence buffering, re-translating on sentence end, or the vendor's own
+    endpointing knobs. Batch has the whole clip, so none of them can beat it. A small Δ means
+    no client change will move this language. It is also the cheap arm: no real-time pacing;
+  - **two-stage (cross-engine)** — the Soniox transcript translated by an engine that is *not*
+    the one that wrote the ideal, so it carries the same handicap as in-band and the two can
+    honestly be subtracted. **This is the column that decides whether a second MT vendor earns
+    its cost**;
+  - **different-engine floor** — a second engine translating the verified reference. Perfect
+    input, no ASR error, so everything below 100 is the price of not being the engine that
+    wrote the ideal. Read every other column against this, not against 100.
+- Every Δ is a **per-clip mean over the clips both arms recorded**. Averaging two arms over
+  different clip sets and subtracting the means reports a difference between samples as if it
+  were an effect.
+- **`Soniox → DeepL` is reported separately and never differenced against in-band.** It is
+  DeepL output scored against a DeepL ideal, so it collects a same-engine bonus no other arm
+  can — measured at **+19.4 chrF** on Hungarian. Subtracting it from in-band measures which
+  engine wrote the answer key, not translation quality.
+- **Endpoint detection** (`--variant endpointed`) is judged on **flicker and finalization
+  latency, not chrF**, since the batch arm already bounds its effect on the words. Captions
+  that stop rewriting themselves are worth having on their own.
+- Needs `scripts/translate.py --target <LANG>` to have run for the same language first — that
+  is where the ideal comes from — and `scripts/calibrate_metric.py --target <lang>` for the
+  floor and two-stage columns. Soniox codes are lowercase (`hu`), DeepL's are not (`HU`);
+  `config.deepl_target()` maps between them.
+- chrF is character-n-gram based, so it does not punish an agglutinative language for
+  inflecting differently the way BLEU would. **Absolute values are not comparable across
+  languages** — the comparisons within one row are. For a metric without the same-engine
+  bias at all, `scoring/semantic.py` adds COMET; it is opt-in (`pip install -r
+  requirements-comet.txt`, `EVAL_COMET=1`) because it pulls torch and a 2.3 GB checkpoint.
 
 **Translation fidelity (ASR → DeepL)**
 - Each provider's transcript is translated with DeepL and compared to the translation
@@ -79,6 +124,41 @@ fixtures already exist.
 Only report numbers from runs that actually executed. If a step could not run (missing
 key, missing clip), the scorecard cell reads `n/a (not run)` — never an estimate.
 Anything aspirational in docs gets one explicit "not wired yet" sentence.
+
+## Transcript headline (real run, n=21)
+
+**Telling Soniox the vocabulary in advance is worth more than every translation-side lever
+combined.** Same audio, same model, only the session `context` changes
+([`scripts/record_asr_context.py`](scripts/record_asr_context.py)):
+
+| Context | WER | Caption chrF (hu) |
+|---|---|---|
+| none | 0.242 | 54.9 |
+| the app's 49-term glossary | 0.205 | 57.0 (+2.0) |
+| this clip's distinctive vocabulary | 0.192 | 59.7 (+4.7) |
+| this clip's full reference prose | 0.103 | 63.7 (+8.8) |
+
+Against a different-engine floor of 68.1, the last row closes about two-thirds of the gap —
+where latency, engine choice and the static glossary are each worth 2–3. The `oracle-*` rows
+are not shippable (their vocabulary comes from the reference); they bound what any advance
+supply of vocabulary could do, slide OCR included. Note that a *word list* gets only a third
+of it: the rest comes from knowing the phrasing.
+
+Also fixed here: Soniox keyterm boosting was a commented-out guess at a `speech_context`
+field the SDK does not have, so the `-boost` arm silently re-ran the baseline and the
+scorecard reported Soniox boosting as worthless. It is worth −0.037 WER.
+
+## Translation headline (real run, n=21 per language)
+
+**Every lever is small; the transcript is the bottleneck.** In-band ships at 54.4 (hu) /
+53.2 (ru) against a different-engine floor of 68.1 / 66.2. Of that ~13-point gap, the
+glossary is worth +2.5 (hu) but only +0.6 (ru), *every* latency-buying scheme is capped at
++2.1/+2.0 (the batch ceiling bounds client buffering and vendor endpointing alike), and
+switching translation engine is worth +2.8/+5.1. The ~+19.7 that once appeared to favour a two-stage path was the
+same-engine bonus, priced at +19.4 (hu) and +18.1 (ru) by
+[`scripts/calibrate_metric.py`](scripts/calibrate_metric.py). Endpoint detection moved
+flicker by 0.000 — the translated arm never flickers, because Soniox sends translated tokens
+only as final.
 
 ## Current headline (real run)
 

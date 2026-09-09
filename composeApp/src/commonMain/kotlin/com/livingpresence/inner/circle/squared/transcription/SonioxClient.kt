@@ -28,10 +28,12 @@ import kotlinx.serialization.json.Json
  * language; null leaves the stream untranslated.
  *
  * **Domain vocabulary.** The config frame also carries a `context` object built from
- * [CaptionGlossary]: `terms` pins the spelling of vocabulary a general model has no reason
- * to expect, and `translation_terms` pins the accepted rendering of those terms in the
- * language being translated into, so the caption says what the tradition says rather than
- * what a literal translation of the English would.
+ * [CaptionGlossary]: `text` names the subject of every lecture in plain English — the Fourth
+ * Way, the teaching of Peter Ouspensky — so the model resolves this vocabulary in its
+ * technical sense rather than its everyday one; `terms` pins the spelling of words a general
+ * model has no reason to expect; and `translation_terms` pins the accepted rendering of those
+ * terms in the language being translated into, so the caption says what the tradition says
+ * rather than what a literal translation of the English would.
  *
  * **Idle timeouts.** Soniox closes a stream that receives neither audio nor a keepalive
  * for more than ~20 s, reporting `error_message: "Request timeout"` — which a paused video,
@@ -49,6 +51,7 @@ class SonioxClient(
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),
     private val translateTo: String? = null,
+    private val domain: String? = null,
     private val terms: List<String> = emptyList(),
     private val translationTerms: Map<String, String> = emptyMap(),
 ) : WebSocketTranscriber(
@@ -81,7 +84,7 @@ class SonioxClient(
             sampleRate = sampleRate,
             languageHints = languageHints,
             translation = translateTo?.let { SonioxTranslation(targetLanguage = it) },
-            context = sonioxContext(terms, translationTerms),
+            context = sonioxContext(domain, terms, translationTerms),
         )
         ws.sendText(json.encodeToString(config))
     }
@@ -208,12 +211,13 @@ internal fun selectCaptionText(tokens: List<SonioxToken>, translating: Boolean):
 private const val TRANSLATION_STATUS_TRANSLATION = "translation"
 
 /**
- * The session `context` Soniox accepts alongside the audio settings. Only the two sections
- * this app has anything to say are modelled; the API also takes `general` key-values and a
- * free-text `text` block.
+ * The session `context` Soniox accepts alongside the audio settings. Only the three sections
+ * this app has anything to say are modelled; the API also takes `general` key-values.
  */
 @Serializable
 internal data class SonioxContext(
+    /** Free-text description of the material — what these recordings are, in a sentence. */
+    val text: String? = null,
     val terms: List<String>? = null,
     @SerialName("translation_terms") val translationTerms: List<SonioxTranslationTerm>? = null,
 )
@@ -223,16 +227,20 @@ internal data class SonioxContext(
 internal data class SonioxTranslationTerm(val source: String, val target: String)
 
 /**
- * Builds the context block, or null when there is nothing to say — an empty `terms` array
- * would otherwise be sent on every session, and the two sections are independently empty:
- * a device with no glossary for its language still gets the transcription terms.
+ * Builds the context block, or null when there is nothing to say. The three sections are
+ * independently empty and each is omitted rather than sent blank — a session captioning into
+ * a language with no glossary still gets the domain sentence and the transcription terms, and
+ * an empty array would otherwise be parsed and ignored on every one of those sessions.
  */
 internal fun sonioxContext(
+    domain: String?,
     terms: List<String>,
     translationTerms: Map<String, String>,
 ): SonioxContext? {
-    if (terms.isEmpty() && translationTerms.isEmpty()) return null
+    val text = domain?.takeIf { it.isNotBlank() }
+    if (text == null && terms.isEmpty() && translationTerms.isEmpty()) return null
     return SonioxContext(
+        text = text,
         terms = terms.takeIf { it.isNotEmpty() },
         translationTerms = translationTerms
             .map { (source, target) -> SonioxTranslationTerm(source, target) }

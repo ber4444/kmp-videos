@@ -54,9 +54,11 @@ class CaptionGlossaryTest {
     fun theGlossaryStaysUnderSonioxContextLimit() {
         for (language in CaptionGlossary.LANGUAGES) {
             val terms = CaptionGlossary.translationTermsFor(language)
-            val chars = CaptionGlossary.TERMS.sumOf { it.length } +
+            // The domain sentence rides along on every session, so it counts against the cap.
+            val chars = CaptionGlossary.DOMAIN.length +
+                CaptionGlossary.TERMS.sumOf { it.length } +
                 terms.entries.sumOf { it.key.length + it.value.length }
-            assertTrue(chars < 8_000, "$language glossary is $chars chars, close to the cap")
+            assertTrue(chars < 8_000, "$language context is $chars chars, close to the cap")
         }
     }
 
@@ -69,11 +71,13 @@ class CaptionGlossaryTest {
     }
 
     @Test
-    fun contextCarriesBothSectionsWhenTranslating() {
+    fun contextCarriesEverySectionWhenTranslating() {
         val context = sonioxContext(
+            domain = CaptionGlossary.DOMAIN,
             terms = listOf("Uncreated light"),
             translationTerms = mapOf("Uncreated light" to "Несотворённый Свет"),
         )
+        assertEquals(CaptionGlossary.DOMAIN, context?.text)
         assertEquals(listOf("Uncreated light"), context?.terms)
         assertEquals(
             listOf(SonioxTranslationTerm("Uncreated light", "Несотворённый Свет")),
@@ -82,8 +86,25 @@ class CaptionGlossaryTest {
     }
 
     @Test
-    fun contextOmitsTheTranslationSectionWhenThereIsNoGlossary() {
-        val context = sonioxContext(terms = CaptionGlossary.TERMS, translationTerms = emptyMap())
+    fun theDomainSentenceNamesTheTeachingAndItsAuthor() {
+        // The whole point of the `text` block: a model that knows what it is listening to
+        // resolves "the work", "school" and "centers" in this sense rather than the everyday
+        // one. Naming it wrongly is worse than saying nothing, so pin the two names.
+        assertTrue(CaptionGlossary.DOMAIN.contains("Fourth Way"))
+        assertTrue(CaptionGlossary.DOMAIN.contains("Ouspensky"))
+        assertTrue(CaptionGlossary.DOMAIN.isNotBlank())
+    }
+
+    @Test
+    fun everySessionCarriesTheDomainEvenWithoutAGlossary() {
+        // Japanese has no glossary and never will have every language; the sentence about
+        // what the lectures *are* is not a per-language thing and goes on every session.
+        val context = sonioxContext(
+            domain = CaptionGlossary.DOMAIN,
+            terms = CaptionGlossary.TERMS,
+            translationTerms = CaptionGlossary.translationTermsFor("ja"),
+        )
+        assertEquals(CaptionGlossary.DOMAIN, context?.text)
         assertEquals(CaptionGlossary.TERMS, context?.terms)
         // Absent rather than empty: an empty array is a section Soniox has to parse and
         // ignore on every untranslated session.
@@ -92,6 +113,9 @@ class CaptionGlossaryTest {
 
     @Test
     fun contextIsAbsentWhenThereIsNothingToSay() {
-        assertNull(sonioxContext(terms = emptyList(), translationTerms = emptyMap()))
+        assertNull(sonioxContext(domain = null, terms = emptyList(), translationTerms = emptyMap()))
+        // A blank domain is nothing to say, not an empty `text` field to send.
+        assertNull(sonioxContext(domain = "   ", terms = emptyList(), translationTerms = emptyMap()))
+        assertNull(sonioxContext(domain = "", terms = listOf("Steward"), translationTerms = emptyMap())?.text)
     }
 }
