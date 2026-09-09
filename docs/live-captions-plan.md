@@ -91,7 +91,9 @@ Build commands used (set `ANDROID_HOME=~/Library/Android/sdk`):
 - [x] 0.4 `androidApp/build.gradle.kts` reads `secrets.properties` → BuildConfig fields
   `DEEPGRAM_API_KEY` / `SONIOX_API_KEY`. NOTE: needed `import java.util.Properties` at top
   (bare `java.util.X` collides with Gradle's `java` extension accessor in `.kts`).
-- [ ] 0.5 Push keys into `TranscriptionSecrets` at Android startup — **do in Phase 2**
+- [x] 0.5 Push keys into `TranscriptionSecrets` at Android startup — done in Phase 2 below,
+  where this line's own note said it would be. Left checked in both places rather than
+  deleted here, so the Phase 0 list still reads as a complete account of Phase 0.
   (MainActivity/Application: `TranscriptionSecrets.deepgramApiKey = BuildConfig.DEEPGRAM_API_KEY`, etc.).
 
 ### Phase 1 — Shared core (`commonMain`) — DONE
@@ -109,8 +111,10 @@ Build commands used (set `ANDROID_HOME=~/Library/Android/sdk`):
 - [x] 1.7 `DeepgramClient` — Ktor WS, `nova-3`, `Authorization: Token` header, binary PCM,
   parses `channel.alternatives[0].transcript` + `is_final`.
 - [x] 1.8 `SonioxClient` — Ktor WS, JSON config handshake then binary PCM, token stream with
-  `is_final`; commits a cue at sentence end / >80 chars. **Endpoint + fields UNVERIFIED against
-  live service — re-check vendor docs.**
+  `is_final`; commits a cue at sentence end / >80 chars. Endpoint and field shapes are
+  **verified against the live service** — the eval harness has since run several hundred
+  calls through both the socket and the async API, including the `context`, `translation`
+  and token-`translation_status` fields this client sends and reads.
 - [ ] 1.9 Shared caption overlay — DEFERRED. Android `CaptionOverlay.kt` (androidMain) still
   works for Android; move to commonMain when doing iOS (Phase 3) so both share it.
 
