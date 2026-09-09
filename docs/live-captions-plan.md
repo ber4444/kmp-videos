@@ -76,7 +76,7 @@ before `feedPcm` (reuse the anti-aliased resampler already in `TranscriptionEngi
 
 **Phases 0–3 DONE** — shared core, Android wiring, and iOS wiring all compile; captions ship
 on both platforms with the language menu, and the key is server-side (PR #74/#77). What is
-left is **Phase 4 (Wasm)** and **Phase 5 (docs/ADR)**, plus caption-choice persistence, which
+left is **Phase 4 (Wasm)**, plus caption-choice persistence, which
 is deliberately unbuilt: the selection resets per video so a metered caption session cannot
 carry silently into a video nobody asked to caption.
 
@@ -175,9 +175,15 @@ resolves the per-platform engine (android/darwin/js already in deps) with no eng
 - [ ] 4.1 WebAudio `AudioWorklet` PCM tap → `feedPcm` via `ktor-client-js`.
 
 ### Phase 5 — Docs / cleanup
-- [ ] 5.1 Update README: captions are cloud-streamed for live (audio leaves device);
-  correct the "on-device / no network round-trip" claim.
-- [ ] 5.2 Short ADR capturing the on-device→cloud decision (the portfolio story).
+- [x] 5.1 README states captions are cloud-streamed. The feature had no entry in
+  *Features* at all — it was described only under *Caption provider evaluation* and
+  *Privacy* — so the disclosure now sits where a reader first meets it. The stale
+  "on-device / no network round-trip" claim this step was written to correct had already
+  been removed; the Privacy section and the published policy were both accurate.
+- [x] 5.2 [ADR 0001](adr/0001-cloud-streaming-asr-for-live-captions.md) — the
+  on-device→cloud decision, the whisper.cpp numbers behind it, what it cost (audio leaves
+  the device, metered, needs network), what it unlocked (in-band translation), and the
+  PR #74/#77 amendment that moved the key server-side.
 
 ## Handoff notes (append as you go)
 - **New files (commonMain `transcription/`):** `TranscriptionProvider`, `TranscriptionSettings`,

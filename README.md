@@ -30,6 +30,14 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Live & recorded playback.** Live-vs-VOD is inferred from playlist inspection;
   live events expose a LIVE badge and jump-to-live, and the seek bar tracks a
   growing Wowza nDVR window without drift.
+- **Live captions, translated in-band.** Real-time captions for live events, in the
+  viewer's choice of 22 languages off the same English audio. These are **cloud
+  streamed**: while captions are on, the *media's* audio leaves the device for
+  Soniox — never the microphone, for which the app holds no permission. On-device
+  recognition was tried first and could not do it (see
+  [ADR 0001](./docs/adr/0001-cloud-streaming-asr-for-live-captions.md)). Captions are
+  off by default and reset to off on every video, because the service is metered.
+  The app ships no transcription key: `:server` mints a single-use one per session.
 - **Thumbnail feed with scrub preview.** Poster tiles and a scrub-preview bubble 
   are powered by an ExoPlayer frame engine on Android, and native `AVAssetImageGenerator` 
   on iOS, avoiding the overhead of N full per-tile players.
