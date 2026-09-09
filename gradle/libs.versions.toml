@@ -19,7 +19,7 @@ androidx-work = "2.11.2"
 kotlinx-serialization = "1.11.0"
 dokka = "2.2.0"
 kover = "0.9.9"
-binary-compatibility-validator = "0.18.1"
+binary-compatibility-validator = "0.18.2"
 kotlincrypto-hash = "0.8.0"
 logback = "1.6.3"
 
