@@ -127,6 +127,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.runtime)
     implementation(libs.compose.foundation)
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     debugImplementation(libs.compose.ui.tooling)
 }
