@@ -31,9 +31,10 @@ buildscript {
                 // request down to 4.1.137 asks for artifacts that line never published.
                 requested.group == "io.netty" ->
                     if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
-                requested.group == "org.bouncycastle" -> useVersion("1.84")
-                requested.group == "org.jsoup" -> useVersion("1.23.1")
-                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+                requested.group == "org.bouncycastle" -> useVersion("1.85")
+                requested.group == "org.jsoup" -> useVersion("1.23.2")
+                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.11")
+                requested.group == "org.freemarker" -> useVersion("2.3.35")
                 requested.group == "com.google.protobuf" ->
                     if (requested.name != "protobuf-bom") useVersion("3.25.5")
                 requested.group == "org.apache.commons" ->

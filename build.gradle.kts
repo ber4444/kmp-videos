@@ -1,7 +1,8 @@
 buildscript {
     // The Android Gradle Plugin and Dokka drag vulnerable transitive libraries (netty,
-    // bouncycastle, jackson, jsoup, commons-lang3, httpclient, jose4j, jdom2, protobuf) onto the
-    // plugin classpath. They surface in GitHub's dependency graph and trip Dependabot alerts.
+    // bouncycastle, jackson, jsoup, commons-lang3, httpclient, jose4j, jdom2, protobuf,
+    // freemarker) onto the plugin classpath. They surface in GitHub's dependency graph and
+    // trip Dependabot alerts.
     // Force patched versions on the buildscript classpath so only fixed versions are ever resolved.
     // (Inlined rather than shared with the allprojects block below: the buildscript block is
     // evaluated before top-level script declarations exist.)
@@ -15,14 +16,17 @@ buildscript {
                 // 4.2.7 on, so resolution failed outright.
                 requested.group == "io.netty" ->
                     if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
-                requested.group == "org.bouncycastle" -> useVersion("1.84")
-                requested.group == "org.jsoup" -> useVersion("1.23.1")
+                requested.group == "org.bouncycastle" -> useVersion("1.85")
+                requested.group == "org.jsoup" -> useVersion("1.23.2")
                 // Covers jackson-core/databind/annotations plus the dataformat, module and bom
                 // artifacts, which all share one version line. Dokka 2.2.0 requests 2.15.3;
-                // 2.18.10 is the newest 2.18.x and clears every open jackson advisory. (Dokka
+                // 2.18.11 is the newest 2.18.x and clears every open jackson advisory. (Dokka
                 // <= 2.1.0 could not be forced past 2.15 — it called TypeFactory(LRUMap), removed
                 // in jackson 2.16 — which is why jackson used to be excluded here.)
-                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.11")
+                // Dokka's HTML renderer (dokka-base) pins freemarker 2.3.32 for its page
+                // templates, which carries the path-traversal advisory fixed in 2.3.35.
+                requested.group == "org.freemarker" -> useVersion("2.3.35")
                 requested.group == "com.google.protobuf" ->
                     if (requested.name != "protobuf-bom") useVersion("3.25.5")
                 requested.group == "org.apache.commons" ->
@@ -76,9 +80,10 @@ fun DependencyResolveDetails.forceSecurityPatchedVersions() {
         // Only the 4.1 line — see the note in the buildscript block above.
         requested.group == "io.netty" ->
             if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
-        requested.group == "org.bouncycastle" -> useVersion("1.84")
-        requested.group == "org.jsoup" -> useVersion("1.23.1")
-        requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+        requested.group == "org.bouncycastle" -> useVersion("1.85")
+        requested.group == "org.jsoup" -> useVersion("1.23.2")
+        requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.11")
+        requested.group == "org.freemarker" -> useVersion("2.3.35")
         requested.group == "com.google.protobuf" ->
             if (requested.name != "protobuf-bom") useVersion("3.25.5")
         requested.group == "org.apache.commons" ->
