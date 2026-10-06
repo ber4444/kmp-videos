@@ -1,27 +1,27 @@
 [versions]
-agp = "9.4.0"
+agp = "9.4.1"
 # Keep at or above 2.4.10, the first version with the fix for CVE-2026-53914,
 # unsafe deserialization in the Kotlin build cache metadata.
 kotlin = "2.4.20"
 compose = "1.11.4"
-compose-multiplatform = "1.12.0"
+compose-multiplatform = "1.12.1"
 compose-icons = "1.7.8"
 compose-material3 = "1.4.0"
 androidx-activityCompose = "1.13.0"
 lifecycle = "2.11.0"
-metro = "1.4.3"
+metro = "1.4.5"
 navigation-compose = "2.9.2"
 kotlinx-coroutines = "1.11.0"
 kotlinx-coroutines-test = "1.11.0"
-ktor = "3.5.2"
-media3 = "1.11.0"
-androidx-work = "2.11.2"
+ktor = "3.6.0"
+media3 = "1.11.1"
+androidx-work = "2.12.0"
 kotlinx-serialization = "1.11.0"
 dokka = "2.2.0"
 kover = "0.9.9"
 binary-compatibility-validator = "0.18.2"
 kotlincrypto-hash = "0.8.0"
-logback = "1.6.3"
+logback = "1.6.4"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
