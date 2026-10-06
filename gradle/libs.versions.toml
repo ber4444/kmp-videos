@@ -1,7 +1,7 @@
 [versions]
 agp = "9.4.1"
-# 2.4.10: first version with the fix for CVE-2026-53914, unsafe deserialization
-# in the Kotlin build cache metadata.
+# Keep at or above 2.4.10, the first version with the fix for CVE-2026-53914,
+# unsafe deserialization in the Kotlin build cache metadata.
 kotlin = "2.4.20"
 compose = "1.11.4"
 compose-multiplatform = "1.12.1"
