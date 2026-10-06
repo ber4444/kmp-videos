@@ -18,10 +18,10 @@ media3 = "1.11.1"
 androidx-work = "2.12.0"
 kotlinx-serialization = "1.11.0"
 dokka = "2.2.0"
-kover = "0.9.9"
+kover = "0.9.11"
 binary-compatibility-validator = "0.18.2"
 kotlincrypto-hash = "0.8.0"
-logback = "1.6.4"
+logback = "1.6.5"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
