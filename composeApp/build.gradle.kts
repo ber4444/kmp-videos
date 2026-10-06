@@ -18,7 +18,8 @@ kotlin {
     android {
         namespace = "com.livingpresence.inner.circle.squared.shared"
         compileSdk = 37
-        minSdk = 23
+        // Keep in step with :androidApp and :mediakit — see the note there.
+        minSdk = 24
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }

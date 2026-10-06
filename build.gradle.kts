@@ -8,7 +8,13 @@ buildscript {
     configurations.all {
         resolutionStrategy.eachDependency {
             when {
-                requested.group == "io.netty" -> useVersion("4.1.137.Final")
+                // Only the 4.1 line. The pin is a security *floor* for what AGP and Dokka
+                // request, and 4.2.x is already past it — but a blanket force also dragged 4.2
+                // requests down to 4.1.137, asking for artifacts that line never published:
+                // ktor-server-netty 3.6.0 depends on netty-codec-http3, which exists only from
+                // 4.2.7 on, so resolution failed outright.
+                requested.group == "io.netty" ->
+                    if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
                 requested.group == "org.bouncycastle" -> useVersion("1.84")
                 requested.group == "org.jsoup" -> useVersion("1.23.1")
                 // Covers jackson-core/databind/annotations plus the dataformat, module and bom
@@ -67,7 +73,9 @@ val isMac = System.getProperty("os.name").startsWith("Mac OS X")
 // list in sync with the buildscript block above.
 fun DependencyResolveDetails.forceSecurityPatchedVersions() {
     when {
-        requested.group == "io.netty" -> useVersion("4.1.137.Final")
+        // Only the 4.1 line — see the note in the buildscript block above.
+        requested.group == "io.netty" ->
+            if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
         requested.group == "org.bouncycastle" -> useVersion("1.84")
         requested.group == "org.jsoup" -> useVersion("1.23.1")
         requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")

@@ -20,7 +20,9 @@ android {
 
     defaultConfig {
         applicationId = "com.livingpresence.inner.circle.squared"
-        minSdk = 23
+        // 24 (Android 7.0), not 23: androidx.work 2.12.0 — and androidx in general —
+        // no longer supports Marshmallow, and the manifest merger refuses the mismatch.
+        minSdk = 24
         targetSdk = 36
         versionCode = 7016
         versionName = "8.1.4"

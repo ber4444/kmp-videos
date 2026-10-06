@@ -27,7 +27,10 @@ buildscript {
     configurations.all {
         resolutionStrategy.eachDependency {
             when {
-                requested.group == "io.netty" -> useVersion("4.1.137.Final")
+                // Only the 4.1 line — see the note in build.gradle.kts: forcing a 4.2.x
+                // request down to 4.1.137 asks for artifacts that line never published.
+                requested.group == "io.netty" ->
+                    if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
                 requested.group == "org.bouncycastle" -> useVersion("1.84")
                 requested.group == "org.jsoup" -> useVersion("1.23.1")
                 requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
