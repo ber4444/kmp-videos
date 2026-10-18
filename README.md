@@ -33,9 +33,10 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Thumbnail feed with scrub preview.** Poster tiles and a scrub-preview bubble 
   are powered by an ExoPlayer frame engine on Android, and native `AVAssetImageGenerator` 
   on iOS, avoiding the overhead of N full per-tile players.
-- **Flexible presentation.** fit/fill/zoom resize matrix for both horizontal and
-  vertical (9:16) video, rotate-to-fullscreen, auto-hiding controls,
-  buffering/error UX, and a stats overlay + quality menu.
+- **Flexible presentation.** Light and dark themes that follow the system setting
+  (so the status-bar icons stay legible over the edge-to-edge feed), a fit/fill/zoom
+  resize matrix for both horizontal and vertical (9:16) video, rotate-to-fullscreen,
+  auto-hiding controls, buffering/error UX, and a stats overlay + quality menu.
 - **Background & Picture-in-Picture.** Playback is owned by a `MediaSession`
   service (surviving config changes), with PiP aspect-clamped for vertical video
   and background audio constrained to the low-bitrate audio-only tier.
@@ -124,18 +125,40 @@ iOS and wasm purely from `commonMain`. The Android playback engine that consumes
 it is **owned by a `MediaSessionService`** in `composeApp/src/androidMain`, not by
 a composable, so it survives config changes and enables background audio/PiP.
 
+### Explicit API mode
+
+Both KMP modules compile with `explicitApi()`, so every declaration states its
+visibility — but they use it for opposite reasons:
+
+- **`:mediakit`** is an SDK, so `public` is the point: that surface is tracked in
+  `mediakit/api/` and checked by `apiCheck`.
+- **`:composeApp`** is internal by default. Whatever it makes public is exported
+  into the `ComposeApp.framework` Objective-C header that Swift imports, and
+  becomes API `:androidApp` can reach into. Only the host entry points are
+  public: `HostBridge`, `PipController`, `DiscordConfig`, `DiscordAuthBroker` and
+  `TranscriptionSecrets` for `:androidApp`; `mainViewController` and
+  `handleDeepLink` for Swift; `main` for wasm.
+
+A new declaration in `:composeApp` should be `internal` unless one of those hosts
+calls it. Keep an `expect` and its `actual`s at the same visibility, and make test
+fakes `internal` too — a public fake that implements an internal interface fails
+to compile (`EXPOSED_PARAMETER_TYPE`).
+
 ## Possible future work
 
 - Rename `:composeApp` to `:shared` and extract a separate `:webApp` — the full
   platform restructure JetBrains recommends. The current split keeps iOS and
   wasm in `:composeApp`.
 - Extract repeated build configuration into convention plugins.
-- Audit R8 keep rules, shrinking policy, and packaging against the AGP 9
-  defaults, with release smoke testing.
 
 ## Building
 
 ### Android
+
+Runs on **Android 7.0+** (`minSdk = 24`, kept in step across `:androidApp`,
+`:composeApp` and `:mediakit` — current androidx no longer supports API 23).
+Compiles against API 37 and targets API 36.
+
 ```bash
 ./gradlew assembleDebug            # debug APK → androidApp/build/outputs/apk/debug/
 ./gradlew installDebug             # install on a connected device
@@ -160,6 +183,12 @@ debug key, which installs locally but is rejected by Play on upload.
 ```bash
 ./gradlew :androidApp:bundleRelease   # AAB → androidApp/build/outputs/bundle/release/
 ```
+
+Release builds run R8 with resource shrinking on (`isShrinkResources`).
+`androidApp/proguard-rules.pro` deliberately keeps no package wholesale: the
+libraries ship their own consumer rules, and AGP derives keeps for every
+component in the manifest. Restating those as blanket `-keep` rules only hides
+classes from R8 — dropping them took the release AAB from 10.29 MB to 7.98 MB.
 
 #### Foreground services and runtime permissions
 
@@ -190,6 +219,9 @@ controls and no download progress.
 > treatment until the plugin gap is closed.
 
 ### iOS
+
+Runs on **iOS 16.0+** (`deploymentTarget` in `iosApp/project.yml`).
+
 ```bash
 ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64   # Compose framework incl. the AVPlayer cinterop
 ```
@@ -249,10 +281,10 @@ fetch-signing-files` to provision the certificate and profile on every build.
 > (`composeApp/build.gradle.kts`), and a `Copy Compose resources` build phase
 > (`iosApp/project.yml`) copies the result to `<bundle>/compose-resources`.
 
-> **cinterop note.** Kotlin 2.3.x's cinterop parses the def's `sources =
-> AVPlayerBridge.m` but does not compile the Obj-C implementation into the
-> framework, so `_OBJC_CLASS_$_AVPlayerBridge` stays undefined at link time.
-> The Gradle build works around this by compiling `AVPlayerBridge.m` to LLVM
+> **cinterop note.** Kotlin/Native's cinterop (seen from 2.3.x through at least
+> 2.4.20) parses the def's `sources = AVPlayerBridge.m` but does not compile the
+> Obj-C implementation into the framework, so `_OBJC_CLASS_$_AVPlayerBridge`
+> stays undefined at link time. The Gradle build works around this by compiling `AVPlayerBridge.m` to LLVM
 > bitcode (`.bc`) and injecting it into the cinterop klib's `natives/`
 > directory, where the Kotlin/Native linker picks it up. No manual steps
 > needed — `linkDebugFrameworkIosSimulatorArm64` handles it end-to-end.
@@ -277,7 +309,7 @@ To serve the production build from a static server:
                                          # download-state mapping, ASR reconnect)
 ./gradlew :composeApp:allTests           # adds the commonTest suites
 ./gradlew :mediakit:apiCheck             # binary-compatibility validation
-./gradlew :mediakit:dokkaHtml            # API docs → mediakit/build/dokka/html
+./gradlew :mediakit:dokkaGenerateHtml    # API docs → mediakit/build/dokka/html
 ./gradlew koverXmlReport                 # coverage report
 ```
 
