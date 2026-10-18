@@ -2,9 +2,9 @@
 agp = "9.4.1"
 # Keep at or above 2.4.10, the first version with the fix for CVE-2026-53914,
 # unsafe deserialization in the Kotlin build cache metadata.
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 compose = "1.11.4"
-compose-multiplatform = "1.12.1"
+compose-multiplatform = "1.12.2"
 compose-icons = "1.7.8"
 compose-material3 = "1.4.0"
 androidx-activityCompose = "1.13.0"
