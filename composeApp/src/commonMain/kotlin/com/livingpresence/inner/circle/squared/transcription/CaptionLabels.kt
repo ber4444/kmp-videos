@@ -8,30 +8,25 @@ package com.livingpresence.inner.circle.squared.transcription
  */
 
 /**
- * The caption toggle's label, which states what tapping it will *do* rather than what is
- * currently happening: the device's caption language while captions are off ("Russian"),
- * and "No translation" while they are on.
+ * The label on the button that opens the caption language menu.
  *
- * [translateTo] is the resolved target from [CaptionLanguage.deviceTarget]; null means
- * nothing would be translated — an English device, or a language Soniox does not cover. The
- * wording drops to plain captions there, because a device reading English captions off
- * English audio is not translating and "No translation" would describe both states equally.
+ * A button that opens a menu reports state rather than promising an action, so it reads as
+ * the row that is currently selected: "No translation" while captions are off, "Russian
+ * translation" while they are on, "Italian" for a language picked over the device's own. The
+ * old toggle said what tapping it would *do*, because tapping it did exactly one thing;
+ * naming the action is meaningless now that the tap only opens a list. See
+ * [captionMenuOptions] for the rows themselves.
  *
  * [status] is folded in as a trailing mark so a stream that is connecting, retrying or dead
- * is still visible on the button. It replaces the old `CC…`/`CC↻`/`CC!` suffixes, and the
- * healthy case stays unmarked: the captions themselves are the evidence it is working, and a
- * steady `●` next to a text label is noise.
+ * is still visible without opening the menu. The healthy case stays unmarked — the captions
+ * themselves are the evidence it is working, and a steady `●` next to a text label is noise
+ * — and so does the off row, whose status is whatever the session that just ended left
+ * behind and says nothing about a stream that is not running.
  */
-internal fun captionToggleLabel(
-    enabled: Boolean,
-    translateTo: String?,
+internal fun captionMenuButtonLabel(
+    selected: CaptionMenuOption,
     status: TranscriberStatus,
-): String {
-    val language = translateTo?.let { CaptionLanguage.displayName(it) }
-    if (!enabled) return language ?: CAPTIONS_ON
-    val off = if (language != null) NO_TRANSLATION else CAPTIONS_OFF
-    return off + status.mark()
-}
+): String = selected.label + if (selected.captionsOn) status.mark() else ""
 
 /**
  * The provider button's label — currently unreachable, since the Deepgram/Soniox switcher
@@ -54,11 +49,3 @@ private fun TranscriberStatus.mark(): String = when (this) {
     TranscriberStatus.ERROR -> " !"
     TranscriberStatus.IDLE, TranscriberStatus.LISTENING -> ""
 }
-
-/** Turning captions on when nothing will be translated. */
-private const val CAPTIONS_ON = "Captions"
-
-/** Turning them off again in that same case, where "No translation" would say nothing. */
-private const val CAPTIONS_OFF = "No captions"
-
-private const val NO_TRANSLATION = "No translation"

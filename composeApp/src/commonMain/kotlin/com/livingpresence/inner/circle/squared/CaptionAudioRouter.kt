@@ -25,8 +25,14 @@ internal class CaptionAudioRouter private constructor() {
     val status: StateFlow<TranscriberStatus> = live.status
     val error: StateFlow<String?> = live.error
 
-    fun enable(provider: TranscriptionProvider) = live.enable(provider)
-    fun switch(provider: TranscriptionProvider) = live.enable(provider)
+    /**
+     * Starts (or re-points) recognition. [translateTo] is the language the captions should be
+     * written in — the row the viewer picked in the caption menu — or null to leave them in
+     * the spoken language; see [LiveTranscriber.enable].
+     */
+    fun enable(provider: TranscriptionProvider, translateTo: String?) =
+        live.enable(provider, translateTo)
+
     fun disable() = live.disable()
 
     /**

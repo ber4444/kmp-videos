@@ -4,9 +4,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * What the caption provider button reads. The provider name is an implementation detail;
- * the choice the viewer is actually making is English captions vs captions in their own
- * language, so the button says so.
+ * What the caption buttons read. The provider name is an implementation detail; the choice
+ * the viewer is actually making is what language they read the captions in, so the controls
+ * say that instead — the (unrendered) provider button by naming what it would translate
+ * into, and the menu button by naming the row the viewer is on.
  */
 class CaptionLabelTest {
 
@@ -36,45 +37,41 @@ class CaptionLabelTest {
         assertEquals("Deepgram", TranscriptionProvider.DEEPGRAM.captionLabel(null))
     }
 
-    // --- The caption toggle, which is what the player actually shows. ---
+    // --- The caption menu button, which is what the player actually shows. ---
 
-    private fun toggle(
-        enabled: Boolean,
-        translateTo: String? = "ru",
+    private fun button(
+        selected: CaptionMenuOption,
         status: TranscriberStatus = TranscriberStatus.LISTENING,
-    ) = captionToggleLabel(enabled, translateTo, status)
+    ) = captionMenuButtonLabel(selected, status)
+
+    private val off = captionMenuOptions("ru")[0]
+    private val russian = captionMenuOptions("ru")[1]
+    private val english = captionMenuOptions("ru")[2]
+    private val italian = captionMenuOptions("ru").first { it.translateTo == "it" }
 
     @Test
-    fun offTheToggleOffersTheDeviceLanguage() {
-        assertEquals("Russian", toggle(enabled = false, status = TranscriberStatus.IDLE))
-        assertEquals("Hungarian", toggle(enabled = false, translateTo = "hu", status = TranscriberStatus.IDLE))
-    }
-
-    @Test
-    fun onTheToggleOffersToStopTranslating() {
-        assertEquals("No translation", toggle(enabled = true))
-    }
-
-    @Test
-    fun withNothingToTranslateTheWordingDropsToPlainCaptions() {
-        // An English device: captions are English either way, so "No translation" would
-        // describe the on state and the off state equally well, i.e. not at all.
-        assertEquals("Captions", toggle(enabled = false, translateTo = null, status = TranscriberStatus.IDLE))
-        assertEquals("No captions", toggle(enabled = true, translateTo = null))
+    fun theButtonNamesTheRowTheViewerIsOn() {
+        // It opens a menu, so it reports the current selection rather than promising what a
+        // tap will do — the tap only opens the list.
+        assertEquals("No translation", button(off, status = TranscriberStatus.IDLE))
+        assertEquals("Russian translation", button(russian))
+        assertEquals("English captions", button(english))
+        assertEquals("Italian", button(italian))
     }
 
     @Test
     fun theStreamStateIsStillVisibleOnTheButton() {
-        assertEquals("No translation …", toggle(enabled = true, status = TranscriberStatus.CONNECTING))
-        assertEquals("No translation ↻", toggle(enabled = true, status = TranscriberStatus.RECONNECTING))
-        assertEquals("No translation !", toggle(enabled = true, status = TranscriberStatus.ERROR))
-        assertEquals("No translation", toggle(enabled = true, status = TranscriberStatus.LISTENING))
+        assertEquals("Russian translation …", button(russian, TranscriberStatus.CONNECTING))
+        assertEquals("Russian translation ↻", button(russian, TranscriberStatus.RECONNECTING))
+        assertEquals("Russian translation !", button(russian, TranscriberStatus.ERROR))
+        assertEquals("Russian translation", button(russian, TranscriberStatus.LISTENING))
     }
 
     @Test
-    fun theOffLabelIsNeverMarkedWithAStaleState() {
-        // status lingers at ERROR after a rejected key; the off label is an invitation to
-        // turn captions on, not a report on the session that just died.
-        assertEquals("Russian", toggle(enabled = false, status = TranscriberStatus.ERROR))
+    fun theOffRowIsNeverMarkedWithAStaleState() {
+        // status lingers at ERROR after a rejected key; "No translation" describes a stream
+        // that is not running, and has no state to report.
+        assertEquals("No translation", button(off, TranscriberStatus.ERROR))
+        assertEquals("No translation", button(off, TranscriberStatus.RECONNECTING))
     }
 }

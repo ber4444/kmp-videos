@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import config
 from providers import TranscriptResult, StreamResult
 from scoring.metrics import calculate_and_dump_diff, calculate_streaming_metrics, calculate_translation_fidelity
+from scoring.semantic import comet_enabled, comet_scores, comet_status
 
 
 def _load_translation(kind, clip_id, target_lang):
@@ -18,6 +19,16 @@ def _load_translation(kind, clip_id, target_lang):
         return None
     with open(path, "r") as f:
         return json.load(f).get("text", "")
+
+def _inband_languages():
+    """Language codes with recorded in-band translation, from either variant's fixtures."""
+    langs = set()
+    for base in (config.INBAND_DIR, config.INBAND_NOCONTEXT_DIR, config.INBAND_BATCH_DIR,
+                 config.INBAND_ENDPOINTED_DIR):
+        if os.path.isdir(base):
+            langs.update(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
+    return sorted(langs)
+
 
 def generate_scorecard(allow_unverified: bool = False):
     with open(config.MANIFEST_PATH, 'r') as f:
@@ -36,6 +47,12 @@ def generate_scorecard(allow_unverified: bool = False):
     # Translation fidelity (ASR -> DeepL) results
     target_lang = config.TRANSLATE_TARGET_LANG
     translation_by_provider = defaultdict(list)  # provider -> [{clip_id, metrics}]
+
+    # Soniox in-band translation (what the app ships), per language and variant.
+    # lang -> {"context": [...], "nocontext": [...], "batch": [...], "control": [...],
+    #          "two_stage": [...], "via_deepl_same_engine": [...]}
+    inband_langs = _inband_languages()
+    inband = defaultdict(lambda: defaultdict(list))
     
     for entry in manifest["entries"]:
         clip_id = entry["id"]
@@ -99,6 +116,95 @@ def generate_scorecard(allow_unverified: bool = False):
             if ref_translation is not None and hyp_translation is not None:
                 fidelity = calculate_translation_fidelity(ref_translation, hyp_translation)
                 translation_by_provider[provider].append({"clip_id": clip_id, "metrics": fidelity})
+
+        # Soniox in-band translation, scored per language against the DeepL translation of
+        # the verified reference. Sharing one ideal is necessary for these columns to be
+        # comparable but not sufficient: an arm that is *itself* DeepL output is scored on
+        # resembling its own engine, which is worth ~19 chrF here and has nothing to do
+        # with translation quality. Hence the control and two-stage arms below.
+        for lang in inband_langs:
+            ideal = _load_translation("ref", clip_id, config.deepl_target(lang))
+            if ideal is None:
+                continue
+            for variant, base in (("context", config.INBAND_DIR),
+                                  ("nocontext", config.INBAND_NOCONTEXT_DIR),
+                                  ("endpointed", config.INBAND_ENDPOINTED_DIR)):
+                path = os.path.join(base, lang, f"{clip_id}.json")
+                if not os.path.exists(path):
+                    continue
+                with open(path, "r") as f:
+                    stream = StreamResult(**json.load(f))
+                inband[lang][variant].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, stream.final_text),
+                    # Kept for the endpointing comparison, which is about how the caption
+                    # behaves on screen rather than which words it lands on.
+                    "stream": calculate_streaming_metrics(ref_text, stream),
+                    "session_config": stream.session_config,
+                    # For COMET, which reads the source to tell a mistranslation from a
+                    # rephrasing — the distinction chrF cannot make.
+                    "src": ref_text, "hyp": stream.final_text, "ref": ideal,
+                })
+            # The full-context ceiling: the same model on the same audio, async, so nothing
+            # is committed before the sentence ends.
+            batch_path = os.path.join(config.INBAND_BATCH_DIR, lang, f"{clip_id}.json")
+            if os.path.exists(batch_path):
+                with open(batch_path, "r") as f:
+                    batch_text = TranscriptResult(**json.load(f)).text
+                inband[lang]["batch"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, batch_text),
+                    "src": ref_text, "hyp": batch_text, "ref": ideal,
+                })
+
+            # The different-engine floor: a second engine translating the *verified
+            # reference*. Perfect input, zero ASR error, so everything it scores below 100
+            # is the price of not being the engine that wrote the ideal. Every cross-engine
+            # arm should be read against this, not against 100.
+            control = _load_translation("ref-gemini", clip_id, config.deepl_target(lang))
+            if control is not None:
+                inband[lang]["control"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, control),
+                })
+
+            # The two-stage alternative, scored fairly: a non-DeepL engine translating the
+            # Soniox transcript, carrying the same cross-engine handicap as the in-band arm.
+            # This is the column to read when deciding whether to add a second vendor.
+            two_stage = _load_translation("soniox-gemini", clip_id, config.deepl_target(lang))
+            if two_stage is not None:
+                inband[lang]["two_stage"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, two_stage),
+                    "src": ref_text, "hyp": two_stage, "ref": ideal,
+                })
+
+            # Soniox transcript -> DeepL. Retained because it is what a two-stage path on
+            # DeepL would actually produce, but it is NOT comparable to the arms above: it
+            # is DeepL output scored against a DeepL ideal, so it collects a same-engine
+            # bonus none of the others can. Reported separately and never differenced
+            # against in-band.
+            via_deepl = _load_translation("soniox", clip_id, config.deepl_target(lang))
+            if via_deepl is not None:
+                inband[lang]["via_deepl_same_engine"].append({
+                    "clip_id": clip_id,
+                    "metrics": calculate_translation_fidelity(ideal, via_deepl),
+                })
+
+    # COMET, if the caller opted in. Scored here in one batched pass per arm rather than
+    # per clip inside the loop above: loading the checkpoint is the expensive part, and a
+    # semantic metric is only worth its cost when it can be compared across whole arms.
+    if comet_enabled():
+        for lang, arms in inband.items():
+            for arm, runs in arms.items():
+                scorable = [r for r in runs if "src" in r]
+                if not scorable:
+                    continue
+                scores = comet_scores([r["src"] for r in scorable],
+                                      [r["hyp"] for r in scorable],
+                                      [r["ref"] for r in scorable])
+                for run, score in zip(scorable, scores or []):
+                    run["metrics"]["comet"] = score
 
     # Generate Markdown
     md = []
@@ -207,6 +313,177 @@ def generate_scorecard(allow_unverified: bool = False):
             src_wer = avg_metric(src_runs, "wer_norm") if src_runs else 0.0
             md.append(f"| {p} | {len(runs)} | {chrf:.1f} | {twer:.3f} | {src_wer:.3f} |")
         md.append("\n")
+
+    # Soniox in-band translation — the captions the app actually shows.
+    if inband:
+        md.append("## In-Band Translation Quality (Soniox, per language)\n")
+        md.append("What the player actually renders: Soniox translating on the same socket, "
+                  "streamed and paced in real time, with the app's own session context "
+                  "(domain sentence + glossary, read from `CaptionGlossary.kt`). Every column "
+                  "is chrF against DeepL's translation of the verified reference.\n")
+        md.append("**Read every number against the floor, not against 100.** The ideal is one "
+                  "engine's output, so an arm is scored partly on resembling *that engine* "
+                  "rather than on being a good translation. The **floor** column measures "
+                  "exactly that: a second engine translating the verified reference — perfect "
+                  "input, no ASR error — so whatever it scores below 100 is the price of not "
+                  "being DeepL. Measured at ~68 for Hungarian, i.e. a flawless translation "
+                  "scores 68, not 100.\n")
+        md.append("- **In-band (context)** — what ships today.\n"
+                  "- **In-band (no context)** — same audio, context withheld. The gap is what "
+                  "the glossary and domain sentence are worth for this language.\n"
+                  "- **Batch (full context)** — the same model and context through the async "
+                  "API, which reads the whole clip before answering. **Δ streaming** is the "
+                  "price of committing a translation before the sentence ends, and it is also "
+                  "the ceiling on every latency-buying trick there is: holding the tail, "
+                  "re-translating on sentence end, or the vendor's own endpointing knobs. A "
+                  "small Δ means no client change will move this language.\n"
+                  "- **Two-stage (cross-engine)** — the Soniox transcript translated by a "
+                  "*different* engine than the one that wrote the ideal, so it carries the "
+                  "same handicap as in-band and the two can be subtracted. **This is the "
+                  "column that decides whether a second MT vendor is worth its cost**, and on "
+                  "Hungarian it came out level with in-band, not ahead.\n")
+        md.append("| Target | In-band (context) | In-band (no context) | Δ context | "
+                  "Batch (full context) | Δ streaming | Two-stage (cross-engine) | Δ two-stage | "
+                  "Different-engine floor |")
+        md.append("|---|---|---|---|---|---|---|---|---|")
+
+        def _by_clip(runs):
+            return {r["clip_id"]: r["metrics"]["trans_chrf"] for r in runs}
+
+        def cell(runs):
+            """Mean chrF and the number of clips behind it. The n is per-arm because arms
+            are recorded independently and a half-finished one must not look complete."""
+            if not runs:
+                return "n/a"
+            return f"{avg_metric(runs, 'trans_chrf'):.1f} (n={len(runs)})"
+
+        def paired_delta(better, worse):
+            """Mean per-clip difference over the clips *both* arms recorded.
+
+            Subtracting two means taken over different clip sets compares two different
+            samples and calls it an effect — which is how a 21-clip arm once appeared to
+            beat a 5-clip one by 2.6 points on clips it had never been run against.
+            """
+            a, b = _by_clip(better), _by_clip(worse)
+            shared = sorted(set(a) & set(b))
+            if not shared:
+                return "n/a"
+            mean = sum(a[c] - b[c] for c in shared) / len(shared)
+            return f"{mean:+.1f} (n={len(shared)})"
+
+        for lang in sorted(inband):
+            runs = inband[lang]["context"]
+            no_ctx = inband[lang]["nocontext"]
+            batch = inband[lang]["batch"]
+            two_stage = inband[lang]["two_stage"]
+            control = inband[lang]["control"]
+            if not runs and not no_ctx and not batch:
+                continue
+            md.append(f"| {lang} | {cell(runs)} | {cell(no_ctx)} | "
+                      f"{paired_delta(runs, no_ctx)} | {cell(batch)} | "
+                      f"{paired_delta(batch, runs)} | {cell(two_stage)} | "
+                      f"{paired_delta(two_stage, runs)} | {cell(control)} |")
+        md.append("\nchrF is 0–100, higher is better; it is character-n-gram based, so it does "
+                  "not punish a morphologically rich language for inflecting differently than "
+                  "the reference the way BLEU would. Absolute values are not comparable across "
+                  "languages (a chrF of 55 means different things in Hungarian and Spanish) — "
+                  "the comparisons within a row are. Every Δ is a per-clip mean over the clips "
+                  "both arms recorded, never a difference of two independently-averaged arms.\n")
+
+        # COMET scores meaning rather than surface form, so it does not have the
+        # same-engine bias the control corrects for. Reported when enabled, and explicitly
+        # marked absent when not, so nobody reads a chrF-only table as two metrics agreeing.
+        if comet_enabled():
+            md.append("#### COMET (semantic)\n")
+            md.append("A trained metric that reads the English source, so an equally correct "
+                      "translation phrased differently is not penalised for the wording. It "
+                      "does not carry the same-engine bias the *floor* column corrects for, "
+                      "so where COMET and chrF disagree, prefer COMET.\n")
+            md.append("| Target | In-band (context) | Batch (full context) | Two-stage (cross-engine) |")
+            md.append("|---|---|---|---|")
+
+            def comet_cell(runs):
+                vals = [r["metrics"]["comet"] for r in runs if "comet" in r["metrics"]]
+                return f"{sum(vals)/len(vals):.3f} (n={len(vals)})" if vals else "n/a"
+
+            for lang in sorted(inband):
+                md.append(f"| {lang} | {comet_cell(inband[lang]['context'])} | "
+                          f"{comet_cell(inband[lang]['batch'])} | "
+                          f"{comet_cell(inband[lang]['two_stage'])} |")
+            md.append("")
+        else:
+            md.append(f"*COMET (semantic scoring): {comet_status()}. chrF alone carries a "
+                      "same-engine bias, which is what the floor column is for.*\n")
+
+        # Kept out of the table above on purpose: this arm shares an engine with the ideal.
+        same_engine = {lang: inband[lang]["via_deepl_same_engine"] for lang in sorted(inband)
+                       if inband[lang]["via_deepl_same_engine"]}
+        if same_engine:
+            md.append("### Not comparable: Soniox → DeepL\n")
+            md.append("DeepL translating the Soniox transcript, scored against DeepL's own "
+                      "translation of the reference. Both sides are the same engine and differ "
+                      "only by ASR error, so this collects a same-engine bonus that no other "
+                      "arm can — measured at **+19.4 chrF** on Hungarian by scoring one "
+                      "hypothesis against two different engines' ideals "
+                      "(`scripts/calibrate_metric.py`). It is reported because it is a real "
+                      "path you could ship, and kept out of the table because differencing it "
+                      "against in-band measures engine agreement, not quality. Use the "
+                      "**two-stage (cross-engine)** column for that decision instead.\n")
+            md.append("| Target | Soniox → DeepL chrF |")
+            md.append("|---|---|")
+            for lang, runs in same_engine.items():
+                md.append(f"| {lang} | {cell(runs)} |")
+            md.append("")
+
+        # Endpoint detection, judged on how the caption behaves rather than on its words.
+        endpointed = {lang: inband[lang]["endpointed"] for lang in sorted(inband)
+                      if inband[lang]["endpointed"]}
+        if endpointed:
+            md.append("### Endpoint detection (flicker, not quality)\n")
+            md.append("The same real-time arm with Soniox's `enable_endpoint_detection` on, so "
+                      "it finalizes at utterance boundaries instead of mid-clause. Judged on "
+                      "**flicker** — the fraction of already-displayed characters later "
+                      "rewritten — because the batch arm above already bounds what any "
+                      "latency-buying mechanism can do for the words themselves. Lower flicker "
+                      "is a real improvement to what a viewer sees even when chrF does not "
+                      "move; higher finalization latency is what it costs.\n")
+            md.append("| Target | Flicker (default) | Flicker (endpointed) | Δ flicker | "
+                      "Final latency med (default) | Final latency med (endpointed) | chrF Δ |")
+            md.append("|---|---|---|---|---|---|---|")
+
+            def _stream_by_clip(runs, key):
+                return {r["clip_id"]: r["stream"][key] for r in runs if "stream" in r}
+
+            def _paired_stream(a_runs, b_runs, key, fmt="{:+.3f}"):
+                a, b = _stream_by_clip(a_runs, key), _stream_by_clip(b_runs, key)
+                shared = sorted(set(a) & set(b))
+                if not shared:
+                    return "n/a"
+                return fmt.format(sum(a[c] - b[c] for c in shared) / len(shared)) + f" (n={len(shared)})"
+
+            def _mean_stream(runs, key, fmt="{:.3f}"):
+                vals = [r["stream"][key] for r in runs if "stream" in r]
+                return fmt.format(sum(vals) / len(vals)) if vals else "n/a"
+
+            for lang, runs in endpointed.items():
+                base = inband[lang]["context"]
+                md.append(
+                    f"| {lang} | {_mean_stream(base, 'flicker')} | "
+                    f"{_mean_stream(runs, 'flicker')} | "
+                    f"{_paired_stream(runs, base, 'flicker')} | "
+                    f"{_mean_stream(base, 'final_latency_med_s', '{:.2f}s')} | "
+                    f"{_mean_stream(runs, 'final_latency_med_s', '{:.2f}s')} | "
+                    f"{paired_delta(runs, base)} |")
+
+            # An arm defined by a config field is only evidence if the field was sent and
+            # the vendor acted on it. Identical results may mean "no effect" or may mean
+            # "silently ignored", and those call for different next steps.
+            sent = next((r.get("session_config", {}) for r in next(iter(endpointed.values()))
+                         if r.get("session_config")), {})
+            knobs = {k: v for k, v in sent.items() if "endpoint" in k}
+            md.append(f"\nConfig actually sent: `{knobs or 'none recorded'}`. If the Δ columns "
+                      "are all zero, check this is non-empty before reading it as a negative "
+                      "result — an ignored field and an ineffective one look identical here.\n")
 
     md.append("## Worst 5 Clips by Provider (WER Norm)\n")
     for p in providers:

@@ -33,7 +33,7 @@ private val CaptionLineHeight = 20.sp
  * (open) cue and the most recent finalized cues are shown so the user gets
  * continuous context (a single live line would lose the previous sentence). The
  * overlay is a plain no-op when captions are empty — its visibility is controlled
- * by the caller (shown only while the CC toggle is on, and on Android only while
+ * by the caller (shown only while a caption language is selected, and on Android only while
  * the player controls are hidden, so the two never share the bottom of the frame).
  *
  * The strip is capped at [maxRows] rows so it can never grow into a wall of text

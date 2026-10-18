@@ -4,8 +4,13 @@ package com.livingpresence.inner.circle.squared.transcription
  * The vocabulary of the events, handed to Soniox as session `context` so the model knows the
  * domain before it hears a word of it.
  *
- * Two problems, two sections of the context object:
+ * Three problems, three sections of the context object:
  *
+ * - **Register.** Before any single term, the model has to know what kind of talk this is.
+ *   [DOMAIN] goes into `context.text` as a plain-English sentence naming the subject — the
+ *   Fourth Way, the teaching of Peter Ouspensky — so that words with an everyday meaning and
+ *   a technical one here (*work*, *school*, *centers*, *essence*, *presence*) are heard and
+ *   translated in the sense the speaker means.
  * - **Transcription.** The talks are dense with terms a general model has no reason to
  *   expect — *Influence C*, *the four wordless breaths*, *the cycle of the ninth life*. Left
  *   to guess, the ASR writes the nearest common phrase and the caption reads as nonsense.
@@ -39,6 +44,24 @@ package com.livingpresence.inner.circle.squared.transcription
  * `Alsóbb én` the list already uses.
  */
 internal object CaptionGlossary {
+
+    /**
+     * What the lectures are *about*, sent as the context's free-text `text` block on every
+     * session. It is the same for every recording — the whole library is one subject — so it
+     * is a constant here rather than something the player has to know or pass in.
+     *
+     * The sentence earns its place by disambiguating rather than describing. Most of this
+     * vocabulary is ordinary English used in a technical sense, and a model with no idea what
+     * it is listening to resolves it the ordinary way: *the work* becomes a job, *school*
+     * becomes education, *centers* become buildings, *essence* becomes a gist. Naming the
+     * teaching is a cheaper fix than boosting every such word, and it carries into the
+     * translation too, where the same ambiguity would otherwise be re-introduced.
+     */
+    const val DOMAIN: String =
+        "These recordings are lectures on the Fourth Way, the esoteric teaching of Peter " +
+            "Ouspensky (P. D. Ouspensky). Its vocabulary — self-remembering, the centers, " +
+            "influences, essence and personality, the work, school — is used throughout in " +
+            "that technical sense rather than an everyday one."
 
     /**
      * Terms boosted for transcription, sent as `context.terms` on every session whether or
