@@ -94,15 +94,15 @@ private val SliderThumbRadius = 10.dp
 // through ServiceLoader. Naming it lets R8 see the only engine we use and drop
 // the rest, and removes the need for a keep rule over io.ktor to protect a
 // lookup that happens by reflection.
-actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
+internal actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
 
 
-actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
+internal actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
     defaultAction()
 }
 
 @Composable
-actual fun loginBackgroundModifier(): Modifier {
+internal actual fun loginBackgroundModifier(): Modifier {
     // See HostBridge.backgroundDrawableResId: Compose resources are not packaged
     // for the Android target, so the background comes from the host module's
     // res/drawable instead. The gradient is the fallback for a host that never
@@ -120,7 +120,7 @@ actual fun loginBackgroundModifier(): Modifier {
 }
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {

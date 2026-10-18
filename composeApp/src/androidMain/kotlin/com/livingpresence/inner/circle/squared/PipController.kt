@@ -7,11 +7,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * [MainActivity] so PiP params can use the correct (clamped) aspect ratio and
  * auto-PiP on leave only triggers while actually playing.
  */
-interface PipController {
-    fun updateVideoSize(width: Int, height: Int)
-    fun setPlaying(playing: Boolean)
+public interface PipController {
+    public fun updateVideoSize(width: Int, height: Int)
+    public fun setPlaying(playing: Boolean)
     /** Report the video's on-screen bounds (for the PiP source-rect hint). */
-    fun updateSourceBounds(left: Int, top: Int, right: Int, bottom: Int)
+    public fun updateSourceBounds(left: Int, top: Int, right: Int, bottom: Int)
 }
 
-val LocalPipController = staticCompositionLocalOf<PipController?> { null }
+internal val LocalPipController = staticCompositionLocalOf<PipController?> { null }

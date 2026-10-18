@@ -1,7 +1,7 @@
 package com.livingpresence.inner.circle.squared.transcription
 
 /** Target PCM sample rate the streaming ASR providers require (16 kHz mono s16le). */
-const val TARGET_SAMPLE_RATE_HZ = 16_000
+internal const val TARGET_SAMPLE_RATE_HZ = 16_000
 
 /**
  * Averaging-decimates this mono 16-bit PCM signal from [inRate] to
@@ -13,7 +13,7 @@ const val TARGET_SAMPLE_RATE_HZ = 16_000
  * layout (Core Media float pointer / JS `FloatArray` / Android `ByteBuffer`) is
  * platform-specific; only this rate-conversion + byte-packing is shared.
  */
-fun ShortArray.resampleTo16kMonoS16(inRate: Int): ByteArray {
+internal fun ShortArray.resampleTo16kMonoS16(inRate: Int): ByteArray {
     val outFrames = if (inRate == TARGET_SAMPLE_RATE_HZ) size
         else (size.toLong() * TARGET_SAMPLE_RATE_HZ / inRate).toInt()
     if (outFrames <= 0) return ByteArray(0)

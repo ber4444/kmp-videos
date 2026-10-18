@@ -47,7 +47,7 @@ private class AndroidDiscordSessionStore(context: Context) : DiscordSessionStore
 }
 
 @Composable
-actual fun rememberDiscordSessionStore(): DiscordSessionStore {
+internal actual fun rememberDiscordSessionStore(): DiscordSessionStore {
     val context = LocalContext.current
     return remember(context) { AndroidDiscordSessionStore(context) }
 }

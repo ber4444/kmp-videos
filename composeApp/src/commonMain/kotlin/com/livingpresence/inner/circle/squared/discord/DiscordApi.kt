@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
  * of the `/users/@me` payload is not needed to gate the feed.
  */
 @Serializable
-data class DiscordUser(
+internal data class DiscordUser(
     val id: String,
     val username: String,
     @SerialName("global_name") val globalName: String? = null,
@@ -27,7 +27,7 @@ data class DiscordUser(
 
 /** The token endpoint's response. */
 @Serializable
-data class DiscordAccessToken(
+internal data class DiscordAccessToken(
     @SerialName("access_token") val accessToken: String,
     @SerialName("token_type") val tokenType: String = "Bearer",
     @SerialName("expires_in") val expiresIn: Long = 0,
@@ -40,7 +40,7 @@ data class DiscordAccessToken(
 )
 
 /** A non-2xx response from Discord, carrying the status for the error message. */
-class DiscordApiException(
+internal class DiscordApiException(
     val status: Int,
     message: String,
 ) : Exception(message)
@@ -54,7 +54,7 @@ class DiscordApiException(
  * `DiscordConnectionViewModel.admit` — and the `guilds` scope is still requested
  * so that *it* can ask Discord with the token this exchange returns.
  */
-class DiscordApi(
+internal class DiscordApi(
     private val httpClient: HttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {

@@ -57,7 +57,7 @@ private val ScrimBottom = Color(0xCC000000)
  * @param onConnected Invoked once the account is verified as an Apollo member.
  */
 @Composable
-fun LandingRoute(onConnected: () -> Unit) {
+internal fun LandingRoute(onConnected: () -> Unit) {
     val viewModel = rememberDiscordConnectionViewModel()
     val state by viewModel.state.collectAsState()
     val launchAuthorization = rememberDiscordAuthLauncher()
@@ -131,7 +131,7 @@ private fun rememberDiscordConnectionViewModel(): DiscordConnectionViewModel {
  * @param modifier Layout modifier from the caller.
  */
 @Composable
-fun LandingScreen(
+internal fun LandingScreen(
     state: DiscordConnectionState,
     onConnect: () -> Unit,
     onTryAgain: () -> Unit,

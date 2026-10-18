@@ -10,11 +10,11 @@ import androidx.compose.ui.platform.LocalUriHandler
  * generated from the same client id). Single slash and the `discord-` prefix are
  * both required — Discord's portal rejects any other shape.
  */
-actual fun defaultDiscordRedirectUri(): String =
+internal actual fun defaultDiscordRedirectUri(): String =
     "${discordRedirectScheme(DiscordConfig.clientId)}:/authorize/callback"
 
 @Composable
-actual fun rememberDiscordAuthLauncher(): (String) -> Unit {
+internal actual fun rememberDiscordAuthLauncher(): (String) -> Unit {
     val uriHandler = LocalUriHandler.current
     return remember(uriHandler) { { url -> uriHandler.openUri(url) } }
 }
