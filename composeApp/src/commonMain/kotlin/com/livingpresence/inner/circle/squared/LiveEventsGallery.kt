@@ -62,7 +62,7 @@ import kotlin.math.ceil
  * of tile — [EventInfo.title] and [EventInfo.streamUrl] carry whatever differs.
  */
 @Composable
-fun LiveEventsGallery(
+internal fun LiveEventsGallery(
     events: List<EventInfo>,
     isLoading: Boolean,
     error: String?,

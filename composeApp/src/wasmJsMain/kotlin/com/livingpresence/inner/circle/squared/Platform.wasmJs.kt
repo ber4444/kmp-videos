@@ -34,7 +34,7 @@ import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.RenditionTier
 import androidx.compose.ui.ExperimentalComposeUiApi
 
-actual fun createHttpClient(): HttpClient = HttpClient(Js)
+internal actual fun createHttpClient(): HttpClient = HttpClient(Js)
 
 @JsFun("""
 function attachHls(videoElement, url) {
@@ -56,16 +56,16 @@ function attachHls(videoElement, url) {
     return null;
 }
 """)
-external fun attachHls(videoElement: HTMLVideoElement, url: String): kotlin.js.JsAny?
+internal external fun attachHls(videoElement: HTMLVideoElement, url: String): kotlin.js.JsAny?
 
 @JsFun("function destroyHls(hls) { if (hls) hls.destroy(); }")
-external fun destroyHls(hls: kotlin.js.JsAny?)
+internal external fun destroyHls(hls: kotlin.js.JsAny?)
 
 
 // onEventClick / loginBackgroundModifier are shared with iOS in nonAndroidMain.
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {
@@ -74,7 +74,7 @@ actual fun PlatformPlayerScreen(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-actual fun LiveEventThumbnail(
+internal actual fun LiveEventThumbnail(
     eventNumber: Int,
     streamUrl: String,
     contentDescription: String?,

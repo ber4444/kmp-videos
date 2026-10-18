@@ -25,7 +25,7 @@ import com.livingpresence.mediakit.MediaKitConfig
  * reaching an account that has been admitted, but recordings that need real
  * privacy still want signed URLs or a backend that authorizes each viewer.
  */
-object FeedConfig {
+internal object FeedConfig {
 
     /**
      * Scheme and authority of the stream server, e.g. `https://your-host:443`.

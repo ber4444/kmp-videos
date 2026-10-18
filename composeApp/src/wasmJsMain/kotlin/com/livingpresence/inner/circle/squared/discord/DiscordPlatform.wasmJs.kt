@@ -10,11 +10,11 @@ import kotlinx.browser.window
  * on the Discord application rather than a custom scheme (which a browser tab
  * has no way to land on).
  */
-actual fun defaultDiscordRedirectUri(): String =
+internal actual fun defaultDiscordRedirectUri(): String =
     window.location.origin + window.location.pathname
 
 @Composable
-actual fun rememberDiscordAuthLauncher(): (String) -> Unit = remember {
+internal actual fun rememberDiscordAuthLauncher(): (String) -> Unit = remember {
     // Navigate the current tab rather than opening a popup: the token comes back
     // in this page's fragment, and `Main.kt` reads it on the next load.
     { url -> window.location.href = url }

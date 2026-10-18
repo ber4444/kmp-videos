@@ -13,6 +13,16 @@ plugins {
 }
 
 kotlin {
+    // Everything public here is API: :androidApp compiles against it, and the iOS
+    // framework exports all of it into the Objective-C header Swift imports, which
+    // grows the header and the framework link even for declarations Swift never
+    // calls. Explicit API mode makes every declaration state its visibility, and
+    // only the host entry points are public: HostBridge, PipController,
+    // DiscordConfig, DiscordAuthBroker and TranscriptionSecrets for :androidApp,
+    // mainViewController/handleDeepLink for Swift, and main for wasm. The rest is
+    // internal.
+    explicitApi()
+
     jvmToolchain(17)
 
     android {
@@ -350,7 +360,9 @@ kotlin.sourceSets.named("wasmJsMain") {
 }
 
 compose.resources {
-    publicResClass = true
+    // Internal, like the rest of the module (see explicitApi() above): no other
+    // module reads these resources — :androidApp ships its own res/drawable copy.
+    publicResClass = false
     packageOfResClass = "com.livingpresence.inner.circle.squared.generated.resources"
 }
 

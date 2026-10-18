@@ -49,4 +49,4 @@ private object WasmDiscordSessionStore : DiscordSessionStore {
 }
 
 @Composable
-actual fun rememberDiscordSessionStore(): DiscordSessionStore = remember { WasmDiscordSessionStore }
+internal actual fun rememberDiscordSessionStore(): DiscordSessionStore = remember { WasmDiscordSessionStore }

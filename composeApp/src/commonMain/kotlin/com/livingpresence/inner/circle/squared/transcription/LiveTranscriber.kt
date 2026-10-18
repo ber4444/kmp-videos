@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
  * This is the piece the Android `CaptionAudioRouter` and the iOS/web taps all reuse —
  * only the audio capture differs per platform.
  */
-class LiveTranscriber(
+internal class LiveTranscriber(
     /**
      * Where session keys come from. Defaulted rather than injected at the call site
      * because the only production caller is a process singleton

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Message shown when the account is not a member of the Apollo guild. */
-const val NOT_ON_APOLLO_MESSAGE: String = "User must be on the Apollo server"
+internal const val NOT_ON_APOLLO_MESSAGE: String = "User must be on the Apollo server"
 
 /**
  * What `:server` said about an account presenting a token.
@@ -19,7 +19,7 @@ const val NOT_ON_APOLLO_MESSAGE: String = "User must be on the Apollo server"
  * launch — locking them out of an app they are still entitled to use, and
  * requiring a fresh consent screen to get back in.
  */
-enum class DiscordAdmission { ADMITTED, REFUSED, UNKNOWN }
+internal enum class DiscordAdmission { ADMITTED, REFUSED, UNKNOWN }
 
 private const val NOT_CONFIGURED_MESSAGE =
     "Discord sign-in is not configured for this build."
@@ -29,7 +29,7 @@ private const val UNREACHABLE_MESSAGE =
     "Could not reach Discord. Check your connection and try again."
 
 /** Where the landing screen's Discord gate currently stands. */
-sealed interface DiscordConnectionState {
+internal sealed interface DiscordConnectionState {
 
     /** Nothing started yet — the connect button is showing. */
     data object Disconnected : DiscordConnectionState
@@ -61,7 +61,7 @@ sealed interface DiscordConnectionState {
  * the URL to open from [beginConnect] and is fed redirects through [onRedirect],
  * so all platform plumbing stays at the edges.
  */
-class DiscordConnectionViewModel(
+internal class DiscordConnectionViewModel(
     private val api: DiscordApi,
     private val sessionStore: DiscordSessionStore = NoOpDiscordSessionStore,
     private val broker: DiscordAuthBroker = DiscordAuthBroker,

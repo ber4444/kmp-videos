@@ -44,7 +44,7 @@ import kotlinx.serialization.json.Json
  * docs (see docs/live-captions-plan.md) — they change and this hasn't been run against
  * the live service.
  */
-class SonioxClient(
+internal class SonioxClient(
     apiKey: suspend () -> String,
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),

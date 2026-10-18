@@ -12,7 +12,7 @@ package com.livingpresence.inner.circle.squared.transcription
  *   Captions are always English: its streaming API has no translation, and adding one
  *   would mean a second service between the socket and the overlay.
  */
-enum class TranscriptionProvider(val label: String) {
+internal enum class TranscriptionProvider(val label: String) {
     DEEPGRAM("Deepgram"),
     SONIOX("Soniox");
 }

@@ -14,7 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlin.coroutines.coroutineContext
 
 /** A live websocket the caller sends handshake / audio / keep-alive frames through. */
-interface WsSession {
+internal interface WsSession {
     suspend fun sendBinary(bytes: ByteArray)
     suspend fun sendText(text: String)
 

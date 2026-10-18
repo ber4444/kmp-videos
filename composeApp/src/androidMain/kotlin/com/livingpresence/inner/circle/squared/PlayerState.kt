@@ -16,14 +16,14 @@ import androidx.media3.common.VideoSize
 import kotlinx.coroutines.delay
 
 /** How the video frame is fitted into the player surface. */
-enum class ResizeMode { FIT, FILL, ZOOM }
+internal enum class ResizeMode { FIT, FILL, ZOOM }
 
 /**
  * The snapshot of player state the UI renders from. Hoisted out of the
  * composable so [PlatformPlayerScreen] stays declarative and the state is
  * unit-testable with a fake player.
  */
-class PlayerState(initial: Player? = null) {
+internal class PlayerState(initial: Player? = null) {
     var currentPosition by mutableLongStateOf(0L)
         internal set
     var duration by mutableLongStateOf(0L)
@@ -96,7 +96,7 @@ class PlayerState(initial: Player? = null) {
  * everything *except* smooth position updates, which need polling).
  */
 @Composable
-fun rememberPlayerState(player: Player?, pollIntervalMs: Long = 500L): PlayerState {
+internal fun rememberPlayerState(player: Player?, pollIntervalMs: Long = 500L): PlayerState {
     val state = remember(player) { PlayerState(player) }
 
     DisposableEffect(player) {

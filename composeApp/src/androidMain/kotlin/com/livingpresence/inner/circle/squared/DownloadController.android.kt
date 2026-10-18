@@ -38,7 +38,7 @@ private const val PROGRESS_POLL_MS = 500L
  * would pile up listeners and progress pollers that nothing ever cancels.
  */
 @UnstableApi
-class AndroidDownloadController private constructor(
+internal class AndroidDownloadController private constructor(
     context: Context,
 ) : DownloadController {
     override val isSupported: Boolean = true
@@ -217,7 +217,7 @@ private class NotificationPromptingDownloadController(
 
 /** Remembers the process-wide [AndroidDownloadController]. */
 @Composable
-actual fun rememberDownloadController(): DownloadController {
+internal actual fun rememberDownloadController(): DownloadController {
     val context = androidx.compose.ui.platform.LocalContext.current
     val delegate = remember { AndroidDownloadController.get(context) }
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return delegate
