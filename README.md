@@ -30,6 +30,9 @@ It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
 - **Live & recorded playback.** Live-vs-VOD is inferred from playlist inspection;
   live events expose a LIVE badge and jump-to-live, and the seek bar tracks a
   growing Wowza nDVR window without drift.
+- **Android playback gestures.** Double-tap the left or right side of the video
+  to skip backward or forward. Hold a playing, seekable video to watch at 2×
+  until you release.
 - **Thumbnail feed with scrub preview.** Poster tiles and a scrub-preview bubble 
   are powered by an ExoPlayer frame engine on Android, and native `AVAssetImageGenerator` 
   on iOS, avoiding the overhead of N full per-tile players.
