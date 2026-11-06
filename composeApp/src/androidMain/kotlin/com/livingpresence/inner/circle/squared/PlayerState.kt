@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.media3.common.C
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import kotlinx.coroutines.delay
@@ -23,7 +22,7 @@ internal enum class ResizeMode { FIT, FILL, ZOOM }
  * composable so [PlatformPlayerScreen] stays declarative and the state is
  * unit-testable with a fake player.
  */
-internal class PlayerState(initial: Player? = null) {
+internal class PlayerState {
     var currentPosition by mutableLongStateOf(0L)
         internal set
     var duration by mutableLongStateOf(0L)
@@ -35,8 +34,6 @@ internal class PlayerState(initial: Player? = null) {
     var isPlaying by mutableStateOf(false)
         internal set
     var isBuffering by mutableStateOf(false)
-        internal set
-    var playbackError by mutableStateOf<PlaybackException?>(null)
         internal set
     var videoSize by mutableStateOf(VideoSize.UNKNOWN)
         internal set
@@ -51,12 +48,9 @@ internal class PlayerState(initial: Player? = null) {
 
     var resizeMode by mutableStateOf(ResizeMode.FIT)
 
-    val isReady: Boolean
-        get() = firstFrameRendered && playbackError == null
-
-    /** Tracks the player via [Player.Listener], updating this state in place. */
-    internal fun bind(player: Player) {
-        player.addListener(object : Player.Listener {
+    /** Tracks the player via [Player.Listener]. The caller removes it when unbinding. */
+    internal fun bind(player: Player): Player.Listener {
+        val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
                 isSeekable = player.isCurrentMediaItemSeekable
                 isLive = player.isCurrentMediaItemLive
@@ -72,21 +66,9 @@ internal class PlayerState(initial: Player? = null) {
                     firstFrameRendered = true
                 }
             }
-
-            override fun onPlayerError(error: PlaybackException) {
-                playbackError = error
-            }
-
-            /**
-             * Also observed so the error *clears*: `onPlayerError` only ever
-             * fires with a failure, so without this the error overlay would
-             * outlive the failure it describes and a successful retry would
-             * leave the user staring at it.
-             */
-            override fun onPlayerErrorChanged(error: PlaybackException?) {
-                playbackError = error
-            }
-        })
+        }
+        player.addListener(listener)
+        return listener
     }
 }
 
@@ -97,11 +79,13 @@ internal class PlayerState(initial: Player? = null) {
  */
 @Composable
 internal fun rememberPlayerState(player: Player?, pollIntervalMs: Long = 500L): PlayerState {
-    val state = remember(player) { PlayerState(player) }
+    val state = remember(player) { PlayerState() }
 
     DisposableEffect(player) {
-        if (player != null) state.bind(player)
-        onDispose { /* listener is tied to the remembered state's lifetime */ }
+        val listener = player?.let(state::bind)
+        onDispose {
+            if (listener != null) player.removeListener(listener)
+        }
     }
 
     // Smooth position/duration polling — the listener handles discrete events.
