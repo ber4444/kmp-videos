@@ -24,7 +24,11 @@ android {
         // no longer supports Marshmallow, and the manifest merger refuses the mismatch.
         minSdk = 24
         targetSdk = 36
-        versionCode = 7016
+        // The checked-in value is the floor for local builds. codemagic.yaml's
+        // android-release workflow overrides it with -PversionCode=<highest on
+        // Play + 1>, looked up at build time, so a scheduled build never collides
+        // with the last upload and nobody has to bump this by hand each week.
+        versionCode = providers.gradleProperty("versionCode").map(String::toInt).getOrElse(7016)
         versionName = "8.1.4"
     }
 

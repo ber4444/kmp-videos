@@ -260,18 +260,44 @@ switching is needed.
 
 #### Codemagic CI/CD
 
-`codemagic.yaml` in the project root defines an *iOS Release → TestFlight*
-workflow that reconstructs `secrets.properties` from Codemagic environment
-variables, builds the release framework, generates the Xcode project, archives,
-exports, and uploads to TestFlight. Configure these in the Codemagic dashboard:
+Store builds run on [Codemagic](https://codemagic.io/). `codemagic.yaml` in the
+project root defines two workflows, meant to run **weekly** from the
+dashboard's *Scheduled builds* tab (Codemagic has no schedule syntax in the
+YAML): one schedule per workflow, branch `main`, a weekday and a UTC time.
 
-- **App Store Connect API key** — linked as an integration named "Apollo Videos"
-- **Environment group `app_secrets`** — `SONIOX_TOKEN_URL`, `DISCORD_CLIENT_ID`,
-  `APOLLO_GUILD_ID`. Not `SONIOX_API_KEY`, and no longer `STREAM_HOST` or
-  `EXTRA_VIDEOS_URL`: these values reach `Info.plist`, which ships in cleartext
-  inside the IPA. The stream addresses are `fly secrets` on `:server` now.
+| Workflow | Builds | Ships to |
+| --- | --- | --- |
+| `android-release` | `:androidApp:bundleRelease`, signed with the Play upload key | Google Play, `internal` track (`GOOGLE_PLAY_TRACK` to change) |
+| `ios-release` | release framework → `xcodegen` → archive → IPA | TestFlight, *Internal Testing* group (also on every push to `main`) |
 
-Code signing is automatic: the workflow calls `app-store-connect
+Neither workflow needs a version bump between runs. Each asks its store for the
+highest build number it already holds and ships that + 1: Android through
+`-PversionCode=` (the value in `androidApp/build.gradle.kts` is only the floor
+for local builds), iOS through `CURRENT_PROJECT_VERSION`, which `project.yml`
+wires into `CFBundleVersion`. The user-visible version strings (`versionName`,
+`MARKETING_VERSION`) are still bumped by hand when a release deserves one.
+
+Dashboard-side configuration the workflows depend on:
+
+- **App Store Connect API key** — linked as an integration named "Apollo Videos".
+  Also used to look up the next build number; the app's numeric Apple ID is
+  resolved from the bundle id, or set `APP_APPLE_ID` in `app_secrets` to skip that.
+- **Environment group `app_secrets`** — `SONIOX_TOKEN_URL`, `DISCORD_CLIENT_ID`.
+  Both workflows refuse to build without `DISCORD_CLIENT_ID`, because an empty
+  value ships with the Apollo gate disabled. Not `SONIOX_API_KEY`, and no
+  longer `STREAM_HOST`, `EXTRA_VIDEOS_URL` or `APOLLO_GUILD_ID`: these values
+  reach `Info.plist` and `BuildConfig`, which ship in cleartext. The addresses
+  and the guild id are `fly secrets` on `:server` now.
+- **Environment group `google_play`** — `GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS`
+  (marked *Secret*): the JSON key of a Play Console service account with release
+  permission on the app. Play requires the very first bundle of an app to be
+  uploaded by hand; after that the workflow publishes on its own.
+- **Android keystore** — the Play upload keystore, uploaded under *Team
+  settings → Code signing identities → Android* with the reference name
+  `apollo_videos_upload_key`. The workflow writes it into `~/key.properties`,
+  the same file a developer machine uses (see *Release signing* above).
+
+iOS code signing is automatic: the workflow calls `app-store-connect
 fetch-signing-files` to provision the certificate and profile on every build.
 
 > **Compose resources note (iOS).** Because the Xcode target links a *prebuilt*

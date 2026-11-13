@@ -53,6 +53,14 @@ cd iosApp && xcodegen generate && xcodebuild -project ICSApp.xcodeproj -scheme I
 ./gradlew :mediakit:dokkaGenerateHtml
 ```
 
+Store builds are not in GitHub Actions: `codemagic.yaml` holds an
+`android-release` (Play internal track) and an `ios-release` (TestFlight)
+workflow, scheduled weekly from the Codemagic dashboard. Both look up the next
+build number from the store at build time, so don't bump `versionCode` or
+`CURRENT_PROJECT_VERSION` for them; bump only the user-visible `versionName` /
+`MARKETING_VERSION`. The README's "Codemagic CI/CD" section lists the
+dashboard-side pieces (variable groups, keystore reference, ASC integration).
+
 The Robolectric suites live in `composeApp/src/androidHostTest`. CI runs on Linux,
 so iOS tasks are disabled there and nothing in CI compiles Kotlin/Native. If you
 touch `iosMain`, Swift, or the cinterop, build the iOS framework locally.
