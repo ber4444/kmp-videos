@@ -67,14 +67,21 @@ workflows:
           keyPassword=$CM_KEY_PASSWORD
           EOF
 
-      # compileSdk 37 may be newer than the image. AGP would fetch it on demand,
-      # but doing it here keeps the failure mode readable if the SDK mirror is
-      # down, and mirrors .github/workflows/build.yml.
+      # compileSdk 37 may be newer than the image. Use the SDK's own executable
+      # because Codemagic's macOS image may leave it off PATH.
       - name: Install Android SDK packages
         script: |
           set -euo pipefail
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0"
+          sdk_root="${ANDROID_SDK_ROOT:?Codemagic did not set ANDROID_SDK_ROOT}"
+          sdkmanager="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdkmanager" ]; then
+            echo "Android SDK Manager is missing or not executable: $sdkmanager" >&2
+            exit 1
+          fi
+          # Ignore SIGPIPE from yes when sdkmanager finishes reading prompts.
+          (set +o pipefail; yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses > /dev/null)
+          "$sdkmanager" --sdk_root="$sdk_root" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          printf 'sdk.dir=%s\n' "$sdk_root" > "$CM_BUILD_DIR/local.properties"
 
       # Play rejects a bundle whose versionCode is not higher than every one it
       # holds, on any track. Ask it, rather than keeping a counter in the repo
