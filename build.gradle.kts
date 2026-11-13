@@ -118,11 +118,12 @@ plugins.withType<org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin> {
 }
 
 tasks.register("testClasses") {
-    // This task is an empty placeholder because CodeQL autobuilder hardcodes `testClasses`.
-    // It's already defined for subprojects, so creating it in root project satisfies CodeQL if it runs it at root.
-    dependsOn(subprojects.map { it.tasks.matching { t -> t.name == "testClasses" } })
-    subprojects {
-        val subproject = this
-        this@register.dependsOn(subproject.tasks.matching { it.name.startsWith("compile") && it.name.contains("Kotlin") })
+    // Inspect registered names without realizing every task. AGP's unrelated
+    // Compose Preview tasks require Android resources in unit tests when configured.
+    subprojects.forEach { subproject ->
+        val tasks = subproject.tasks
+        dependsOn(tasks.names.filter { name ->
+            name == "testClasses" || (name.startsWith("compile") && name.contains("Kotlin"))
+        }.map { tasks.named(it) })
     }
 }
