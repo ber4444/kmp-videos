@@ -97,10 +97,10 @@ $dokka.location:com.livingpresence.mediakit/RenditionTier.P160///PointingToDecla
 $dokka.location:com.livingpresence.mediakit/RenditionTier.P360///PointingToDeclaration/{"org.jetbrains.dokka.links.EnumEntryDRIExtra":{"key":"org.jetbrains.dokka.links.EnumEntryDRIExtra"}}mediakit/com.livingpresence.mediakit/-rendition-tier/-p360/index.html
 $dokka.location:com.livingpresence.mediakit/RenditionTier.P720///PointingToDeclaration/{"org.jetbrains.dokka.links.EnumEntryDRIExtra":{"key":"org.jetbrains.dokka.links.EnumEntryDRIExtra"}}mediakit/com.livingpresence.mediakit/-rendition-tier/-p720/index.html
 $dokka.location:com.livingpresence.mediakit/RenditionTier///PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/index.html
-$dokka.location:com.livingpresence.mediakit/RenditionTier/entries/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/entries.html
+$dokka.location:com.livingpresence.mediakit/RenditionTier/entries/#/companion/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/entries.html
 $dokka.location:com.livingpresence.mediakit/RenditionTier/urlSuffix/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/url-suffix.html
-$dokka.location:com.livingpresence.mediakit/RenditionTier/valueOf/#kotlin.String/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/value-of.html
-$dokka.location:com.livingpresence.mediakit/RenditionTier/values/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/values.html
+$dokka.location:com.livingpresence.mediakit/RenditionTier/valueOf/#kotlin.String/companion/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/value-of.html
+$dokka.location:com.livingpresence.mediakit/RenditionTier/values/#/companion/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-rendition-tier/values.html
 $dokka.location:com.livingpresence.mediakit/ResolvedLadder///PointingToDeclaration/mediakit/com.livingpresence.mediakit/-resolved-ladder/index.html
 $dokka.location:com.livingpresence.mediakit/ResolvedLadder/ResolvedLadder/#kotlin.String#kotlin.collections.List[com.livingpresence.mediakit.ProbedRendition]/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-resolved-ladder/-resolved-ladder.html
 $dokka.location:com.livingpresence.mediakit/ResolvedLadder/masterPlaylistText/#/PointingToDeclaration/mediakit/com.livingpresence.mediakit/-resolved-ladder/master-playlist-text.html
