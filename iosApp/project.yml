@@ -62,6 +62,13 @@ targets:
         # build number already on App Store Connect and passes +1 to xcodebuild.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Answers App Store Connect's export-compliance question at upload time.
+        # Without it every build lands flagged "Missing Compliance" and has to be
+        # answered by hand before it can be attached to a version — once per
+        # build, forever. The only cryptography here is the OS's own HTTPS/TLS
+        # and the SHA-256 of the PKCE challenge, both of which are exempt, so
+        # there is no French encryption declaration to make either.
+        ITSAppUsesNonExemptEncryption: false
         # The home-screen and Settings name. CFBundleName still follows
         # PRODUCT_NAME (ICSApp), which is what the target, the .app and the
         # README's xcodebuild commands are keyed to; CFBundleDisplayName is the
