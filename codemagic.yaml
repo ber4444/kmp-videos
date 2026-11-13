@@ -35,7 +35,7 @@ definitions:
 workflows:
   android-release:
     name: Android Release → Google Play
-    instance_type: linux_x2
+    instance_type: linux
     max_build_duration: 60
     environment:
       groups:
