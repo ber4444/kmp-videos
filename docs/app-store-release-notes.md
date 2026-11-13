@@ -29,8 +29,8 @@ hand-editing `Info.plist` survives exactly until the next build.
 |---|---|---|---|
 | `ITSAppUsesNonExemptEncryption` | `project.yml` → `info.properties` | `false` | See below |
 | `PrivacyInfo.xcprivacy` | `iosApp/ics_ios/` | declares `NSUserDefaults` | See below |
-| `CFBundleShortVersionString` | `project.yml` | `1.2` | The public version number |
-| `CFBundleVersion` | `project.yml` | `3` | Must be higher than the last build ASC accepted |
+| `CFBundleShortVersionString` | `project.yml` → `MARKETING_VERSION` | `1.2` | The public version number; bumped by hand when a release deserves one |
+| `CFBundleVersion` | `project.yml` → `CURRENT_PROJECT_VERSION` | `3`, overridden in CI | Must be higher than the last build ASC accepted. `codemagic.yaml` asks ASC for the highest build number and passes +1 to xcodebuild; the value in `project.yml` is only the floor for local archives |
 | `PRODUCT_BUNDLE_IDENTIFIER` | `project.yml` | `com.livingpresence.inner.circle.squared` | Must equal the ASC record and `codemagic.yaml`'s `ios_signing` |
 | `TARGETED_DEVICE_FAMILY` | `project.yml` | `1,2` — iPhone **and iPad** | A decision; see below |
 | `IPHONEOS_DEPLOYMENT_TARGET` | `project.yml` | `16.0` | Drives the "Compatibility" line on the listing |
@@ -484,7 +484,8 @@ Shoot them from the demo account (section 3).
 - [ ] `PrivacyInfo.xcprivacy` verified present in the IPA with `unzip -l`
 - [ ] `PrivacyInfo.xcprivacy` still lists every required-reason API the iOS source
       reaches, if either `DiscordSession.ios.kt` or `PreviewFrameEngine.ios.kt` changed
-- [ ] `CFBundleShortVersionString` / `CFBundleVersion` bumped in `project.yml`
+- [ ] `MARKETING_VERSION` bumped in `project.yml` if this release deserves a new
+      public version; the build number comes from Codemagic, not the repo
 - [ ] iPad decision made — universal with 13" screenshots, or `TARGETED_DEVICE_FAMILY: "1"`
 - [ ] Build installed from TestFlight on a real iPhone *and*, if universal, a real iPad
 - [ ] Demo account verified end-to-end on that build, on a device that has never signed in
