@@ -13,14 +13,14 @@ import kotlinx.coroutines.launch
 
 private const val DEFAULT_VIDEO_LOAD_ERROR = "Unable to load videos"
 
-data class MainUiState(
+internal data class MainUiState(
     val isGalleryVisible: Boolean = true,
     val availableEvents: List<EventInfo> = emptyList(),
     val isLoadingVideos: Boolean = false,
     val videoLoadError: String? = null,
 )
 
-class MainViewModel(
+internal class MainViewModel(
     private val videoRepository: VideoRepository,
 ) : ViewModel() {
 

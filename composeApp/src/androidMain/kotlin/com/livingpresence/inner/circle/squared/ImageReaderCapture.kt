@@ -30,7 +30,7 @@ import kotlin.coroutines.resume
  * @param width  Capture width (px).
  * @param height Capture height (px).
  */
-class ImageReaderCapture(width: Int, height: Int) {
+internal class ImageReaderCapture(width: Int, height: Int) {
 
     private val handlerThread = HandlerThread("FrameCapture").apply { start() }
     private val handler = Handler(handlerThread.looper)

@@ -14,9 +14,6 @@ updates:
     # jackson is no longer suppressed here. Dokka 2.2.0 dropped the jackson 2.12.x pin (and the
     # TypeFactory(LRUMap) call removed in jackson 2.16) that previously made those advisories
     # unfixable, so build.gradle.kts now forces the patched 2.18.x on every classpath.
-    ignore:
-      - dependency-name: "org.jetbrains.kotlin*"
-        versions: ["2.4.10"]
 
   # GitHub Actions used by the CI workflows (checkout, setup-java, codeql, etc.).
   - package-ecosystem: "github-actions"

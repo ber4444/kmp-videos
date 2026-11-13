@@ -31,7 +31,7 @@ import kotlinx.coroutines.sync.withLock
  * than injected at construction: their addresses are not known until an account
  * has connected.
  */
-open class VideoRepository(
+internal open class VideoRepository(
     private val httpClient: HttpClient,
     private val policyClient: FeedPolicyClient? = null,
 ) {
@@ -116,4 +116,4 @@ open class VideoRepository(
  * Distinct from an empty feed on purpose: the gallery renders this as a failure
  * with a retry, where an empty list would claim there is nothing to see.
  */
-class FeedUnavailableException : Exception("Could not reach the feed service. Check your connection.")
+internal class FeedUnavailableException : Exception("Could not reach the feed service. Check your connection.")

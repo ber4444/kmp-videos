@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.update
  * Written by a single websocket receive loop per client; [MutableStateFlow.update]
  * keeps mutations atomic without a JVM-only lock (so it stays `commonMain`-safe).
  */
-class CaptionAccumulator(private val maxCues: Int = MAX_CUES) {
+internal class CaptionAccumulator(private val maxCues: Int = MAX_CUES) {
     private val _captions = MutableStateFlow<List<CaptionCue>>(emptyList())
     val captions: StateFlow<List<CaptionCue>> = _captions.asStateFlow()
 

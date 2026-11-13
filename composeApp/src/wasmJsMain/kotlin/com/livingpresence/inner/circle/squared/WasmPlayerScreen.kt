@@ -151,7 +151,7 @@ function getBufferedAfter(video) {
 internal external fun getBufferedAfter(video: kotlin.js.JsAny): Double
 
 @Composable
-fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
+internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     val eventNumber = parseEventNumber(url)
     val scope = rememberCoroutineScope()
     val httpClient = remember { HttpClient(Js) }

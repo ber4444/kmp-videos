@@ -24,7 +24,7 @@ import androidx.media3.session.MediaSessionService
  * player reads it via [DataSchemeDataSource] so genuine ABR keeps working under
  * service ownership.
  */
-class PlaybackService : MediaSessionService() {
+internal class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
 

@@ -45,7 +45,7 @@ private const val DOWNLOAD_CONTENT_DIR = "media_downloads"
  * unmet the UI reports [DownloadState.WAITING] rather than a silent 0%.
  */
 @UnstableApi
-class DownloadCenter private constructor(
+internal class DownloadCenter private constructor(
     private val context: Context,
     val config: MediaKitConfig,
     internal val downloadManager: DownloadManager,

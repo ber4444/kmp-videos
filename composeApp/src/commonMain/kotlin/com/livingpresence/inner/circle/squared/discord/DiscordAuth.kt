@@ -18,7 +18,7 @@ import kotlin.random.Random
  * confidential has to ship in the binary. The Discord application must have the
  * public-client flag set for the secret-less exchange to be accepted.
  */
-object DiscordAuth {
+internal object DiscordAuth {
 
     private const val AUTHORIZE_ENDPOINT = "https://discord.com/oauth2/authorize"
     private const val STATE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -151,7 +151,7 @@ object DiscordAuth {
 }
 
 /** The three shapes a Discord redirect can take. */
-sealed interface DiscordRedirect {
+internal sealed interface DiscordRedirect {
 
     /** Authorization succeeded; [code] is exchangeable for an access token. */
     data class Code(

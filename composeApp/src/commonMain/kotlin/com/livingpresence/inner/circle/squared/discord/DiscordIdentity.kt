@@ -23,7 +23,7 @@ import kotlin.concurrent.Volatile
  * captions are for Apollo members, and a build that cannot identify anyone cannot
  * have them.
  */
-object DiscordIdentity {
+internal object DiscordIdentity {
 
     @Volatile
     private var token: String = ""

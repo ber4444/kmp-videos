@@ -26,7 +26,7 @@ import com.livingpresence.mediakit.MediaKitConfig
  * in the meantime.
  */
 @Composable
-fun rememberPlaybackController(context: Context): MediaController? {
+internal fun rememberPlaybackController(context: Context): MediaController? {
     var controller by remember { mutableStateOf<MediaController?>(null) }
 
     DisposableEffect(context) {

@@ -8,8 +8,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +66,7 @@ import androidx.media3.exoplayer.hls.playlist.HlsPlaylistTracker
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
+import androidx.media3.ui.compose.state.rememberErrorState
 import com.livingpresence.mediakit.LadderResolver
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.ProbedRendition
@@ -94,15 +94,15 @@ private val SliderThumbRadius = 10.dp
 // through ServiceLoader. Naming it lets R8 see the only engine we use and drop
 // the rest, and removes the need for a keep rule over io.ktor to protect a
 // lookup that happens by reflection.
-actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
+internal actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
 
 
-actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
+internal actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
     defaultAction()
 }
 
 @Composable
-actual fun loginBackgroundModifier(): Modifier {
+internal actual fun loginBackgroundModifier(): Modifier {
     // See HostBridge.backgroundDrawableResId: Compose resources are not packaged
     // for the Android target, so the background comes from the host module's
     // res/drawable instead. The gradient is the fallback for a host that never
@@ -120,7 +120,7 @@ actual fun loginBackgroundModifier(): Modifier {
 }
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {
@@ -192,7 +192,6 @@ private fun ExoPlayerScreen(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val videoTapInteractionSource = remember { MutableInteractionSource() }
 
     /**
      * Leaving the player *on purpose* ends playback; merely backgrounding the app
@@ -371,7 +370,7 @@ private fun ExoPlayerScreen(
     // cuts the stream to ~51 kbps. On return to foreground, restore video.
     BackgroundAudioPolicy(player = player, isVideoVisible = !HostBridge.inPipState.value)
 
-    val playbackError = state.playbackError
+    val playbackError = rememberErrorState(player).error
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -389,12 +388,7 @@ private fun ExoPlayerScreen(
             )
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = videoTapInteractionSource,
-                        indication = null,
-                    ) { showVideoControls = !showVideoControls },
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
@@ -418,6 +412,16 @@ private fun ExoPlayerScreen(
                         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
                         modifier = Modifier.fillMaxSize(),
                     )
+                }
+
+                if (!HostBridge.inPipState.value && playbackError == null) {
+                    key(resolvedMediaItemUri, reloadToken) {
+                        PlaybackGestures(
+                            player = player,
+                            onToggleControls = { showVideoControls = !showVideoControls },
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
                 }
 
                 // Buffering spinner while the first frame hasn't rendered.
@@ -685,10 +689,12 @@ private fun PlayerErrorOverlay(
     onClose: () -> Unit,
 ) {
     val liveStreamOver = error.isLiveStreamOver
-    if (liveStreamOver) {
-        Log.i(APP_TAG, "Live playlist stopped updating; the event has most likely ended.")
-    } else {
-        Log.e(APP_TAG, "Playback error", error)
+    LaunchedEffect(error) {
+        if (liveStreamOver) {
+            Log.i(APP_TAG, "Live playlist stopped updating; the event has most likely ended.")
+        } else {
+            Log.e(APP_TAG, "Playback error", error)
+        }
     }
     Column(
         modifier = Modifier

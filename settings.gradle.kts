@@ -7,11 +7,11 @@ pluginManagement {
     }
 
     plugins {
-        id("com.android.application") version "9.4.0"
-        id("org.jetbrains.kotlin.android") version "2.4.10"
-        id("org.jetbrains.kotlin.multiplatform") version "2.4.10"
-        id("org.jetbrains.kotlin.plugin.compose") version "2.4.10"
-        id("org.jetbrains.compose") version "1.12.0"
+        id("com.android.application") version "9.5.1"
+        id("org.jetbrains.kotlin.android") version "2.4.21"
+        id("org.jetbrains.kotlin.multiplatform") version "2.4.21"
+        id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
+        id("org.jetbrains.compose") version "1.12.2"
     }
 }
 
@@ -27,10 +27,14 @@ buildscript {
     configurations.all {
         resolutionStrategy.eachDependency {
             when {
-                requested.group == "io.netty" -> useVersion("4.1.137.Final")
-                requested.group == "org.bouncycastle" -> useVersion("1.84")
-                requested.group == "org.jsoup" -> useVersion("1.23.1")
-                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.10")
+                // Only the 4.1 line — see the note in build.gradle.kts: forcing a 4.2.x
+                // request down to 4.1.137 asks for artifacts that line never published.
+                requested.group == "io.netty" ->
+                    if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
+                requested.group == "org.bouncycastle" -> useVersion("1.85")
+                requested.group == "org.jsoup" -> useVersion("1.23.2")
+                requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.11")
+                requested.group == "org.freemarker" -> useVersion("2.3.35")
                 requested.group == "com.google.protobuf" ->
                     if (requested.name != "protobuf-bom") useVersion("3.25.5")
                 requested.group == "org.apache.commons" ->

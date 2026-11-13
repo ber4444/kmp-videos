@@ -1,4 +1,114 @@
+# Store builds run on Codemagic. Two workflows, one per store, both meant to run
+# on a weekly schedule.
+#
+# Codemagic has no schedule syntax in this file: the cadence is set in the
+# dashboard under the app's "Scheduled builds" tab (branch main, one workflow
+# per schedule, a weekday and a UTC time). Builds started that way are labelled
+# "Schedule" in the build list. The README's "Codemagic CI/CD" section lists
+# every dashboard-side piece these workflows rely on.
+#
+# Neither workflow bumps a version by hand. Each asks its store for the highest
+# build number it already has and ships that + 1, so a scheduled build never
+# collides with the previous week's and nothing in the repo needs editing
+# between releases. The user-visible version strings (versionName in
+# androidApp/build.gradle.kts, MARKETING_VERSION in iosApp/project.yml) are
+# still bumped by hand when a release deserves a new one.
+
+definitions:
+  # Shared by both workflows. The app reads these out of the binary at runtime
+  # (BuildConfig on Android, Info.plist on iOS), which is exactly why only
+  # non-credentials may be here: a value in this file is a value in the
+  # published app. The Soniox key and the stream addresses live in :server.
+  write_secrets: &write_secrets
+    name: Write secrets.properties
+    script: |
+      set -euo pipefail
+      # A store build without the Discord client id ships with the Apollo gate
+      # disabled, which is not a build anyone meant to publish. Fail here rather
+      # than discover it in TestFlight or on the internal track.
+      : "${DISCORD_CLIENT_ID:?DISCORD_CLIENT_ID is not set in the app_secrets variable group}"
+      cat <<EOF > "$CM_BUILD_DIR/secrets.properties"
+      SONIOX_TOKEN_URL=${SONIOX_TOKEN_URL:-}
+      DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      EOF
+
 workflows:
+  android-release:
+    name: Android Release → Google Play
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      groups:
+        - app_secrets                        # SONIOX_TOKEN_URL, DISCORD_CLIENT_ID
+        - google_play                        # GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS (secret):
+                                             # the JSON key of a Play Console service
+                                             # account with release permission on the app.
+      # The Play upload keystore, uploaded once under Team settings → Code
+      # signing identities → Android with the reference name below. Codemagic
+      # exposes it as CM_KEYSTORE_PATH / CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS /
+      # CM_KEY_PASSWORD, which the script below hands to Gradle the same way a
+      # developer machine does: through ~/key.properties.
+      android_signing:
+        - ics
+      vars:
+        PACKAGE_NAME: com.livingpresence.inner.circle.squared
+        GOOGLE_PLAY_TRACK: internal
+      java: 17
+    scripts:
+      - *write_secrets
+
+      - name: Point Gradle at the upload keystore
+        script: |
+          set -euo pipefail
+          cat <<EOF > "$HOME/key.properties"
+          storeFile=$CM_KEYSTORE_PATH
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          keyPassword=$CM_KEY_PASSWORD
+          EOF
+
+      # compileSdk 37 may be newer than the image. Use the SDK's own executable
+      # because Codemagic's macOS image may leave it off PATH.
+      - name: Install Android SDK packages
+        script: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:?Codemagic did not set ANDROID_SDK_ROOT}"
+          sdkmanager="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdkmanager" ]; then
+            echo "Android SDK Manager is missing or not executable: $sdkmanager" >&2
+            exit 1
+          fi
+          # Ignore SIGPIPE from yes when sdkmanager finishes reading prompts.
+          (set +o pipefail; yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses > /dev/null)
+          "$sdkmanager" --sdk_root="$sdk_root" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          printf 'sdk.dir=%s\n' "$sdk_root" > "$CM_BUILD_DIR/local.properties"
+
+      # Play rejects a bundle whose versionCode is not higher than every one it
+      # holds, on any track. Ask it, rather than keeping a counter in the repo
+      # that a manual upload from a laptop could overtake.
+      - name: Build the release bundle with the next version code
+        script: |
+          set -euo pipefail
+          LATEST_VERSION_CODE=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME")
+          NEXT_VERSION_CODE=$((LATEST_VERSION_CODE + 1))
+          echo "Highest versionCode on Play: $LATEST_VERSION_CODE → building $NEXT_VERSION_CODE"
+          ./gradlew --no-daemon :androidApp:bundleRelease -PversionCode="$NEXT_VERSION_CODE"
+
+    artifacts:
+      - androidApp/build/outputs/bundle/release/*.aab
+      # Deobfuscation map for the R8 build; Play reads it from the console
+      # upload, and it is kept here so a crash in a weekly build is readable.
+      - androidApp/build/outputs/mapping/release/mapping.txt
+
+    publishing:
+      google_play:
+        credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        # Weekly builds go to testers, not to the store listing, so no staged
+        # rollout and no update priority. Promote from the Play Console.
+        in_app_update_priority: 0
+        submit_as_draft: false
+
   ios-release:
     name: iOS Release → TestFlight
     instance_type: mac_mini_m2
@@ -14,24 +124,21 @@ workflows:
           source: true
     environment:
       groups:
-        - app_secrets                        # SONIOX_TOKEN_URL, DISCORD_CLIENT_ID, etc.
+        - app_secrets                        # SONIOX_TOKEN_URL, DISCORD_CLIENT_ID.
                                              # NOT SONIOX_API_KEY: it would land in
                                              # the IPA's Info.plist in cleartext.
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.livingpresence.inner.circle.squared
+      vars:
+        BUNDLE_ID: com.livingpresence.inner.circle.squared
       xcode: latest
       java: 17
     scripts:
       # 1. Reconstruct the gitignored secrets.properties from Codemagic env vars so
       #    Gradle's generateIosSecretsXcconfig (a dependency of the framework link)
       #    writes the values into iosApp/Secrets.xcconfig → Info.plist.
-      - name: Write secrets.properties
-        script: |
-          cat <<EOF > "$CM_BUILD_DIR/secrets.properties"
-          SONIOX_TOKEN_URL=${SONIOX_TOKEN_URL:-}
-          DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
-          EOF
+      - *write_secrets
 
       # 2. Build the Kotlin/Native release framework for arm64 devices.
       #    This also compiles the AVPlayerBridge cinterop, injects its bitcode,
@@ -53,21 +160,45 @@ workflows:
         script: |
           keychain initialize
           app-store-connect fetch-signing-files \
-            "com.livingpresence.inner.circle.squared" \
+            "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
           xcode-project use-profiles
 
-      # 5. Archive and export a Release build targeting the iphoneos SDK.
+      # 5. App Store Connect rejects an upload whose CFBundleVersion is not
+      #    higher than one it already holds. project.yml wires CFBundleVersion to
+      #    CURRENT_PROJECT_VERSION, so the archive step can set it from the
+      #    highest build number already uploaded, across every version string.
+      #    The app's numeric Apple ID is looked up from the bundle id; set
+      #    APP_APPLE_ID in the app_secrets group to skip the lookup.
+      - name: Pick the next build number
+        script: |
+          set -euo pipefail
+          if [ -z "${APP_APPLE_ID:-}" ]; then
+            APP_APPLE_ID=$(app-store-connect apps list \
+              --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+              | jq -r '.[0].id // empty')
+          fi
+          : "${APP_APPLE_ID:?No App Store Connect app found for $BUNDLE_ID}"
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-build-number "$APP_APPLE_ID" --all-versions)
+          NEXT_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          echo "Highest build on App Store Connect: $LATEST_BUILD_NUMBER → building $NEXT_BUILD_NUMBER"
+          echo "NEXT_BUILD_NUMBER=$NEXT_BUILD_NUMBER" >> "$CM_ENV"
+
+      # 6. Archive and export a Release build targeting the iphoneos SDK.
+      #    COMPILER_INDEX_STORE_ENABLE=NO is the flag's default, restated because
+      #    passing --archive-xcargs replaces the default rather than adding to it.
       - name: Build and export IPA
         script: |
+          set -euo pipefail
           xcode-project build-ipa \
             --project iosApp/ICSApp.xcodeproj \
             --scheme ICSApp \
             --config Release \
             --archive-directory build/ios \
-            --ipa-directory build/ios/ipa
+            --ipa-directory build/ios/ipa \
+            --archive-xcargs "CURRENT_PROJECT_VERSION=$NEXT_BUILD_NUMBER COMPILER_INDEX_STORE_ENABLE=NO"
 
     artifacts:
       - build/ios/ipa/*.ipa

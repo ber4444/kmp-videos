@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * failures that stay broken (a missing or rejected API key), where captions really have
  * stopped until the user re-enables them.
  */
-enum class TranscriberStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
+internal enum class TranscriberStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR }
 
 /**
  * A live, streaming speech-to-text backend (Deepgram, Soniox, …). Platform code
@@ -25,7 +25,7 @@ enum class TranscriberStatus { IDLE, CONNECTING, LISTENING, RECONNECTING, ERROR 
  * Implementations are cloud websocket clients and live in `commonMain`, so the same
  * code runs on Android, iOS and web — only the audio tap and key source differ.
  */
-interface StreamingTranscriber {
+internal interface StreamingTranscriber {
     val captions: StateFlow<List<CaptionCue>>
     val status: StateFlow<TranscriberStatus>
     val error: StateFlow<String?>

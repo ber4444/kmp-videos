@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
 
 @Composable
-fun PlayerControlsOverlay(
+internal fun PlayerControlsOverlay(
     modifier: Modifier = Modifier,
     isPlaying: Boolean,
     durationMs: Long,

@@ -80,12 +80,12 @@ import kotlin.math.roundToLong
  * seek/time-observation) onto the generated class, so they are unreachable from
  * Kotlin directly. The bridge re-exposes them as members of a plain NSObject.
  */
-actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
+internal actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
 
 // onEventClick / loginBackgroundModifier are shared with web in nonAndroidMain.
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {
@@ -431,7 +431,7 @@ private fun configureBackgroundAudio() {
 
 
 @Composable
-actual fun LiveEventThumbnail(
+internal actual fun LiveEventThumbnail(
     eventNumber: Int,
     streamUrl: String,
     contentDescription: String?,

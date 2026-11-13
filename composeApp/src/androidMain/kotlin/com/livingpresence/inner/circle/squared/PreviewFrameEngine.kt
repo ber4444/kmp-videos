@@ -59,7 +59,7 @@ import java.io.File
  * frame is written to both tiers. The disk store is bounded ([DISK_CACHE_BYTES])
  * with oldest-file LRU eviction; all disk I/O runs on [Dispatchers.IO].
  */
-class PreviewFrameEngine(
+internal class PreviewFrameEngine(
     private val context: Context,
     private val config: MediaKitConfig = MediaKitConfig.Default,
 ) {
@@ -596,10 +596,10 @@ private class DiskFrameCache(
  * CompositionLocal providing the shared [PreviewFrameEngine]. Created once per
  * app session and released on disposal.
  */
-val LocalPreviewFrameEngine = staticCompositionLocalOf<PreviewFrameEngine?> { null }
+internal val LocalPreviewFrameEngine = staticCompositionLocalOf<PreviewFrameEngine?> { null }
 
 @Composable
-fun rememberPreviewFrameEngine(): PreviewFrameEngine {
+internal fun rememberPreviewFrameEngine(): PreviewFrameEngine {
     val context = LocalContext.current
     val engine = remember { PreviewFrameEngine(context) }
     DisposableEffect(engine) {
@@ -614,7 +614,7 @@ fun rememberPreviewFrameEngine(): PreviewFrameEngine {
  * cache. The Android actual of [LiveEventThumbnail].
  */
 @Composable
-actual fun LiveEventThumbnail(
+internal actual fun LiveEventThumbnail(
     eventNumber: Int,
     streamUrl: String,
     contentDescription: String?,

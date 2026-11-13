@@ -27,13 +27,13 @@ import kotlinx.serialization.json.Json
  *   review account's demo list. Empty means none is fetched.
  */
 @Serializable
-data class FeedPolicy(
+internal data class FeedPolicy(
     @SerialName("stream_host") val streamHost: String = "",
     @SerialName("manifest_url") val manifestUrl: String = "",
 )
 
 /** Why [FeedPolicyClient] had no policy to hand back. */
-enum class FeedPolicyAbsence {
+internal enum class FeedPolicyAbsence {
     /** No endpoint, or nobody signed in — nothing has been asked for yet. */
     NOT_APPLICABLE,
 
@@ -45,7 +45,7 @@ enum class FeedPolicyAbsence {
 }
 
 /** Either the server's answer, or why there isn't one. */
-sealed interface FeedPolicyResult {
+internal sealed interface FeedPolicyResult {
     data class Resolved(val policy: FeedPolicy) : FeedPolicyResult
     data class Absent(val reason: FeedPolicyAbsence) : FeedPolicyResult
 }
@@ -67,7 +67,7 @@ sealed interface FeedPolicyResult {
  * is [FeedPolicyAbsence.REFUSED], and only that may cost a stored session — an
  * outage must not log a member out of an app they are still entitled to use.
  */
-class FeedPolicyClient(
+internal class FeedPolicyClient(
     private val httpClient: HttpClient,
     /**
      * The same `:server` deployment the caption path mints against — one service,

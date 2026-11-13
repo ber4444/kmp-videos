@@ -66,7 +66,7 @@ private object AppRoute {
 }
 
 @Composable
-fun App() {
+internal fun App() {
     InnerCircleSquaredTheme {
         val viewModelStoreOwner = remember {
             object : ViewModelStoreOwner {
@@ -211,7 +211,7 @@ private fun rememberMainViewModel(): MainViewModel {
 private val BrandRed = Color(0xFFEF5350)
 
 @Composable
-fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
+internal fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
     // Only `background`, `onBackground` and `error` are read anywhere, and the
     // first two only by GalleryScreen and the feed's empty state — so following
     // the system setting here moves the feed's ground and nothing else. It has
@@ -247,7 +247,7 @@ fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
  *   [SignOutButton] before it is called, so this runs only on a deliberate tap.
  */
 @Composable
-fun GalleryScreen(
+internal fun GalleryScreen(
     uiState: MainUiState,
     onRetry: () -> Unit,
     onPlayEvent: (EventInfo) -> Unit,

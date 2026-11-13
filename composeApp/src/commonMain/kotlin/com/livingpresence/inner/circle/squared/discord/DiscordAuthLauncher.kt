@@ -11,4 +11,4 @@ import androidx.compose.runtime.Composable
  * this app no longer controls.
  */
 @Composable
-expect fun rememberDiscordAuthLauncher(): (String) -> Unit
+internal expect fun rememberDiscordAuthLauncher(): (String) -> Unit

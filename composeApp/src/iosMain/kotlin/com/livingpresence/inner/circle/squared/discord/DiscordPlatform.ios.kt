@@ -10,11 +10,11 @@ import androidx.compose.ui.platform.LocalUriHandler
  * opened URL to [DiscordAuthBroker.deliver] (see `iosApp/ics_ios/ICSApp.swift`).
  * Single slash and the `discord-` prefix are both required by Discord.
  */
-actual fun defaultDiscordRedirectUri(): String =
+internal actual fun defaultDiscordRedirectUri(): String =
     "${discordRedirectScheme(DiscordConfig.clientId)}:/authorize/callback"
 
 @Composable
-actual fun rememberDiscordAuthLauncher(): (String) -> Unit {
+internal actual fun rememberDiscordAuthLauncher(): (String) -> Unit {
     val uriHandler = LocalUriHandler.current
     return remember(uriHandler) { { url -> uriHandler.openUri(url) } }
 }

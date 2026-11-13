@@ -2,14 +2,15 @@ package com.livingpresence.inner.circle.squared
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 
 /**
  * The bridge between the pure Android application module (:androidApp) and the
  * shared Kotlin Multiplatform UI module (:composeApp).
  */
-object HostBridge {
-    var isDebug: () -> Boolean = { false }
+public object HostBridge {
+    public var isDebug: () -> Boolean = { false }
 
     /**
      * Drawable res id for the landing-screen background, supplied by the host
@@ -23,15 +24,15 @@ object HostBridge {
      *
      * 0 means unset — [loginBackgroundModifier] falls back to a gradient.
      */
-    var backgroundDrawableResId: Int = 0
+    public var backgroundDrawableResId: Int = 0
 
     /** Whether the activity is currently in PiP, observed by the player UI. */
-    val inPipState = mutableStateOf(false)
+    public val inPipState: MutableState<Boolean> = mutableStateOf(false)
     
     private var frameEngineForTrim: PreviewFrameEngine? = null
 
     @Composable
-    fun HostApp(
+    public fun HostApp(
         pipController: PipController
     ) {
         val previewFrameEngine = rememberPreviewFrameEngine()
@@ -44,7 +45,7 @@ object HostBridge {
         }
     }
 
-    fun onTrimMemory(level: Int) {
+    public fun onTrimMemory(level: Int) {
         frameEngineForTrim?.let {
             MemoryGovernor.onTrim(level, it.asTrimTarget())
         }

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /** In-memory [DiscordSessionStore] standing in for the platform stores. */
-class FakeDiscordSessionStore(
+internal class FakeDiscordSessionStore(
     private var session: DiscordSession? = null,
 ) : DiscordSessionStore {
     var clearCount: Int = 0

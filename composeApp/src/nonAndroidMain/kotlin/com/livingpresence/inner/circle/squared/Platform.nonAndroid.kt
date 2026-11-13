@@ -13,12 +13,12 @@ import org.jetbrains.compose.resources.painterResource
  * default in-app action and paint the same login background, so these live in the
  * `nonAndroidMain` source set rather than being duplicated per platform.
  */
-actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
+internal actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
     defaultAction()
 }
 
 @Composable
-actual fun loginBackgroundModifier(): Modifier = Modifier.paint(
+internal actual fun loginBackgroundModifier(): Modifier = Modifier.paint(
     painter = painterResource(Res.drawable.background_image),
     contentScale = ContentScale.Crop,
 )

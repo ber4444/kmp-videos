@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
  * record of where a downloaded extra came from. Empty when the platform cannot
  * report it.
  */
-data class EventDownloadState(
+internal data class EventDownloadState(
     val eventNumber: Int,
     val state: DownloadStatus,
     val percent: Float,
@@ -29,13 +29,13 @@ data class EventDownloadState(
  * and the device is metered). Showing it as `0%` is indistinguishable from a
  * stalled transfer, so the UI calls it out.
  */
-enum class DownloadStatus { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING, NOT_DOWNLOADED }
+internal enum class DownloadStatus { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING, NOT_DOWNLOADED }
 
 /** User-selectable download quality. ~220 MB/h at 360p vs ~450 MB/h at 720p. */
-enum class DownloadQuality { P720, P360, P160, AUDIO }
+internal enum class DownloadQuality { P720, P360, P160, AUDIO }
 
 /** Maps a user-facing [DownloadQuality] to the mediakit [RenditionTier]. */
-fun DownloadQuality.toRenditionTier(): RenditionTier = when (this) {
+internal fun DownloadQuality.toRenditionTier(): RenditionTier = when (this) {
     DownloadQuality.P720 -> RenditionTier.P720
     DownloadQuality.P360 -> RenditionTier.P360
     DownloadQuality.P160 -> RenditionTier.P160
@@ -52,7 +52,7 @@ fun DownloadQuality.toRenditionTier(): RenditionTier = when (this) {
  * whatever single rendition their playlist offers: [DownloadQuality] applies
  * only to entries with the ladder ([EventInfo.hasRenditionLadder]).
  */
-interface DownloadController {
+internal interface DownloadController {
     /** True if the platform supports background downloading of VOD events. */
     val isSupported: Boolean
 
@@ -71,4 +71,4 @@ interface DownloadController {
 
 /** Platform download-controller factory. Android wires the DownloadCenter; wasmJs is a no-op. */
 @Composable
-expect fun rememberDownloadController(): DownloadController
+internal expect fun rememberDownloadController(): DownloadController

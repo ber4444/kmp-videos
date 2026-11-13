@@ -53,11 +53,15 @@ targets:
           - CFBundleURLName: "$(PRODUCT_BUNDLE_IDENTIFIER).discord"
             CFBundleURLSchemes:
               - "$(DISCORD_REDIRECT_SCHEME)"
-        # Bumped per release. App Store Connect rejects an upload whose
-        # CFBundleVersion is not higher than the last one it accepted, and nothing
-        # in codemagic.yaml derives these, so they are maintained here by hand.
-        CFBundleShortVersionString: "1.2"
-        CFBundleVersion: "3"
+        # Both resolve from build settings so a CI build can override them
+        # without rewriting this file. MARKETING_VERSION (the user-visible
+        # version) is bumped per release by hand, below. CURRENT_PROJECT_VERSION
+        # below is only the floor for local builds: App Store Connect rejects an
+        # upload whose CFBundleVersion is not higher than the last one it
+        # accepted, so codemagic.yaml's ios-release workflow looks up the highest
+        # build number already on App Store Connect and passes +1 to xcodebuild.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Answers App Store Connect's export-compliance question at upload time.
         # Without it every build lands flagged "Missing Compliance" and has to be
         # answered by hand before it can be attached to a version — once per
@@ -95,6 +99,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.livingpresence.inner.circle.squared
+        # See the CFBundleShortVersionString / CFBundleVersion note above.
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "3"
         # ics_ios/Assets.xcassets holds the golden bark on white — the same
         # artwork androidApp draws its adaptive icon from (res/drawable/ypf.png
         # over @color/ic_launcher_background), framed to match.

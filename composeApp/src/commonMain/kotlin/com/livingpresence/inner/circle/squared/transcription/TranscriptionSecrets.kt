@@ -16,7 +16,7 @@ package com.livingpresence.inner.circle.squared.transcription
  * A build that sets no endpoint falls back to [DEFAULT_SONIOX_TOKEN_URL], so
  * captions work in a fresh clone without any local configuration.
  */
-object TranscriptionSecrets {
+public object TranscriptionSecrets {
 
     /**
      * The token service this project deploys, used when a build supplies no
@@ -33,7 +33,7 @@ object TranscriptionSecrets {
      * A fork points at its own service by setting `SONIOX_TOKEN_URL` in
      * `secrets.properties`, which overrides this.
      */
-    const val DEFAULT_SONIOX_TOKEN_URL: String = "https://apollo-videos-tokens.fly.dev"
+    internal const val DEFAULT_SONIOX_TOKEN_URL: String = "https://apollo-videos-tokens.fly.dev"
 
     /**
      * Base URL of the temporary-key service — scheme and authority, no path.
@@ -45,7 +45,7 @@ object TranscriptionSecrets {
      * `SONIOX_TOKEN_URL` arrives here as `""` — which has to mean "use the
      * default", not "captions are off".
      */
-    var sonioxTokenEndpoint: String = ""
+    public var sonioxTokenEndpoint: String = ""
         get() = field.ifBlank { DEFAULT_SONIOX_TOKEN_URL }
 
     /**
@@ -57,5 +57,5 @@ object TranscriptionSecrets {
      * The evaluation harness in `eval/` still scores both providers; it reads its
      * own keys from its own environment and never went through this object.
      */
-    const val DEEPGRAM_UNCONFIGURED: String = ""
+    internal const val DEEPGRAM_UNCONFIGURED: String = ""
 }
