@@ -49,7 +49,7 @@ workflows:
       # CM_KEY_PASSWORD, which the script below hands to Gradle the same way a
       # developer machine does: through ~/key.properties.
       android_signing:
-        - apollo_videos_upload_key
+        - ics
       vars:
         PACKAGE_NAME: com.livingpresence.inner.circle.squared
         GOOGLE_PLAY_TRACK: internal
