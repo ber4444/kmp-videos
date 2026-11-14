@@ -4,11 +4,8 @@ A Compose Multiplatform (Android + iOS + wasmJs) app for streaming live and
 recorded HLS event streams, built on **Media3/ExoPlayer** (Android) and
 **AVPlayer** (iOS) with a standalone KMP playback SDK (`:mediakit`).
 
-**Live on Google Play:**
-[Apollo Videos](https://play.google.com/store/apps/details?id=com.livingpresence.inner.circle.squared)
-
-It plays live/recorded HLS event streams from a Wowza nDVR server and turns four
-*unadvertised* sibling renditions into a genuine client-side ABR ladder.
+Live on [Google Play](https://play.google.com/store/apps/details?id=com.livingpresence.inner.circle.squared)
+and [Apple TestFlight](https://testflight.apple.com/join/YBHu9W7V)
 
 ## Features
 
