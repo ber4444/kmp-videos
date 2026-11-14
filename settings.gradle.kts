@@ -31,6 +31,9 @@ buildscript {
                 // request down to 4.1.137 asks for artifacts that line never published.
                 requested.group == "io.netty" ->
                     if (requested.version.orEmpty().startsWith("4.1.")) useVersion("4.1.137.Final")
+                // AGP and Android Lint use the JRE artifact. 33.7.2 fixes CVE-2026-102554.
+                requested.group == "com.google.guava" && requested.name == "guava" &&
+                    requested.version.orEmpty().endsWith("-jre") -> useVersion("33.7.2-jre")
                 requested.group == "org.bouncycastle" -> useVersion("1.85")
                 requested.group == "org.jsoup" -> useVersion("1.23.2")
                 requested.group.startsWith("com.fasterxml.jackson") -> useVersion("2.18.11")
