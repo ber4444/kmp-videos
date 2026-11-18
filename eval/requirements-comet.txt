@@ -1,0 +1,7 @@
+# Optional: semantic MT scoring (scoring/semantic.py). Deliberately kept out of
+# requirements.txt — this pulls torch and downloads a ~2.3 GB checkpoint on first use,
+# and the rest of the harness scores for free, offline, in CI.
+#
+#   pip install -r requirements-comet.txt
+#   EVAL_COMET=1 python scoring/scorecard.py
+unbabel-comet>=2.2.2

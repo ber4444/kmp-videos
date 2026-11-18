@@ -33,6 +33,11 @@ class StreamResult(BaseModel):
     final_words: List[FinalWord]
     audio_duration_s: float
     model: str = ""
+    # The non-secret part of the config frame that opened the session. Recorded because an
+    # arm defined by a config knob is worthless if the vendor quietly ignored the knob:
+    # the fixture would look like a valid negative result. Defaulted so fixtures recorded
+    # before this field existed still parse.
+    session_config: Dict[str, Any] = {}
 
 class Provider(ABC):
     @property

@@ -242,12 +242,18 @@ private fun ExoPlayerScreen(
 
     // Phase 8: on-device transcription (CC). The RenderersFactory in the service
     // taps PCM; captions render via CaptionOverlay below.
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
     val captionController = rememberCaptionController()
 
     var isScrubbing by remember(player) { mutableStateOf(false) }
     var sliderFraction by remember(player) { mutableStateOf(0f) }
     var showVideoControls by remember(player) { mutableStateOf(true) }
     var showStats by remember(player) { mutableStateOf(false) }
+    // Holds the controls up while the caption language menu is open: the menu is a child of
+    // the control bar, so auto-hiding out from under it would close a list the viewer is
+    // still reading — and it is long enough that three seconds is not enough to read it.
+    var captionMenuOpen by remember(player) { mutableStateOf(false) }
 
     val canJumpToLive by remember(state, isScrubbing, sliderFraction) {
         derivedStateOf {
@@ -348,6 +354,7 @@ private fun ExoPlayerScreen(
         visible = showVideoControls,
         isScrubbing = isScrubbing,
         isPlaying = state.isPlaying,
+        menuOpen = captionMenuOpen,
         onHide = { showVideoControls = false },
     )
 
@@ -499,6 +506,7 @@ private fun ExoPlayerScreen(
                                 isScrubbing = false
                             },
                             onClose = closePlayer,
+                            captionLanguage = captionController.selected.translateTo,
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             topRightControls = {
                                 PlayerTopRightControls(
@@ -507,6 +515,7 @@ private fun ExoPlayerScreen(
                                     // controls are down, so switching captions on has
                                     // to take the controls with it or nothing appears.
                                     onCaptionsShown = { showVideoControls = false },
+                                    onCaptionMenuOpenChange = { captionMenuOpen = it },
                                     onToggleStats = { showStats = !showStats },
                                     qualityMenu = {
                                         QualityMenu(
@@ -748,17 +757,20 @@ private fun PlayerErrorOverlay(
 
 /**
  * Auto-hides the controls [CONTROLS_AUTO_HIDE_MS] after the last interaction,
- * only while playing. Paused/scrubbing keeps them visible.
+ * only while playing. Paused/scrubbing keeps them visible, and so does an open
+ * [menuOpen] caption menu — it is drawn inside the control bar, so hiding the bar
+ * takes the menu with it mid-read.
  */
 @Composable
 private fun ControlsAutoHide(
     visible: Boolean,
     isScrubbing: Boolean,
     isPlaying: Boolean,
+    menuOpen: Boolean,
     onHide: () -> Unit,
 ) {
-    if (!visible || isScrubbing || !isPlaying) return
-    LaunchedEffect(visible, isScrubbing, isPlaying) {
+    if (!visible || isScrubbing || !isPlaying || menuOpen) return
+    LaunchedEffect(visible, isScrubbing, isPlaying, menuOpen) {
         delay(CONTROLS_AUTO_HIDE_MS)
         onHide()
     }

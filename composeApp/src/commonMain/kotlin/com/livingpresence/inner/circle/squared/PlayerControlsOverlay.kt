@@ -29,6 +29,10 @@ internal fun PlayerControlsOverlay(
     onPlayPauseToggle: () -> Unit,
     onJumpToLive: () -> Unit,
     onClose: () -> Unit,
+    // The active caption language (null while captions are off, or on the
+    // untranslated spoken-language row) — see closeButtonLabel/playPauseButtonLabel
+    // for why Close/Play/Pause read in it too once it's set.
+    captionLanguage: String? = null,
     onThumbCenterXChanged: (Float) -> Unit = {},
     onTopBarBottomChanged: (Float) -> Unit = {},
     onBottomBarTopChanged: (Float) -> Unit = {},
@@ -47,7 +51,7 @@ internal fun PlayerControlsOverlay(
                 .onGloballyPositioned { onTopBarBottomChanged(it.boundsInWindow().bottom) }
                 .background(Color.Black.copy(alpha = 0.55f))
                 // Inset *inside* the scrim: the translucent black still runs to
-                // the top edge, but Close and the caption toggle sit below the
+                // the top edge, but Close and the caption menu sit below the
                 // status bar / Dynamic Island instead of under it. Android hides
                 // the system bars here (ImmersiveSystemBars), so this collapses to
                 // the display cutout there and to zero on web.
@@ -59,7 +63,7 @@ internal fun PlayerControlsOverlay(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onClose) {
-                Text("Close", color = Color.White)
+                Text(closeButtonLabel(captionLanguage), color = Color.White)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 topRightControls()
@@ -144,7 +148,7 @@ internal fun PlayerControlsOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onPlayPauseToggle) {
-                    Text(if (isPlaying) "Pause" else "Play", color = Color.White)
+                    Text(playPauseButtonLabel(isPlaying, captionLanguage), color = Color.White)
                 }
                 if (isLive && isSeekable && durationMs > 0L) {
                     Spacer(modifier = Modifier.width(16.dp))

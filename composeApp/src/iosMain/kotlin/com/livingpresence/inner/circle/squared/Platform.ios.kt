@@ -134,6 +134,8 @@ internal actual fun PlatformPlayerScreen(
     var isScrubbing by remember(url) { mutableStateOf(false) }
     var showVideoControls by remember(url) { mutableStateOf(true) }
 
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
     val captionController = rememberCaptionController()
     var showStats by remember(url) { mutableStateOf(false) }
     var renditions by remember(url) { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
@@ -311,6 +313,7 @@ internal actual fun PlatformPlayerScreen(
                             },
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             onClose = onClose,
+                            captionLanguage = captionController.selected.translateTo,
                             topRightControls = {
                                 PlayerTopRightControls(
                                     captionController = captionController,
