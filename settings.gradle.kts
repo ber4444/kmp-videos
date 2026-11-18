@@ -2,7 +2,8 @@ pluginManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+        // Stable Compose releases are on Maven Central. The retired Compose dev
+        // host no longer resolves in DNS and blocks fallback to the Plugin Portal.
         gradlePluginPortal()
     }
 
@@ -56,7 +57,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }
 
