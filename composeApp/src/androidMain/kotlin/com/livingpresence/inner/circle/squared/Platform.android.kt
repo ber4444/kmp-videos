@@ -45,17 +45,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource as androidPainterResource
@@ -231,6 +235,7 @@ private fun ExoPlayerScreen(
         player.playWhenReady = true
     }
     val state = rememberPlayerState(player)
+    val videoZoom = remember(url) { VideoZoomState() }
 
     // Rotate-to-fullscreen toggle (offered for landscape content).
     val fullscreen = rememberFullscreenToggle()
@@ -374,6 +379,9 @@ private fun ExoPlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { videoZoom.updateBounds(it.toSize(), videoZoom.contentSize) }
+            .videoZoomGestures(videoZoom, enabled = !HostBridge.inPipState.value)
             .background(Color.Black),
     ) {
         BoxWithConstraints(
@@ -392,25 +400,36 @@ private fun ExoPlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = surfaceModifier.onGloballyPositioned { coords ->
-                        // Report the video's on-screen bounds for the PiP source-rect hint.
-                        val pos = coords.positionInRoot()
-                        val w = coords.size.width
-                        val h = coords.size.height
-                        if (w > 0 && h > 0) {
-                            pipController?.updateSourceBounds(
-                                left = pos.x.toInt(),
-                                top = pos.y.toInt(),
-                                right = (pos.x + w).toInt(),
-                                bottom = (pos.y + h).toInt(),
-                            )
-                        }
-                    },
+                    modifier = surfaceModifier
+                        .onSizeChanged { videoZoom.updateBounds(videoZoom.viewportSize, it.toSize()) }
+                        .onGloballyPositioned { coords ->
+                            // Report the video's on-screen bounds for the PiP source-rect hint.
+                            val pos = coords.positionInRoot()
+                            val w = coords.size.width
+                            val h = coords.size.height
+                            if (w > 0 && h > 0) {
+                                pipController?.updateSourceBounds(
+                                    left = pos.x.toInt(),
+                                    top = pos.y.toInt(),
+                                    right = (pos.x + w).toInt(),
+                                    bottom = (pos.y + h).toInt(),
+                                )
+                            }
+                        },
                 ) {
                     PlayerSurface(
                         player = player,
                         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            // Transform only the video child: the enclosing box
+                            // keeps stable layout bounds for the PiP source hint.
+                            // Read zoom here to avoid recomposing on every move.
+                            val inPip = HostBridge.inPipState.value
+                            scaleX = if (inPip) 1f else videoZoom.scale
+                            scaleY = scaleX
+                            translationX = if (inPip) 0f else videoZoom.offset.x
+                            translationY = if (inPip) 0f else videoZoom.offset.y
+                        },
                     )
                 }
 
