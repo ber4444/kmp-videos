@@ -74,4 +74,31 @@ class CaptionLabelTest {
         assertEquals("No translation", button(off, TranscriberStatus.ERROR))
         assertEquals("No translation", button(off, TranscriberStatus.RECONNECTING))
     }
+
+    // --- The running-caption button, which replaces the menu while captions are on. ---
+
+    @Test
+    fun theOffButtonReadsInTheLanguageAlreadyOnScreen() {
+        assertEquals("Feliratok le", captionOffButtonLabel(captionMenuOptions("hu")[1]))
+        assertEquals("Субтитры выключены", captionOffButtonLabel(russian))
+    }
+
+    @Test
+    fun theOffButtonIsEnglishForTheSpokenLanguageRow() {
+        // The viewer on this row reads English captions already, so the English label is
+        // the correct choice here, not just the fallback for a missing translation.
+        assertEquals("Captions off", captionOffButtonLabel(english))
+    }
+
+    @Test
+    fun everySupportedLanguageHasAnOffLabel() {
+        for (code in CaptionLanguage.SUPPORTED.keys) {
+            val option = CaptionMenuOption(label = code, translateTo = code, captionsOn = true)
+            assertEquals(
+                true,
+                captionOffButtonLabel(option).isNotBlank(),
+                "no 'Captions off' translation for $code",
+            )
+        }
+    }
 }

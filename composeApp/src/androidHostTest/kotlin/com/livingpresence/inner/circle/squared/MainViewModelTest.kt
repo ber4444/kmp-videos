@@ -1,6 +1,7 @@
 package com.livingpresence.inner.circle.squared
 
 import com.livingpresence.mediakit.EventInfo
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -91,6 +92,43 @@ class MainViewModelTest {
         vm.retryLoadingVideos() // load 2
 
         assertEquals(2, loadCount)
+    }
+
+    @Test
+    fun clearFeed_dropsTheSignedOutAccountsEvents() = runTest {
+        val events = listOf(EventInfo(eventNumber = 1, isLive = false, durationMs = 1_000))
+        val vm = MainViewModel(videoRepositoryWith(events))
+        assertEquals(events, vm.uiState.value.availableEvents)
+
+        vm.clearFeed()
+
+        assertEquals(emptyList(), vm.uiState.value.availableEvents)
+        assertFalse(vm.uiState.value.isLoadingVideos)
+        assertNull(vm.uiState.value.videoLoadError)
+    }
+
+    /**
+     * The property that makes sign-out worth more than a UI gesture: a load that
+     * was already in flight belongs to the account that just left, so it must not
+     * be allowed to land in the next account's feed.
+     */
+    @Test
+    fun clearFeed_cancelsALoadInFlightSoItCannotRepopulate() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = object : VideoRepository(FakeHttpClient) {
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> {
+                gate.await()
+                return listOf(EventInfo(eventNumber = 1, isLive = false, durationMs = 1_000))
+            }
+        }
+        val vm = MainViewModel(repo) // init starts a load, which parks on the gate
+        assertTrue(vm.uiState.value.isLoadingVideos)
+
+        vm.clearFeed()
+        gate.complete(Unit)
+
+        assertEquals(emptyList(), vm.uiState.value.availableEvents)
+        assertFalse(vm.uiState.value.isLoadingVideos)
     }
 
     private fun videoRepositoryWith(events: List<EventInfo>): VideoRepository =

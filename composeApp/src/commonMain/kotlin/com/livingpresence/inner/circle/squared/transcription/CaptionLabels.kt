@@ -49,3 +49,94 @@ private fun TranscriberStatus.mark(): String = when (this) {
     TranscriberStatus.ERROR -> " !"
     TranscriberStatus.IDLE, TranscriberStatus.LISTENING -> ""
 }
+
+/**
+ * While captions are running, the button that used to open the language menu instead just
+ * turns them off — the menu itself would require reading it, and anyone who picked a
+ * translation did so because they don't read the menu's language (English) comfortably. So
+ * the one thing offered here is named in [selected]'s own language rather than in English:
+ * "Feliratok le" for a viewer who chose Hungarian, not "Captions off". The stream-status mark
+ * [captionMenuButtonLabel] adds is dropped on purpose — pairing a connection-state glyph with
+ * an action label in a language the glyph's meaning was never translated into would be noise,
+ * and the captions on screen are already the evidence a working stream gives.
+ *
+ * Covers every code in [CaptionLanguage.SUPPORTED], including [selected] having none (the
+ * spoken-language row, which is captioned but not translated): that row's viewer reads
+ * English, so the English label is also the correct one, not just the fallback.
+ */
+internal fun captionOffButtonLabel(selected: CaptionMenuOption): String =
+    selected.translateTo?.let { CAPTIONS_OFF_LABEL[it] } ?: CAPTIONS_OFF_LABEL_EN
+
+private const val CAPTIONS_OFF_LABEL_EN = "Captions off"
+
+/**
+ * "Captions off" in every language [CaptionLanguage.SUPPORTED] lists. These are this model's
+ * own best-effort translations, not sourced from a native speaker or a reviewed glossary —
+ * fine for a two-word UI label, but **the entries below marked with a trailing comment should
+ * get a native-speaker check before this ships**, same as any machine translation would need.
+ * The major-language entries (French, German, Spanish, Russian, Chinese, Japanese, Korean,
+ * Portuguese, Italian, Dutch, Polish, Turkish, Ukrainian, the Nordics…) carry the common,
+ * well-established phrasing video UIs already use and are lower-risk.
+ */
+private val CAPTIONS_OFF_LABEL: Map<String, String> = mapOf(
+    "af" to "Onderskrifte af", // review
+    "sq" to "Titrat e çaktivizuara", // review
+    "ar" to "الترجمة متوقفة",
+    "az" to "Altyazılar deaktiv", // review
+    "eu" to "Azpidatziak itzalita", // review
+    "be" to "Субтытры выключаны", // review
+    "bn" to "ক্যাপশন বন্ধ",
+    "bs" to "Titlovi isključeni",
+    "bg" to "Субтитрите изключени",
+    "ca" to "Subtítols desactivats",
+    "zh" to "字幕已关闭",
+    "hr" to "Titlovi isključeni",
+    "cs" to "Titulky vypnuté",
+    "da" to "Undertekster fra",
+    "nl" to "Ondertiteling uit",
+    "en" to CAPTIONS_OFF_LABEL_EN,
+    "et" to "Subtiitrid väljas",
+    "fi" to "Tekstitys pois",
+    "fr" to "Sous-titres désactivés",
+    "gl" to "Subtítulos desactivados",
+    "de" to "Untertitel aus",
+    "el" to "Υπότιτλοι ανενεργοί", // review
+    "gu" to "કૅપ્શન બંધ", // review
+    "he" to "כתוביות כבויות",
+    "hi" to "कैप्शन बंद",
+    "hu" to "Feliratok le",
+    "id" to "Subtitel nonaktif",
+    "it" to "Sottotitoli disattivati",
+    "ja" to "字幕オフ",
+    "kn" to "ಶೀರ್ಷಿಕೆಗಳು ಆಫ್", // review
+    "kk" to "Субтитрлер өшірілген", // review
+    "ko" to "자막 꺼짐",
+    "lv" to "Subtitri izslēgti",
+    "lt" to "Subtitrai išjungti",
+    "mk" to "Титловите се исклучени", // review
+    "ms" to "Sari kata dimatikan", // review
+    "ml" to "അടിക്കുറിപ്പുകൾ ഓഫ്", // review
+    "mr" to "सबटायटल्स बंद", // review
+    "no" to "Undertekster av",
+    "fa" to "زیرنویس خاموش", // review
+    "pl" to "Napisy wyłączone",
+    "pt" to "Legendas desativadas",
+    "pa" to "ਕੈਪਸ਼ਨ ਬੰਦ", // review
+    "ro" to "Subtitrări dezactivate",
+    "ru" to "Субтитры выключены",
+    "sr" to "Титлови искључени", // review
+    "sk" to "Titulky vypnuté",
+    "sl" to "Podnapisi izklopljeni",
+    "es" to "Subtítulos desactivados",
+    "sw" to "Manukuu yamezimwa", // review
+    "sv" to "Undertexter av",
+    "tl" to "Naka-off ang caption", // review
+    "ta" to "வசன வரிகள் ஆஃப்", // review
+    "te" to "క్యాప్షన్లు ఆఫ్", // review
+    "th" to "คำบรรยายปิด",
+    "tr" to "Altyazılar kapalı",
+    "uk" to "Субтитри вимкнено",
+    "ur" to "کیپشنز بند", // review
+    "vi" to "Phụ đề đã tắt",
+    "cy" to "Capsiynau i ffwrdd", // review
+)

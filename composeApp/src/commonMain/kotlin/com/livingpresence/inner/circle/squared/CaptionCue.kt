@@ -10,7 +10,7 @@ package com.livingpresence.inner.circle.squared
  * Shared across platforms: produced on Android by the on-device engine and, on
  * every platform, by the streaming ASR clients in the `transcription` package.
  */
-data class CaptionCue(
+internal data class CaptionCue(
     val text: String,
     val startMs: Long,
     val endMs: Long,

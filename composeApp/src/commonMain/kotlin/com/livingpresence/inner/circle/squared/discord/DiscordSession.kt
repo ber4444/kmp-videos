@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
  * [displayName] is cached purely so the restoring UI can greet the user without
  * waiting on a round trip; it is re-read from Discord on every restore.
  */
-data class DiscordSession(
+internal data class DiscordSession(
     val refreshToken: String,
     val displayName: String,
 )
@@ -24,7 +24,7 @@ data class DiscordSession(
  * tokens for the account until it is revoked — so implementations use the most
  * protected per-app store each platform offers.
  */
-interface DiscordSessionStore {
+internal interface DiscordSessionStore {
 
     /** Persists [session], replacing any previous one. */
     fun save(session: DiscordSession)
@@ -38,14 +38,14 @@ interface DiscordSessionStore {
 
 /** The platform's [DiscordSessionStore]. */
 @Composable
-expect fun rememberDiscordSessionStore(): DiscordSessionStore
+internal expect fun rememberDiscordSessionStore(): DiscordSessionStore
 
 /**
  * A store that forgets everything, for previews, tests, and any platform where
  * persistence is unavailable. Restoring simply finds nothing and the user sees
  * the connect button.
  */
-object NoOpDiscordSessionStore : DiscordSessionStore {
+internal object NoOpDiscordSessionStore : DiscordSessionStore {
     override fun save(session: DiscordSession) = Unit
     override fun load(): DiscordSession? = null
     override fun clear() = Unit

@@ -36,7 +36,7 @@ import kotlin.coroutines.resume
  * decoded frame at the requested position.
  */
 @OptIn(ExperimentalForeignApi::class)
-class PreviewFrameEngine {
+internal class PreviewFrameEngine {
 
     private val cacheDir: NSURL by lazy {
         val urls = NSFileManager.defaultManager.URLsForDirectory(NSCachesDirectory, NSUserDomainMask)

@@ -10,10 +10,10 @@ package com.livingpresence.inner.circle.squared.discord
  * snowflake — but they ride along in the gitignored `secrets.properties` so a
  * fork does not inherit this app's Discord application.
  */
-object DiscordConfig {
+public object DiscordConfig {
 
     /** OAuth2 client id of the Discord application. Empty disables the gate. */
-    var clientId: String = ""
+    public var clientId: String = ""
 
     // No apolloGuildId here. The membership check is :server's — it is the one
     // that has to hold against a client that has been patched — and the snowflake
@@ -21,7 +21,7 @@ object DiscordConfig {
     // value nothing reads.
 
     /** Overrides [defaultDiscordRedirectUri] when a host needs a different URI. */
-    var redirectUriOverride: String? = null
+    internal var redirectUriOverride: String? = null
 
     /**
      * Where Discord sends the browser back to.
@@ -29,19 +29,19 @@ object DiscordConfig {
      * Computed on each read rather than cached: on mobile it is derived from
      * [clientId], which the platform host does not set until startup.
      */
-    val redirectUri: String get() = redirectUriOverride ?: defaultDiscordRedirectUri()
+    internal val redirectUri: String get() = redirectUriOverride ?: defaultDiscordRedirectUri()
 
 
     /**
      * `identify` names the connected account, `guilds` lists the servers it
      * belongs to — the minimum needed to answer "is this user on Apollo?".
      */
-    const val SCOPES: String = "identify guilds"
+    internal const val SCOPES: String = "identify guilds"
 
-    const val API_BASE: String = "https://discord.com/api/v10"
+    internal const val API_BASE: String = "https://discord.com/api/v10"
 
     /** Whether a Discord application has been configured for this build. */
-    val isConfigured: Boolean get() = clientId.isNotBlank()
+    internal val isConfigured: Boolean get() = clientId.isNotBlank()
 }
 
 /**
@@ -56,7 +56,7 @@ object DiscordConfig {
  * Whatever this returns must be registered verbatim as a redirect URI on the
  * Discord application, or authorization fails before the consent screen.
  */
-expect fun defaultDiscordRedirectUri(): String
+internal expect fun defaultDiscordRedirectUri(): String
 
 /** The custom URL scheme Discord requires for [clientId]'s mobile redirect. */
-fun discordRedirectScheme(clientId: String): String = "discord-$clientId"
+internal fun discordRedirectScheme(clientId: String): String = "discord-$clientId"

@@ -5,7 +5,7 @@ import androidx.compose.ui.Modifier
 import com.livingpresence.mediakit.MediaKitConfig
 import io.ktor.client.HttpClient
 
-expect fun createHttpClient(): HttpClient
+internal expect fun createHttpClient(): HttpClient
 
 /**
  * The HTTP client engine and offline-download manager are provided via Koin DI,
@@ -13,7 +13,7 @@ expect fun createHttpClient(): HttpClient
  */
 
 @Composable
-expect fun PlatformPlayerScreen(
+internal expect fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 )
@@ -22,7 +22,7 @@ expect fun PlatformPlayerScreen(
  * Platform-specific click handler for event tiles.
  * Wasm bypasses the player screen and opens the stream in a new tab directly.
  */
-expect fun onEventClick(eventNumber: Int, defaultAction: () -> Unit)
+internal expect fun onEventClick(eventNumber: Int, defaultAction: () -> Unit)
 
 /**
  * Platform-specific thumbnail for a feed tile. Android renders a frame extracted
@@ -38,7 +38,7 @@ expect fun onEventClick(eventNumber: Int, defaultAction: () -> Unit)
  * @param modifier Layout modifier from the tile.
  */
 @Composable
-expect fun LiveEventThumbnail(
+internal expect fun LiveEventThumbnail(
     eventNumber: Int,
     streamUrl: String,
     contentDescription: String?,
@@ -50,7 +50,7 @@ expect fun LiveEventThumbnail(
  * so the production host lives in one place (the `:mediakit` SDK) rather than
  * being sprinkled through app code.
  */
-fun getUrl(eventNumber: Int): String =
+internal fun getUrl(eventNumber: Int): String =
     MediaKitConfig.Default.eventUrl(eventNumber)
 
 /**
@@ -61,7 +61,7 @@ fun getUrl(eventNumber: Int): String =
  * Delegates to [MediaKitConfig.eventNumberIn] so the URL scheme is described in
  * exactly one place.
  */
-fun parseEventNumber(url: String): Int? = MediaKitConfig.eventNumberIn(url)
+internal fun parseEventNumber(url: String): Int? = MediaKitConfig.eventNumberIn(url)
 
 /**
  * Background for the landing screen — the `background_image` photo, cropped to
@@ -74,4 +74,4 @@ fun parseEventNumber(url: String): Int? = MediaKitConfig.eventNumberIn(url)
  * module's `res/drawable` copy instead, via `HostBridge.backgroundDrawableResId`.
  */
 @Composable
-expect fun loginBackgroundModifier(): Modifier
+internal expect fun loginBackgroundModifier(): Modifier

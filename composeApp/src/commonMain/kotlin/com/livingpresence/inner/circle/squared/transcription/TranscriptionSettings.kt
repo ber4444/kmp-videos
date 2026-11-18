@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * NSUserDefaults on iOS, localStorage on web) is a follow-up — see
  * docs/live-captions-plan.md step 1.4.
  */
-object TranscriptionSettings {
+internal object TranscriptionSettings {
     private val _provider = MutableStateFlow(TranscriptionProvider.SONIOX)
     val provider: StateFlow<TranscriptionProvider> = _provider.asStateFlow()
 

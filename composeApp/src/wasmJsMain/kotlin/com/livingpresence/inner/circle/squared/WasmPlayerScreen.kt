@@ -151,7 +151,7 @@ function getBufferedAfter(video) {
 internal external fun getBufferedAfter(video: kotlin.js.JsAny): Double
 
 @Composable
-fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
+internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     val eventNumber = parseEventNumber(url)
     val scope = rememberCoroutineScope()
     val httpClient = remember { HttpClient(Js) }
@@ -170,9 +170,9 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
 
     var renditions by remember { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
     var showStats by remember { mutableStateOf(false) }
-    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
-    // every one, whatever language the viewer picked on the last.
-    val captionController = rememberCaptionController(videoKey = url)
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
+    val captionController = rememberCaptionController()
 
     // The Compose surface on web is a single opaque skiko canvas, so (unlike the
     // native players) controls can't be drawn translucently over the HTML <video>.
@@ -354,6 +354,7 @@ fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
                     videoElement?.let { seekVideo(it, duration) }
                 },
                 onClose = onClose,
+                captionLanguage = captionController.selected.translateTo,
                 onThumbCenterXChanged = { thumbCenterRootX = it },
                 onTopBarBottomChanged = { topBarBottomPx = it },
                 onBottomBarTopChanged = { bottomBarTopPx = it },

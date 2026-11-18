@@ -75,10 +75,10 @@ before `feedPcm` (reuse the anti-aliased resampler already in `TranscriptionEngi
 ## Current status
 
 **Phases 0–3 DONE** — shared core, Android wiring, and iOS wiring all compile; captions ship
-on both platforms with the language menu, and the key is server-side (PR #74/#77). What is
-left is **Phase 4 (Wasm)**, plus caption-choice persistence, which
-is deliberately unbuilt: the selection resets per video so a metered caption session cannot
-carry silently into a video nobody asked to caption.
+on both platforms with the language menu, and the key is server-side (PR #74/#77). The caption
+*language* choice now persists across videos and app launches too (see the caption menu
+section below) — provider selection (`TranscriptionSettings`) does not, but that is moot while
+Soniox is the only provider the UI offers. What is left is **Phase 4 (Wasm)**.
 
 **Still unverified end-to-end on any platform**: captions have never been watched working
 against a real live event. Everything below is compile- and unit-verified only.
@@ -107,8 +107,11 @@ Build commands used (set `ANDROID_HOME=~/Library/Android/sdk`):
 - [x] 1.2 Added to `composeApp` commonMain deps; applied `libs.plugins.kotlinx.serialization`.
 - [x] 1.3 `CaptionCue` moved to `commonMain` (same package, so androidMain refs unchanged);
   deleted `androidMain/.../CaptionCue.kt`.
-- [x] 1.4 `TranscriptionProvider` enum + `TranscriptionSettings` (in-memory `StateFlow`).
-  Persistence still TODO (DataStore/NSUserDefaults/localStorage).
+- [x] 1.4 `TranscriptionProvider` enum + `TranscriptionSettings` (in-memory `StateFlow`,
+  provider selection still not persisted — moot while Soniox is the only one the UI offers).
+  The caption *language* choice is persisted: `CaptionLanguagePreference`
+  (`SharedPreferences`/`NSUserDefaults`/`localStorage`), keyed by `selectionKey` rather than
+  by the row itself since the menu is rebuilt per device. See the caption menu section below.
 - [x] 1.5 `TranscriptionSecrets` holder.
 - [x] 1.6 `StreamingTranscriber` interface + `TranscriberStatus` + shared `CaptionAccumulator`
   (uses `MutableStateFlow.update`, NOT `synchronized` — the latter is JVM-only, breaks common).
@@ -394,11 +397,23 @@ dropdown (`CaptionLanguageMenu`, commonMain, next to the other player controls):
   told the target in the config frame that opens the socket, so a live stream cannot be
   re-pointed. `CaptionLanguage.deviceTarget()` still picks the default row, and nothing else
   reads it any more.
-- **The selection resets to "No translation" on every video** — `rememberCaptionController` is
-  keyed by the video's URL, so it does not even survive playing a second video on a reused
-  player screen. This is deliberate and is not the missing-persistence follow-up in step 1.4:
-  a caption session streams the whole soundtrack to a metered service, so a language picked
-  once must not quietly keep billing on every video after it. Re-picking is one tap.
+- **The selection persists across videos and app launches** — a deliberate reversal of this
+  controller's original "resets every video" behavior. `CaptionMenuOption.translateTo` can't
+  identify a row by itself for storage (it's null on both "No translation" and the
+  untranslated spoken-language row), so `selectionKey`/`optionForSelectionKey` map each row
+  to/from a stable string, persisted via `CaptionLanguagePreference`.
+  - **A never-touched install** defaults to the device's own language if it has one
+    (`defaultCaptionOptionForFreshInstall`) rather than to "No translation" — captions start
+    automatically the first time a non-English device opens a video. An English device still
+    starts off, since there's no row to default to in that slot.
+  - **An explicit "No translation"** persists as its own key (`"off"`), distinct from "nothing
+    chosen yet" — once a viewer turns captions off, later videos stay off rather than
+    reverting to the device-language default; picking a language again means opening the menu.
+  - While a caption session is running, the control that used to open the menu instead just
+    turns it off, labelled in the active caption language rather than in English
+    (`captionOffButtonLabel`) — reopening the menu to pick a *different* language goes through
+    "No translation" first. The Close/Play/Pause controls (`PlayerControlLabels.kt`) follow the
+    same language while captions are on, and read English otherwise.
 - Android holds the controls up while the menu is open (`ControlsAutoHide(menuOpen = …)`) — the
   menu is drawn inside the control bar, and three seconds is not enough to read twenty-odd rows.
 

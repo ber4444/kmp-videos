@@ -16,7 +16,7 @@ package com.livingpresence.inner.circle.squared.transcription
  * @param healthySessionMs how long a session must last to count as healthy; failures
  *   after one of those restart the schedule from [initialDelayMs].
  */
-class ReconnectPolicy(
+internal class ReconnectPolicy(
     val initialDelayMs: Long = 500L,
     val maxDelayMs: Long = 10_000L,
     val healthySessionMs: Long = 15_000L,

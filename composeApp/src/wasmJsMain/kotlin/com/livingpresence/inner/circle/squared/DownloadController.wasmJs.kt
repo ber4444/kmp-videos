@@ -159,4 +159,4 @@ private class WasmDownloadController : DownloadController {
 }
 
 @Composable
-actual fun rememberDownloadController(): DownloadController = remember { WasmDownloadController() }
+internal actual fun rememberDownloadController(): DownloadController = remember { WasmDownloadController() }

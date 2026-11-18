@@ -103,4 +103,4 @@ private class IOSDownloadController : DownloadController {
 }
 
 @Composable
-actual fun rememberDownloadController(): DownloadController = remember { IOSDownloadController() }
+internal actual fun rememberDownloadController(): DownloadController = remember { IOSDownloadController() }

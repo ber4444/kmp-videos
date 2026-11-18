@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
 
 @Composable
-fun PlayerControlsOverlay(
+internal fun PlayerControlsOverlay(
     modifier: Modifier = Modifier,
     isPlaying: Boolean,
     durationMs: Long,
@@ -29,6 +29,10 @@ fun PlayerControlsOverlay(
     onPlayPauseToggle: () -> Unit,
     onJumpToLive: () -> Unit,
     onClose: () -> Unit,
+    // The active caption language (null while captions are off, or on the
+    // untranslated spoken-language row) — see closeButtonLabel/playPauseButtonLabel
+    // for why Close/Play/Pause read in it too once it's set.
+    captionLanguage: String? = null,
     onThumbCenterXChanged: (Float) -> Unit = {},
     onTopBarBottomChanged: (Float) -> Unit = {},
     onBottomBarTopChanged: (Float) -> Unit = {},
@@ -59,7 +63,7 @@ fun PlayerControlsOverlay(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onClose) {
-                Text("Close", color = Color.White)
+                Text(closeButtonLabel(captionLanguage), color = Color.White)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 topRightControls()
@@ -144,7 +148,7 @@ fun PlayerControlsOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onPlayPauseToggle) {
-                    Text(if (isPlaying) "Pause" else "Play", color = Color.White)
+                    Text(playPauseButtonLabel(isPlaying, captionLanguage), color = Color.White)
                 }
                 if (isLive && isSeekable && durationMs > 0L) {
                     Spacer(modifier = Modifier.width(16.dp))

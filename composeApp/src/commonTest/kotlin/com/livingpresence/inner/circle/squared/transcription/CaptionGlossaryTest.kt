@@ -1,5 +1,6 @@
 package com.livingpresence.inner.circle.squared.transcription
 
+import kotlin.ExperimentalStdlibApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -13,6 +14,7 @@ import kotlin.test.assertTrue
  * forgotten in the others — which produces no error at runtime, just a caption that quietly
  * reverts to a literal translation on some devices and not others.
  */
+@OptIn(ExperimentalStdlibApi::class) // allDistinct(), new in Kotlin 2.4.20.
 class CaptionGlossaryTest {
 
     @Test
@@ -38,7 +40,7 @@ class CaptionGlossaryTest {
 
     @Test
     fun termsAreUniqueAndNonBlank() {
-        assertEquals(CaptionGlossary.TERMS.size, CaptionGlossary.TERMS.toSet().size)
+        assertTrue(CaptionGlossary.TERMS.allDistinct(), "TERMS repeats a term")
         assertTrue(CaptionGlossary.TERMS.all { it.isNotBlank() })
         assertTrue(CaptionGlossary.LANGUAGES.all { language ->
             CaptionGlossary.translationTermsFor(language).values.all { it.isNotBlank() }

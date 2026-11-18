@@ -8,8 +8,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,17 +45,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource as androidPainterResource
@@ -67,6 +70,7 @@ import androidx.media3.exoplayer.hls.playlist.HlsPlaylistTracker
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
+import androidx.media3.ui.compose.state.rememberErrorState
 import com.livingpresence.mediakit.LadderResolver
 import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.ProbedRendition
@@ -94,15 +98,15 @@ private val SliderThumbRadius = 10.dp
 // through ServiceLoader. Naming it lets R8 see the only engine we use and drop
 // the rest, and removes the need for a keep rule over io.ktor to protect a
 // lookup that happens by reflection.
-actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
+internal actual fun createHttpClient(): HttpClient = HttpClient(OkHttp)
 
 
-actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
+internal actual fun onEventClick(eventNumber: Int, defaultAction: () -> Unit) {
     defaultAction()
 }
 
 @Composable
-actual fun loginBackgroundModifier(): Modifier {
+internal actual fun loginBackgroundModifier(): Modifier {
     // See HostBridge.backgroundDrawableResId: Compose resources are not packaged
     // for the Android target, so the background comes from the host module's
     // res/drawable instead. The gradient is the fallback for a host that never
@@ -120,7 +124,7 @@ actual fun loginBackgroundModifier(): Modifier {
 }
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {
@@ -192,7 +196,6 @@ private fun ExoPlayerScreen(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val videoTapInteractionSource = remember { MutableInteractionSource() }
 
     /**
      * Leaving the player *on purpose* ends playback; merely backgrounding the app
@@ -232,15 +235,16 @@ private fun ExoPlayerScreen(
         player.playWhenReady = true
     }
     val state = rememberPlayerState(player)
+    val videoZoom = remember(url) { VideoZoomState() }
 
     // Rotate-to-fullscreen toggle (offered for landscape content).
     val fullscreen = rememberFullscreenToggle()
 
     // Phase 8: on-device transcription (CC). The RenderersFactory in the service
     // taps PCM; captions render via CaptionOverlay below.
-    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
-    // every one, whatever language the viewer picked on the last.
-    val captionController = rememberCaptionController(videoKey = url)
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
+    val captionController = rememberCaptionController()
 
     var isScrubbing by remember(player) { mutableStateOf(false) }
     var sliderFraction by remember(player) { mutableStateOf(0f) }
@@ -378,10 +382,13 @@ private fun ExoPlayerScreen(
     // cuts the stream to ~51 kbps. On return to foreground, restore video.
     BackgroundAudioPolicy(player = player, isVideoVisible = !HostBridge.inPipState.value)
 
-    val playbackError = state.playbackError
+    val playbackError = rememberErrorState(player).error
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { videoZoom.updateBounds(it.toSize(), videoZoom.contentSize) }
+            .videoZoomGestures(videoZoom, enabled = !HostBridge.inPipState.value)
             .background(Color.Black),
     ) {
         BoxWithConstraints(
@@ -396,35 +403,51 @@ private fun ExoPlayerScreen(
             )
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = videoTapInteractionSource,
-                        indication = null,
-                    ) { showVideoControls = !showVideoControls },
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = surfaceModifier.onGloballyPositioned { coords ->
-                        // Report the video's on-screen bounds for the PiP source-rect hint.
-                        val pos = coords.positionInRoot()
-                        val w = coords.size.width
-                        val h = coords.size.height
-                        if (w > 0 && h > 0) {
-                            pipController?.updateSourceBounds(
-                                left = pos.x.toInt(),
-                                top = pos.y.toInt(),
-                                right = (pos.x + w).toInt(),
-                                bottom = (pos.y + h).toInt(),
-                            )
-                        }
-                    },
+                    modifier = surfaceModifier
+                        .onSizeChanged { videoZoom.updateBounds(videoZoom.viewportSize, it.toSize()) }
+                        .onGloballyPositioned { coords ->
+                            // Report the video's on-screen bounds for the PiP source-rect hint.
+                            val pos = coords.positionInRoot()
+                            val w = coords.size.width
+                            val h = coords.size.height
+                            if (w > 0 && h > 0) {
+                                pipController?.updateSourceBounds(
+                                    left = pos.x.toInt(),
+                                    top = pos.y.toInt(),
+                                    right = (pos.x + w).toInt(),
+                                    bottom = (pos.y + h).toInt(),
+                                )
+                            }
+                        },
                 ) {
                     PlayerSurface(
                         player = player,
                         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            // Transform only the video child: the enclosing box
+                            // keeps stable layout bounds for the PiP source hint.
+                            // Read zoom here to avoid recomposing on every move.
+                            val inPip = HostBridge.inPipState.value
+                            scaleX = if (inPip) 1f else videoZoom.scale
+                            scaleY = scaleX
+                            translationX = if (inPip) 0f else videoZoom.offset.x
+                            translationY = if (inPip) 0f else videoZoom.offset.y
+                        },
                     )
+                }
+
+                if (!HostBridge.inPipState.value && playbackError == null) {
+                    key(resolvedMediaItemUri, reloadToken) {
+                        PlaybackGestures(
+                            player = player,
+                            onToggleControls = { showVideoControls = !showVideoControls },
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
                 }
 
                 // Buffering spinner while the first frame hasn't rendered.
@@ -483,6 +506,7 @@ private fun ExoPlayerScreen(
                                 isScrubbing = false
                             },
                             onClose = closePlayer,
+                            captionLanguage = captionController.selected.translateTo,
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             topRightControls = {
                                 PlayerTopRightControls(
@@ -693,10 +717,12 @@ private fun PlayerErrorOverlay(
     onClose: () -> Unit,
 ) {
     val liveStreamOver = error.isLiveStreamOver
-    if (liveStreamOver) {
-        Log.i(APP_TAG, "Live playlist stopped updating; the event has most likely ended.")
-    } else {
-        Log.e(APP_TAG, "Playback error", error)
+    LaunchedEffect(error) {
+        if (liveStreamOver) {
+            Log.i(APP_TAG, "Live playlist stopped updating; the event has most likely ended.")
+        } else {
+            Log.e(APP_TAG, "Playback error", error)
+        }
     }
     Column(
         modifier = Modifier

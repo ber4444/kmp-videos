@@ -30,24 +30,31 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.viewinterop.UIKitView
+import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import cnames.supported.AVPlayerBridge
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import kotlinx.cinterop.CValue
+import kotlinx.cinterop.useContents
 import platform.AVFoundation.AVAssetImageGenerator
 import platform.AVFoundation.AVPlayerLayer
 import platform.AVFoundation.AVURLAsset
@@ -80,12 +87,12 @@ import kotlin.math.roundToLong
  * seek/time-observation) onto the generated class, so they are unreachable from
  * Kotlin directly. The bridge re-exposes them as members of a plain NSObject.
  */
-actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
+internal actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
 
 // onEventClick / loginBackgroundModifier are shared with web in nonAndroidMain.
 
 @Composable
-actual fun PlatformPlayerScreen(
+internal actual fun PlatformPlayerScreen(
     url: String,
     onClose: () -> Unit,
 ) {
@@ -96,7 +103,28 @@ actual fun PlatformPlayerScreen(
         configureBackgroundAudio()
         AVPlayerBridge(uRL = nsUrl)
     }
-    val playerLayer = remember { bridge.playerLayer!! }
+    val playerLayer = remember(bridge) { bridge.playerLayer!! }
+    val videoZoom = remember(url) { VideoZoomState() }
+    var videoAspectRatio by remember(url) { mutableFloatStateOf(16f / 9f) }
+
+    LaunchedEffect(videoZoom.viewportSize, videoAspectRatio) {
+        val viewport = videoZoom.viewportSize
+        val width = minOf(viewport.width, viewport.height * videoAspectRatio)
+        videoZoom.updateBounds(viewport, Size(width, width / videoAspectRatio))
+    }
+    LaunchedEffect(bridge, videoZoom) {
+        // Native views need a native transform; a Compose graphicsLayer does
+        // not reliably transform a UIKit interop view. Normalize for UIKit points.
+        snapshotFlow {
+            Triple(
+                videoZoom.scale,
+                videoZoom.offset.x / videoZoom.viewportSize.width.coerceAtLeast(1f),
+                videoZoom.offset.y / videoZoom.viewportSize.height.coerceAtLeast(1f),
+            )
+        }.collect { (scale, x, y) ->
+            bridge.setVideoZoomScale(scale, offsetX = x, offsetY = y)
+        }
+    }
 
     var isReady by remember(url) { mutableStateOf(false) }
     var isPlaying by remember(url) { mutableStateOf(false) }
@@ -106,9 +134,9 @@ actual fun PlatformPlayerScreen(
     var isScrubbing by remember(url) { mutableStateOf(false) }
     var showVideoControls by remember(url) { mutableStateOf(true) }
 
-    // Keyed by the video: captions (and the Soniox bill that comes with them) start off on
-    // every one, whatever language the viewer picked on the last.
-    val captionController = rememberCaptionController(videoKey = url)
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
+    val captionController = rememberCaptionController()
     var showStats by remember(url) { mutableStateOf(false) }
     var renditions by remember(url) { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
 
@@ -156,6 +184,9 @@ actual fun PlatformPlayerScreen(
                 if (!seconds.isNaN()) positionMs = (seconds * 1000.0).roundToLong()
                 val rate = bridge.rate()
                 isPlaying = rate > 0f
+                bridge.videoSize().useContents {
+                    if (width > 0.0 && height > 0.0) videoAspectRatio = (width / height).toFloat()
+                }
                 val durSeconds = CMTimeGetSeconds(bridge.duration())
                 if (!durSeconds.isNaN() && durSeconds > 0.0) {
                     durationMs = (durSeconds * 1000.0).roundToLong()
@@ -201,21 +232,22 @@ actual fun PlatformPlayerScreen(
     
         val pipController = rememberPipController(playerLayer)
     
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .onSizeChanged { videoZoom.updateBounds(it.toSize(), videoZoom.contentSize) }
+                .videoZoomGestures(videoZoom)
+                .background(Color.Black),
+        ) {
             BoxWithConstraints(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                // AVPlayerLayer interop: a plain UIView whose layer hosts the
-                // bridge's player sublayer (added + sized in `update`).
-                // videoGravity = aspect-fit mirrors the Android default. The bridge's
-                // layoutInSuperview lowers the host view's layer zPosition so the
-                // native view renders *below* the Compose surface — without that, CMP's
-                // UIKitView places the video above the control overlays (the known
-                // z-order sharp edge), making them untappable.
+                // The native viewport clips the zoomed AVPlayerLayer. Touches
+                // stay in Compose for shared pinch gestures and playback controls.
                 UIKitView(
                     factory = { bridge.createPlayerView()!! },
                     modifier = Modifier.fillMaxSize(),
+                    properties = UIKitInteropProperties(interactionMode = null),
                     onRelease = { bridge.replaceCurrentItemWithItem(null) },
                 )
     
@@ -281,6 +313,7 @@ actual fun PlatformPlayerScreen(
                             },
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             onClose = onClose,
+                            captionLanguage = captionController.selected.translateTo,
                             topRightControls = {
                                 PlayerTopRightControls(
                                     captionController = captionController,
@@ -433,7 +466,7 @@ private fun configureBackgroundAudio() {
 
 
 @Composable
-actual fun LiveEventThumbnail(
+internal actual fun LiveEventThumbnail(
     eventNumber: Int,
     streamUrl: String,
     contentDescription: String?,

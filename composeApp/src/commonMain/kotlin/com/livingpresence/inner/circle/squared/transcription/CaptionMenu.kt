@@ -69,9 +69,67 @@ internal fun captionMenuOptions(deviceTarget: String?): List<CaptionMenuOption> 
     }
 }
 
-/** The row a fresh player starts on: captions off until the viewer asks for them. */
+/** The off row itself — "No translation" — regardless of why a player landed on it. */
 internal fun defaultCaptionOption(options: List<CaptionMenuOption>): CaptionMenuOption =
     options.first()
 
+/**
+ * The row a never-touched install starts on, before [CaptionLanguagePreference] has
+ * anything recorded: the device's own language, if it has one, rather than silence — someone
+ * who hasn't said anything yet is better served by captions in a language they read than by
+ * a menu they have to find first. An English device has nothing to offer there (no second row
+ * is a translation; the one that sits there instead is the spoken-language row, which the
+ * viewer's own first language already covers), so it falls back to [defaultCaptionOption].
+ *
+ * Only for that one moment — before any choice exists. The instant the viewer picks anything,
+ * [selectionKey] starts persisting it, including picking "No translation" itself, and that
+ * recorded choice is what every later video restores; it does not fall back through here again.
+ */
+internal fun defaultCaptionOptionForFreshInstall(options: List<CaptionMenuOption>): CaptionMenuOption =
+    options.getOrNull(1)?.takeIf { it.captionsOn && it.translateTo != null } ?: defaultCaptionOption(options)
+
 /** Turning captions off, and the label of the row that does it. */
 internal const val NO_TRANSLATION = "No translation"
+
+/**
+ * The key that identifies a row for [CaptionLanguagePreference], so the choice survives past
+ * this menu's own [CaptionMenuOption] instances being rebuilt per device.
+ *
+ * [CaptionMenuOption.translateTo] alone can't do this: it is null on both "No translation" and
+ * the untranslated spoken-language row, which are opposite choices — one costs nothing and the
+ * other starts a session. And "No translation" needs a key of its own rather than persisting
+ * as null, even though [optionForSelectionKey] treats the two alike: null means nothing has
+ * been recorded, which is what lets [defaultCaptionOptionForFreshInstall] run exactly once, on
+ * an install that has never chosen anything. An explicit "off" has to persist as a real choice
+ * — [OFF_SELECTION_KEY] — or turning captions off would be indistinguishable from never having
+ * touched the control, and the next video would offer the device's language again instead of
+ * staying off until the viewer reopens the menu themselves.
+ */
+internal fun selectionKey(option: CaptionMenuOption): String =
+    if (!option.captionsOn) OFF_SELECTION_KEY
+    else option.translateTo ?: SPOKEN_LANGUAGE_SELECTION_KEY
+
+/**
+ * The reverse of [selectionKey]: resolves a persisted key back to a row of *this* device's
+ * [options]. Falls back to [defaultCaptionOption] — not [defaultCaptionOptionForFreshInstall]
+ * — for a null or explicitly-off key, and for a key naming a row this device's menu doesn't
+ * carry (restoring on a different device, or a device locale that has since changed); the
+ * fresh-install default is a one-time policy decided before anything is stored, not something
+ * this generic resolver should reapply every time a lookup comes up empty.
+ */
+internal fun optionForSelectionKey(options: List<CaptionMenuOption>, key: String?): CaptionMenuOption =
+    when (key) {
+        null, OFF_SELECTION_KEY -> defaultCaptionOption(options)
+        SPOKEN_LANGUAGE_SELECTION_KEY -> options.firstOrNull { it.captionsOn && it.translateTo == null }
+        else -> options.firstOrNull { it.translateTo == key }
+    } ?: defaultCaptionOption(options)
+
+/** Persisted for an explicit "No translation" pick. Not a real Soniox code. */
+private const val OFF_SELECTION_KEY = "off"
+
+/**
+ * Not a real Soniox code either — "en" is the spoken language, never a translation target
+ * (see [CaptionLanguage.SPOKEN_LANGUAGES]) — so it can't collide with a
+ * [CaptionMenuOption.translateTo].
+ */
+private const val SPOKEN_LANGUAGE_SELECTION_KEY = "en"

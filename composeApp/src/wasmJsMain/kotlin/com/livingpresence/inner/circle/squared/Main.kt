@@ -9,7 +9,7 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 
 @OptIn(ExperimentalComposeUiApi::class)
-fun main() {
+public fun main() {
     document.title = "Apollo Videos"
     // Where captions get their per-session Soniox key. A web bundle is public by
     // construction, so what is baked in here is a URL and never a credential — the

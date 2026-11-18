@@ -13,22 +13,32 @@ plugins {
 }
 
 kotlin {
+    // Everything public here is API: :androidApp compiles against it, and the iOS
+    // framework exports all of it into the Objective-C header Swift imports, which
+    // grows the header and the framework link even for declarations Swift never
+    // calls. Explicit API mode makes every declaration state its visibility, and
+    // only the host entry points are public: HostBridge, PipController,
+    // DiscordConfig, DiscordAuthBroker and TranscriptionSecrets for :androidApp,
+    // mainViewController/handleDeepLink for Swift, and main for wasm. The rest is
+    // internal.
+    explicitApi()
+
     jvmToolchain(17)
 
     android {
         namespace = "com.livingpresence.inner.circle.squared.shared"
         compileSdk = 37
-        minSdk = 23
+        // Keep in step with :androidApp and :mediakit — see the note there.
+        minSdk = 24
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
-        withHostTestBuilder {
-            // isIncludeAndroidResources = true  (moved to testOptions if needed or omitted for now)
+        withHostTest {
+            // Compose touch tests launch an activity under Robolectric, which
+            // needs the merged test manifest and Android resources.
+            isIncludeAndroidResources = true
         }
     }
-
-    // testOptions are typically not available directly in the simplified KMP DSL,
-    // so we'll start with just withHostTestBuilder.
 
     val iosTargets = if (System.getProperty("os.name").startsWith("Mac OS X")) {
         listOf(
@@ -78,6 +88,7 @@ kotlin {
                 else -> "arm64-apple-ios"
             }
             inputs.file(source)
+            inputs.file(cinteropDir.resolve("AVPlayerBridge.h"))
             inputs.property("sdk", sdk)
             inputs.property("target", target)
             outputs.file(bitcodeFile)
@@ -115,6 +126,11 @@ kotlin {
                 // it explicitly so AVPlayerBridge.h is found regardless of CWD.
                 compilerOpts("-I${cinteropDir.absolutePath}")
             }
+        }
+        // cinterop does not track headers found via compilerOpts. Otherwise a
+        // new bridge method compiles in Obj-C but stays missing from Kotlin.
+        tasks.named(cinteropTaskName).configure {
+            inputs.file(cinteropDir.resolve("AVPlayerBridge.h"))
         }
         // After cinterop generates the klib (which contains cstubs.bc but NOT
         // our Obj-C implementation), inject AVPlayerBridge.bc into the klib's
@@ -249,6 +265,8 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.media3.test.utils.robolectric)
+                implementation(libs.robolectric)
+                implementation(libs.androidx.compose.ui.test.manifest)
                 implementation(libs.kotlinx.coroutines.test)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.uiTest)
@@ -349,7 +367,9 @@ kotlin.sourceSets.named("wasmJsMain") {
 }
 
 compose.resources {
-    publicResClass = true
+    // Internal, like the rest of the module (see explicitApi() above): no other
+    // module reads these resources — :androidApp ships its own res/drawable copy.
+    publicResClass = false
     packageOfResClass = "com.livingpresence.inner.circle.squared.generated.resources"
 }
 

@@ -23,7 +23,7 @@ import kotlinx.serialization.decodeFromString
  *   longer configured in the app (see [TranscriptionSecrets.DEEPGRAM_UNCONFIGURED]).
  * @param sampleRate PCM rate declared to Deepgram; must match what [feedPcm] sends.
  */
-class DeepgramClient(
+internal class DeepgramClient(
     apiKey: suspend () -> String,
     private val sampleRate: Int = 16_000,
 ) : WebSocketTranscriber(apiKey) {

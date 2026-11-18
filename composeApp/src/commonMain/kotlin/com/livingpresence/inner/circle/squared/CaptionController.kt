@@ -22,7 +22,12 @@ import com.livingpresence.inner.circle.squared.transcription.TranscriptionSettin
 import com.livingpresence.inner.circle.squared.transcription.captionLabel
 import com.livingpresence.inner.circle.squared.transcription.captionMenuButtonLabel
 import com.livingpresence.inner.circle.squared.transcription.captionMenuOptions
+import com.livingpresence.inner.circle.squared.transcription.captionOffButtonLabel
 import com.livingpresence.inner.circle.squared.transcription.defaultCaptionOption
+import com.livingpresence.inner.circle.squared.transcription.defaultCaptionOptionForFreshInstall
+import com.livingpresence.inner.circle.squared.transcription.optionForSelectionKey
+import com.livingpresence.inner.circle.squared.transcription.rememberCaptionLanguagePreference
+import com.livingpresence.inner.circle.squared.transcription.selectionKey
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -68,21 +73,37 @@ internal class CaptionController(
  * travels in Soniox's config frame and a live session cannot be re-pointed); stops on "No
  * translation" or when the screen leaves.
  *
- * **Every video starts on "No translation", including for a viewer who picked a language on
- * the last one.** Captions are metered — a session streams the whole soundtrack to Soniox for
- * as long as it runs — so a choice must not follow the viewer from video to video and quietly
- * bill them for one they never asked to have captioned. That is what [videoKey] is for: pass
- * whatever identifies the video on this screen (its URL), and the selection resets when it
- * changes, rather than depending on the player screen happening to leave the composition
- * between videos. Re-picking a language is one tap; an hour of unwatched captions is not.
+ * **The chosen language follows the viewer**, via [rememberCaptionLanguagePreference]: the
+ * next video opens captioned in whatever they picked on the last one, on this launch or any
+ * later one, rather than resetting to "No translation" and making them re-pick every time.
+ * That is a deliberate reversal of this controller's original behavior — captions are a
+ * metered stream, so this does mean a choice made once keeps billing it on videos the viewer
+ * never re-confirms wanting captioned — made because re-picking before every single video was
+ * the worse cost for how this app is actually used. [selectionKey] is what gets persisted
+ * rather than the row itself, since the menu (and so the row's identity) is rebuilt fresh per
+ * device from [CaptionLanguage.deviceTarget].
+ *
+ * **An install that has never chosen anything** starts on its device language instead of
+ * off, via [defaultCaptionOptionForFreshInstall] — see that function for why, and for why an
+ * English device (nothing there to default to) and an install that has *explicitly* picked
+ * "No translation" both still start off. The two are told apart by the stored preference
+ * itself: null means nothing has ever been recorded; anything else — including the key "No
+ * translation" itself persists as — means a choice already exists, and this default no
+ * longer applies.
  */
 @Composable
-internal fun rememberCaptionController(videoKey: Any?): CaptionController {
+internal fun rememberCaptionController(): CaptionController {
     val router = remember { CaptionAudioRouter.get() }
     // The device language is read once per composition — it cannot change without the app
     // being recreated — and decides only which row sits second, not what the menu offers.
     val options = remember { captionMenuOptions(CaptionLanguage.deviceTarget()) }
-    var selected by remember(videoKey) { mutableStateOf(defaultCaptionOption(options)) }
+    val preference = rememberCaptionLanguagePreference()
+    var selected by remember {
+        mutableStateOf(
+            preference.load()?.let { optionForSelectionKey(options, it) }
+                ?: defaultCaptionOptionForFreshInstall(options),
+        )
+    }
     val provider by TranscriptionSettings.provider.collectAsState()
 
     // A row with captions on → start (or re-point) the stream; "No translation" → stop.
@@ -104,17 +125,28 @@ internal fun rememberCaptionController(videoKey: Any?): CaptionController {
             status = router.status,
             error = router.error,
             captions = router.captions,
-            onSelect = { selected = it },
+            onSelect = {
+                selected = it
+                preference.save(selectionKey(it))
+            },
             onSelectProvider = { TranscriptionSettings.select(it) },
         )
     }
 }
 
 /**
- * The caption language menu: "No translation" (nothing running), the device's own language,
- * plain captions in the spoken language, then the rest of the languages this audience reads.
- * See [captionMenuOptions] for the rows and [captionMenuButtonLabel] for what the closed
- * button says, including the state mark that reports a connecting or failed stream.
+ * The caption control: the language menu while captions are off, or — while they're
+ * running — a single button that turns them off, in the language already on screen rather
+ * than in English. See [captionMenuOptions] for the menu's rows, [captionMenuButtonLabel] for
+ * the closed menu button's text (including the state mark for a connecting or failed stream),
+ * and [captionOffButtonLabel] for the running-state button's.
+ *
+ * The two states get different widgets rather than one button whose label changes, because a
+ * viewer running captions in, say, Hungarian does not necessarily read the other twenty-one
+ * rows' English names either — offering the full menu would just be offering a list they
+ * can't read to get back to the one row they can. Turning off is the one action this button
+ * promises while captions run; picking a *different* language is one extra tap through "No
+ * translation" first, not a tap away inside a list.
  *
  * @param onCaptionsShown called when a selection leaves captions running, so a platform whose
  *   controls cover the caption strip can get out of the way. See
@@ -143,11 +175,18 @@ internal fun CaptionLanguageMenu(
         onDispose { onMenuOpenChange(false) }
     }
 
+    if (controller.enabled) {
+        TextButton(onClick = { controller.onSelect(defaultCaptionOption(controller.options)) }) {
+            Text(text = captionOffButtonLabel(controller.selected), color = Color.White)
+        }
+        return
+    }
+
     Box {
         TextButton(onClick = { setExpanded(true) }) {
             Text(
                 text = captionMenuButtonLabel(controller.selected, status),
-                color = if (controller.enabled) Color.White else Color.White.copy(alpha = 0.7f),
+                color = Color.White.copy(alpha = 0.7f),
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { setExpanded(false) }) {

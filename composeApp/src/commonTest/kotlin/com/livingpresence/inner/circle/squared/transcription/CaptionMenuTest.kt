@@ -139,4 +139,65 @@ class CaptionMenuTest {
             "nothing is dropped for it: Korean is one row on top of the full list",
         )
     }
+
+    // --- selectionKey / optionForSelectionKey: what survives to the next video or launch. ---
+
+    @Test
+    fun turningCaptionsOffPersistsAsItsOwnKeyRatherThanNothing() {
+        // Distinct from "nothing stored yet" — see defaultCaptionOptionForFreshInstall, which
+        // only applies to an install that has never recorded a choice at all. An explicit "No
+        // translation" has to persist as a real choice, or the next video would look exactly
+        // like a fresh install and offer the device's language again instead of staying off.
+        assertEquals("off", selectionKey(russianDevice.first()))
+    }
+
+    @Test
+    fun theSpokenLanguageRowGetsItsOwnKeyDespiteAlsoHavingNoTranslateTo() {
+        // "English captions" is captionsOn with a null translateTo, same shape as "off" — the
+        // sentinel is what tells a restored preference which of the two was actually chosen.
+        val spoken = russianDevice[2]
+        assertEquals("en", selectionKey(spoken))
+    }
+
+    @Test
+    fun aTranslationRowKeysOnItsOwnCode() {
+        val russian = russianDevice[1]
+        assertEquals("ru", selectionKey(russian))
+    }
+
+    @Test
+    fun everyRowRoundTripsThroughItsOwnKey() {
+        for (option in russianDevice) {
+            assertEquals(option, optionForSelectionKey(russianDevice, selectionKey(option)))
+        }
+    }
+
+    @Test
+    fun aNullKeyRestoresOff() {
+        assertEquals(defaultCaptionOption(russianDevice), optionForSelectionKey(russianDevice, null))
+    }
+
+    @Test
+    fun aKeyThisDevicesMenuDoesNotCarryFallsBackToOff() {
+        // E.g. restoring "ko" on a device whose own row is "ru": Korean isn't offered here,
+        // so the choice can't be honored, and the safe failure is the row that costs nothing.
+        assertEquals(defaultCaptionOption(russianDevice), optionForSelectionKey(russianDevice, "ko"))
+    }
+
+    // --- defaultCaptionOptionForFreshInstall: the one-time default before anything is stored. ---
+
+    @Test
+    fun aFreshInstallOnANonEnglishDeviceDefaultsToItsOwnLanguage() {
+        assertEquals(russianDevice[1], defaultCaptionOptionForFreshInstall(russianDevice))
+    }
+
+    @Test
+    fun aFreshInstallOnAnEnglishDeviceDefaultsToOff() {
+        // No translation row sits in slot two for it — only the untranslated spoken-language
+        // row does — so there is nothing sensible to default to besides "No translation".
+        assertEquals(
+            defaultCaptionOption(englishDevice),
+            defaultCaptionOptionForFreshInstall(englishDevice),
+        )
+    }
 }

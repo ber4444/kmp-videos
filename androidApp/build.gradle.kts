@@ -20,9 +20,15 @@ android {
 
     defaultConfig {
         applicationId = "com.livingpresence.inner.circle.squared"
-        minSdk = 23
+        // 24 (Android 7.0), not 23: androidx.work 2.12.0 — and androidx in general —
+        // no longer supports Marshmallow, and the manifest merger refuses the mismatch.
+        minSdk = 24
         targetSdk = 36
-        versionCode = 7016
+        // The checked-in value is the floor for local builds. codemagic.yaml's
+        // android-release workflow overrides it with -PversionCode=<highest on
+        // Play + 1>, looked up at build time, so a scheduled build never collides
+        // with the last upload and nobody has to bump this by hand each week.
+        versionCode = providers.gradleProperty("versionCode").map(String::toInt).getOrElse(7016)
         versionName = "8.1.4"
     }
 
@@ -127,6 +133,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.runtime)
     implementation(libs.compose.foundation)
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     debugImplementation(libs.compose.ui.tooling)
 }

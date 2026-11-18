@@ -51,7 +51,7 @@ import kotlin.time.TimeSource
  * a compiled-in constant — would authenticate the first session of a video and none of
  * the reconnects after it.
  */
-abstract class WebSocketTranscriber internal constructor(
+internal abstract class WebSocketTranscriber internal constructor(
     private val apiKey: suspend () -> String,
     protected val json: Json,
     private val reconnect: ReconnectPolicy,

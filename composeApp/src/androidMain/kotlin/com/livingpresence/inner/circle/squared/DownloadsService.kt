@@ -22,7 +22,7 @@ private const val CHANNEL_ID = "ics_downloads"
  * process death) route through [WorkManagerScheduler].
  */
 @UnstableApi
-class DownloadsService : DownloadService(FOREGROUND_NOTIFICATION_ID) {
+internal class DownloadsService : DownloadService(FOREGROUND_NOTIFICATION_ID) {
     override fun getDownloadManager(): DownloadManager =
         DownloadCenter.get(this).downloadManager
 

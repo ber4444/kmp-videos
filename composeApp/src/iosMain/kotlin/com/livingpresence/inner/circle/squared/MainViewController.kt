@@ -5,6 +5,7 @@ import com.livingpresence.inner.circle.squared.discord.DiscordAuthBroker
 import com.livingpresence.inner.circle.squared.discord.DiscordConfig
 import com.livingpresence.inner.circle.squared.transcription.TranscriptionSecrets
 import platform.Foundation.NSBundle
+import platform.UIKit.UIViewController
 
 /**
  * iOS app entry point. The host Xcode project (SwiftUI `App`) calls
@@ -14,7 +15,7 @@ import platform.Foundation.NSBundle
  * Mirrors how the wasmJs target's `Main.kt` mounts `App()` into the DOM; here
  * the framework is embedded in an `iosApp` Xcode project (not in this repo).
  */
-fun mainViewController() = ComposeUIViewController {
+public fun mainViewController(): UIViewController = ComposeUIViewController {
     val info = NSBundle.mainBundle.infoDictionary
     // Where captions get their per-session Soniox key. Info.plist ships in cleartext
     // inside the .app, so this is a URL and never a credential — the Soniox key
@@ -37,7 +38,7 @@ fun mainViewController() = ComposeUIViewController {
  *
  * Unrelated deep links are ignored, so the host can forward every URL it gets.
  */
-fun handleDeepLink(url: String) {
+public fun handleDeepLink(url: String) {
     if (DiscordAuthBroker.isAuthRedirect(url)) {
         DiscordAuthBroker.deliver(url)
     }

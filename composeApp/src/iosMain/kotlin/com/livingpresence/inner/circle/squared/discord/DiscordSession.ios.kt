@@ -182,4 +182,4 @@ private fun keychainGet(account: String): String? = memScoped {
 }
 
 @Composable
-actual fun rememberDiscordSessionStore(): DiscordSessionStore = remember { IosDiscordSessionStore }
+internal actual fun rememberDiscordSessionStore(): DiscordSessionStore = remember { IosDiscordSessionStore }

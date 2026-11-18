@@ -20,43 +20,43 @@ import kotlinx.coroutines.flow.asStateFlow
  * then has to tap connect again — an acceptable trade for not persisting
  * anything auth-related to disk.
  */
-object DiscordAuthBroker {
+public object DiscordAuthBroker {
 
     private val _pendingRedirect = MutableStateFlow<String?>(null)
 
     /** The redirect URI waiting to be handled, or null when there is none. */
-    val pendingRedirect: StateFlow<String?> = _pendingRedirect.asStateFlow()
+    internal val pendingRedirect: StateFlow<String?> = _pendingRedirect.asStateFlow()
 
     /** The `state` nonce of the authorization currently in flight, if any. */
-    val pendingAuthState: String? get() = loadDiscordAuthState()
+    internal val pendingAuthState: String? get() = loadDiscordAuthState()
 
     /** The PKCE `code_verifier` for the authorization currently in flight. */
-    val pendingCodeVerifier: String? get() = loadDiscordCodeVerifier()
+    internal val pendingCodeVerifier: String? get() = loadDiscordCodeVerifier()
 
     /**
      * Records the nonce and PKCE verifier for an authorization about to launch.
      * Both must survive the round trip: the nonce proves the redirect is ours,
      * and without the verifier the token exchange fails with `invalid_grant`.
      */
-    fun startAuthorization(state: String, codeVerifier: String) {
+    internal fun startAuthorization(state: String, codeVerifier: String) {
         saveDiscordAuthState(state)
         saveDiscordCodeVerifier(codeVerifier)
         _pendingRedirect.value = null
     }
 
     /** Clears the in-flight nonce and verifier once a redirect has been matched. */
-    fun finishAuthorization() {
+    internal fun finishAuthorization() {
         saveDiscordAuthState(null)
         saveDiscordCodeVerifier(null)
     }
 
     /** Publishes a redirect URI received by a platform entry point. */
-    fun deliver(redirectUri: String) {
+    public fun deliver(redirectUri: String) {
         _pendingRedirect.value = redirectUri
     }
 
     /** Drops the pending redirect once the screen has handled it. */
-    fun consumeRedirect() {
+    internal fun consumeRedirect() {
         _pendingRedirect.value = null
     }
 
@@ -64,7 +64,7 @@ object DiscordAuthBroker {
      * Whether [uri] looks like the redirect this app registered with Discord.
      * Platform entry points use this to ignore unrelated deep links.
      */
-    fun isAuthRedirect(uri: String): Boolean =
+    public fun isAuthRedirect(uri: String): Boolean =
         uri.startsWith(DiscordConfig.redirectUri, ignoreCase = true)
 }
 

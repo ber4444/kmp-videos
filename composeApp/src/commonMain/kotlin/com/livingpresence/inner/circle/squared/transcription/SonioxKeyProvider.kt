@@ -26,7 +26,7 @@ import kotlinx.serialization.json.Json
  * ask again each time. Caching one would work exactly once and then fail every
  * reconnect for the rest of the stream.
  */
-class SonioxKeyProvider(
+internal class SonioxKeyProvider(
     private val httpClient: HttpClient,
     private val baseUrl: () -> String = { TranscriptionSecrets.sonioxTokenEndpoint },
     /**
@@ -94,7 +94,7 @@ class SonioxKeyProvider(
  * service will not mint for) is terminal; 429 and 5xx are not, and are left to the
  * ordinary reconnect backoff.
  */
-class TranscriptionKeyException(
+internal class TranscriptionKeyException(
     val status: Int,
     message: String,
 ) : Exception(message)
