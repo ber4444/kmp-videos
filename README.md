@@ -32,6 +32,9 @@ and [Apple TestFlight](https://testflight.apple.com/join/YBHu9W7V)
 - **Android playback gestures.** Double-tap the left or right side of the video
   to skip backward or forward. Hold a playing, seekable video to watch at 2×
   until you release.
+- **Pinch-to-zoom on Android and iOS.** Zoom the picture up to 4× and pan with
+  two fingers; pinch back to 1× to restore the full frame. Captions and controls
+  keep their normal size.
 - **Thumbnail feed with scrub preview.** Poster tiles and a scrub-preview bubble 
   are powered by an ExoPlayer frame engine on Android, and native `AVAssetImageGenerator` 
   on iOS, avoiding the overhead of N full per-tile players.
