@@ -60,11 +60,13 @@ internal object CaptionLanguage {
      * point of the list is that someone who does *not* want their system language can find
      * theirs quickly, and the head of it covers most of those people.
      *
-     * Only codes [SUPPORTED] has may appear here — an unsupported `target_language` is
-     * rejected by Soniox with an `error_message` that [WebSocketTranscriber] cannot tell from
-     * a dropped socket, so it would reconnect and fail for the whole video instead of
-     * showing anything. `CaptionMenuTest` pins that. Armenian belongs on this list by
-     * audience and is missing for exactly that reason: Soniox has no model for it.
+     * Only codes [SUPPORTED] has may appear here. An unsupported `target_language` is
+     * rejected by Soniox with an `error_message`; [SonioxClient.isTerminalFailure] recognizes
+     * that class of error and stops instead of reconnecting forever, so the failure mode is
+     * graceful — the video plays with no captions — but there is still no reason to offer a
+     * language that can only ever land there instead of a real caption. `CaptionMenuTest`
+     * pins the omission. Armenian belongs on this list by audience and is missing for exactly
+     * that reason: Soniox has no model for it.
      *
      * English is not here because it is not a translation — the spoken language gets its own
      * row from [captionMenuOptions], which runs Soniox with translation off.

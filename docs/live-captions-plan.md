@@ -388,15 +388,25 @@ dropdown (`CaptionLanguageMenu`, commonMain, next to the other player controls):
 
 - The rows are built in `captionMenuOptions` (commonMain, Compose-free) so the wording and the
   ordering are asserted in `CaptionMenuTest` rather than buried in a `DropdownMenu`.
-- Every offered code must be in `CaptionLanguage.SUPPORTED`; a target Soniox rejects comes back
-  as an `error_message` that `WebSocketTranscriber` cannot tell from a dropped socket, so it
-  would reconnect and fail for the whole video. `CaptionMenuTest` pins that. **Armenian is on
-  the requested list and is not offered for exactly this reason** — Soniox has no model for it.
+- Every offered code must be in `CaptionLanguage.SUPPORTED`. A target Soniox rejects comes back
+  as an `error_message`, and this used to be indistinguishable from a dropped socket —
+  `WebSocketTranscriber` would reconnect and fail for the whole video instead of showing
+  anything. **Fixed**: Soniox's `error_code` sorts into a config-validation class (400) and a
+  retryable class (408/429/503 — timeout, rate limit, service unavailable); `SonioxClient`
+  now classifies 400 as terminal via `isTerminalFailure`/`isSonioxConfigError`, and
+  `onTerminalFailure` suppresses the error line for it, so the graceful outcome is the video
+  playing with no captions. `CaptionMenuTest` and `SonioxErrorHandlingTest` pin this. **Armenian
+  is on the requested list and is still not offered** — not because the failure is catastrophic
+  any more, but because there is no reason to offer a language that can only ever land on "no
+  captions" instead of a real one: Soniox has no model for it.
 - The target now travels from the menu through `CaptionAudioRouter.enable(provider, translateTo)`
   into `LiveTranscriber.enable`, which restarts the session when the language changes: Soniox is
-  told the target in the config frame that opens the socket, so a live stream cannot be
-  re-pointed. `CaptionLanguage.deviceTarget()` still picks the default row, and nothing else
-  reads it any more.
+  told the target in the config frame that opens the socket, and the real-time protocol has no
+  message to retarget a running session — confirmed against Soniox's docs and against Soniox's
+  own Pipecat integration, which does the identical full reconnect for any settings change
+  outside speaker-diarization formatting. This is a `stt-rt-v5` protocol limit, not a shortcut
+  taken here, so there is nothing to fix on this side. `CaptionLanguage.deviceTarget()` still
+  picks the default row, and nothing else reads it any more.
 - **The selection persists across videos and app launches** — a deliberate reversal of this
   controller's original "resets every video" behavior. `CaptionMenuOption.translateTo` can't
   identify a row by itself for storage (it's null on both "No translation" and the
