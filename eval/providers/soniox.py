@@ -19,7 +19,7 @@ class SonioxProvider(Provider):
         
         # We don't have the explicit config object imported here, but we can just use the defaults
         # or pass dict if config parameter accepts dict. Actually, Soniox Python SDK uses `config` param
-        # but let's just pass basic parameters. We can pass model="stt-async-v5" and file.
+        # but let's just pass basic parameters. We can pass model="stt-async-v6" and file.
         # Wait, the SDK has `CreateTranscriptionConfig`.
         # Let's import it safely.
         from soniox.api.stt import CreateTranscriptionConfig
@@ -32,7 +32,7 @@ class SonioxProvider(Provider):
             
         config = CreateTranscriptionConfig(**config_kwargs) if config_kwargs else None
         
-        res = client.stt.transcribe_and_wait_with_tokens(file=wav_path, model="stt-async-v5", config=config)
+        res = client.stt.transcribe_and_wait_with_tokens(file=wav_path, model="stt-async-v6", config=config)
         
         text = res.text
         words = []
@@ -58,7 +58,7 @@ class SonioxProvider(Provider):
         url = "wss://stt-rt.soniox.com/transcribe-websocket"
         config = json.dumps({
             "api_key": api_key,
-            "model": "stt-rt-v5",
+            "model": "stt-rt-v6",
             "audio_format": "pcm_s16le",
             "sample_rate": 16000,
             "num_channels": 1,
@@ -103,5 +103,5 @@ class SonioxProvider(Provider):
             events=state["events"],
             final_words=state["final_words"],
             audio_duration_s=duration_s,
-            model="stt-rt-v5",
+            model="stt-rt-v6",
         )
