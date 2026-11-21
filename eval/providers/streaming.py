@@ -49,16 +49,14 @@ async def _run(url, wav_path, on_message, headers, init_message, close_message, 
                 await ws.send(close_message)
 
         async def receiver():
-            try:
-                async for raw in ws:
-                    t_recv = time.monotonic() - t0
-                    try:
-                        data = json.loads(raw)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-                    on_message(data, t_recv)
-            except websockets.ConnectionClosed:
-                pass
+            # Normal closes end iteration; abnormal closes must fail recording.
+            async for raw in ws:
+                t_recv = time.monotonic() - t0
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                on_message(data, t_recv)
 
         await asyncio.wait_for(
             asyncio.gather(sender(), receiver()),
