@@ -120,5 +120,13 @@
       ]
     }
   },
-  "input_fingerprint": "39a09fc01b368372f8cee41a45562391e43634ddaa543906b5b3542bade5a224"
+  "v6_term_boost": {
+    "clips": 12,
+    "baseline_wer": 0.3781016391259994,
+    "boosted_wer": 0.29320726448435036,
+    "baseline_entity_f1": 0.6797619047619048,
+    "boosted_entity_f1": 0.861111111111111,
+    "paired_delta_wer": -0.08489437464164903
+  },
+  "input_fingerprint": "e58055490ab60316d54b62ff27e10828ca54df7c1a8db308a04b310ed6dc6d65"
 }

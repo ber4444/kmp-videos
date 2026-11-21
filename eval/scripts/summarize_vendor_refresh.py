@@ -37,11 +37,34 @@ def summarize(baseline, candidate):
                 "corpus_wer": jiwer.wer([normalize_text(refs[e["id"]]) or "<empty>" for e in entries], [normalize_text(hyps[e["id"]]) for e in entries]),
                 "entity_f1": mean(entities), "entity_clips": len(entities)}
     result = {"manifest_sha256": hashlib.sha256(Path(config.MANIFEST_PATH).read_bytes()).hexdigest(), "asr": {}, "translation": {}, "device": {}, "device_stream_smoke": {}}
+    candidate_batch = {}
     for label, root in [("legacy_v5", baseline), ("v6", candidate)]:
         hyps = {e["id"]: load(root / "soniox" / f"{e['id']}.json")["text"] for e in entries}
+        if label == "v6":
+            candidate_batch = hyps
         batch = accuracy(hyps)
         streamed = [calculate_streaming_metrics(refs[e["id"]], StreamResult(**load(root / "soniox-stream" / f"{e['id']}.json"))) for e in entries]
         result["asr"][label] = {**batch, "streaming_clips": len(streamed), **{key: mean(m[key] for m in streamed) for key in streamed[0]}}
+    boost_rows = []
+    for e in entries:
+        if not e["domain_terms"]:
+            continue
+        boosted = load(candidate / "soniox-boost" / f"{e['id']}.json")
+        if boosted["model"] != "stt-async-v6":
+            raise ValueError("Boosted fixture model mismatch")
+        ref = refs[e["id"]]
+        plain = candidate_batch[e["id"]]
+        boost_rows.append({
+            "baseline_wer": calculate_metrics(ref, plain)["wer_norm"],
+            "boosted_wer": calculate_metrics(ref, boosted["text"])["wer_norm"],
+            "baseline_entity_f1": calculate_entity_metrics(ref, plain, e["domain_terms"])["entity_f1"],
+            "boosted_entity_f1": calculate_entity_metrics(ref, boosted["text"], e["domain_terms"])["entity_f1"],
+        })
+    result["v6_term_boost"] = {
+        "clips": len(boost_rows),
+        **{key: mean(row[key] for row in boost_rows) for key in boost_rows[0]},
+        "paired_delta_wer": mean(row["boosted_wer"] - row["baseline_wer"] for row in boost_rows),
+    }
     for arm in ["none", "app"]:
         for lang in ["hu", "ru"]:
             rows = []
@@ -89,6 +112,8 @@ def markdown(r):
     a,b=r['asr']['legacy_v5'],r['asr']['v6']
     for title,key,fmt in [('Mean per-clip normalized WER','mean_clip_wer','.3f'),('Corpus normalized WER','corpus_wer','.3f'),('Mean Entity F1 (12 clips with terms)','entity_f1','.3f'),('Streaming WER (21 clips)','stream_wer','.3f'),('Flicker','flicker','.3f'),('Mean per-clip median final latency, seconds','final_latency_med_s','.2f'),('Mean per-clip p95 final latency, seconds','final_latency_p95_s','.2f')]:
         lines.append(f'| {title} | {a[key]:{fmt}} | {b[key]:{fmt}} |')
+    boost = r['v6_term_boost']
+    lines += ['', f"On the same {boost['clips']} clips with labelled terms, v6 term boosting changes mean WER from {boost['baseline_wer']:.3f} to {boost['boosted_wer']:.3f} (paired delta {boost['paired_delta_wer']:+.3f}) and Entity F1 from {boost['baseline_entity_f1']:.3f} to {boost['boosted_entity_f1']:.3f}. This arm supplies each clip's labelled vocabulary, not the fixed 49-term app glossary; it is not a controlled comparison with the historical full-set glossary experiment. The response fixtures store model IDs but not their request context; arm attribution follows the recording code."]
     lines += ['', 'Batch v6 is worse on both WER aggregations; streaming WER improves while flicker and finalization latency worsen. Latency uses provider timestamps and token finalizations, not forced alignment. Legacy batch fixtures lack stored model provenance; the historical v5 label follows the previous provider code. Streaming fixtures explicitly record v5/v6.', '', '## Async in-band translation', '', '| Target | No context, DeepL ideal | App context, DeepL ideal | No context, Gemini ideal | App context, Gemini ideal |', '|---|---:|---:|---:|---:|']
     for lang in ['hu','ru']:
         n=r['translation'][f'v6_none_{lang}'];a=r['translation'][f'v6_app_{lang}']

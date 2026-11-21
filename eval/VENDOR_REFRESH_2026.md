@@ -10,6 +10,10 @@ separately from this evaluation PR.
 
 - Soniox v6 batch mean normalized WER is **0.268**, versus the archived **0.242**.
   Corpus WER also worsens, **0.184 vs 0.159**, and Entity F1 is **0.680 vs 0.770**.
+- On the same 12 clips with labelled terms, v6 term boosting lowers mean WER
+  **0.378 → 0.293** (paired **−0.085**) and raises Entity F1 **0.680 → 0.861**.
+  This uses each clip's labelled terms, not the fixed app glossary. Request context
+  was not stored in these response fixtures; the arm follows the recording code.
 - Streaming WER improves, **0.293 vs 0.309**, while flicker worsens,
   **0.237 vs 0.228**. The mean per-clip median/p95 finalization times are
   **6.09/7.14 s**, versus **5.77/6.78 s**. These use provider timestamps, not alignment.

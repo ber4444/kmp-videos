@@ -14,6 +14,8 @@ Recorded November 20–21, 2026. Offline recomputation from the same 21 verified
 | Mean per-clip median final latency, seconds | 5.77 | 6.09 |
 | Mean per-clip p95 final latency, seconds | 6.78 | 7.14 |
 
+On the same 12 clips with labelled terms, v6 term boosting changes mean WER from 0.378 to 0.293 (paired delta -0.085) and Entity F1 from 0.680 to 0.861. This arm supplies each clip's labelled vocabulary, not the fixed 49-term app glossary; it is not a controlled comparison with the historical full-set glossary experiment. The response fixtures store model IDs but not their request context; arm attribution follows the recording code.
+
 Batch v6 is worse on both WER aggregations; streaming WER improves while flicker and finalization latency worsen. Latency uses provider timestamps and token finalizations, not forced alignment. Legacy batch fixtures lack stored model provenance; the historical v5 label follows the previous provider code. Streaming fixtures explicitly record v5/v6.
 
 ## Async in-band translation
@@ -54,4 +56,4 @@ Run `venv/bin/python scripts/summarize_vendor_refresh.py` from `eval/` with the 
 
 Manifest SHA-256: `47ec4f19ae7b5f67eea1a234694bcf3c5644493bbef7950e6c3da3fd46574282`.
 
-Input fingerprint: `39a09fc01b368372f8cee41a45562391e43634ddaa543906b5b3542bade5a224`.
+Input fingerprint: `e58055490ab60316d54b62ff27e10828ca54df7c1a8db308a04b310ed6dc6d65`.
