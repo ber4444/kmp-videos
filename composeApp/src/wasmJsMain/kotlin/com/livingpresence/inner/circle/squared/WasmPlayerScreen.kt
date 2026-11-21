@@ -170,6 +170,8 @@ internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
 
     var renditions by remember { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
     var showStats by remember { mutableStateOf(false) }
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
     val captionController = rememberCaptionController()
 
     // The Compose surface on web is a single opaque skiko canvas, so (unlike the
@@ -352,6 +354,7 @@ internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
                     videoElement?.let { seekVideo(it, duration) }
                 },
                 onClose = onClose,
+                captionLanguage = captionController.selected.translateTo,
                 onThumbCenterXChanged = { thumbCenterRootX = it },
                 onTopBarBottomChanged = { topBarBottomPx = it },
                 onBottomBarTopChanged = { bottomBarTopPx = it },

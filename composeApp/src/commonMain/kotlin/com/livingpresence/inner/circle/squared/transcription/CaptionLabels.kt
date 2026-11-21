@@ -8,30 +8,25 @@ package com.livingpresence.inner.circle.squared.transcription
  */
 
 /**
- * The caption toggle's label, which states what tapping it will *do* rather than what is
- * currently happening: the device's caption language while captions are off ("Russian"),
- * and "No translation" while they are on.
+ * The label on the button that opens the caption language menu.
  *
- * [translateTo] is the resolved target from [CaptionLanguage.deviceTarget]; null means
- * nothing would be translated — an English device, or a language Soniox does not cover. The
- * wording drops to plain captions there, because a device reading English captions off
- * English audio is not translating and "No translation" would describe both states equally.
+ * A button that opens a menu reports state rather than promising an action, so it reads as
+ * the row that is currently selected: "No translation" while captions are off, "Russian
+ * translation" while they are on, "Italian" for a language picked over the device's own. The
+ * old toggle said what tapping it would *do*, because tapping it did exactly one thing;
+ * naming the action is meaningless now that the tap only opens a list. See
+ * [captionMenuOptions] for the rows themselves.
  *
  * [status] is folded in as a trailing mark so a stream that is connecting, retrying or dead
- * is still visible on the button. It replaces the old `CC…`/`CC↻`/`CC!` suffixes, and the
- * healthy case stays unmarked: the captions themselves are the evidence it is working, and a
- * steady `●` next to a text label is noise.
+ * is still visible without opening the menu. The healthy case stays unmarked — the captions
+ * themselves are the evidence it is working, and a steady `●` next to a text label is noise
+ * — and so does the off row, whose status is whatever the session that just ended left
+ * behind and says nothing about a stream that is not running.
  */
-internal fun captionToggleLabel(
-    enabled: Boolean,
-    translateTo: String?,
+internal fun captionMenuButtonLabel(
+    selected: CaptionMenuOption,
     status: TranscriberStatus,
-): String {
-    val language = translateTo?.let { CaptionLanguage.displayName(it) }
-    if (!enabled) return language ?: CAPTIONS_ON
-    val off = if (language != null) NO_TRANSLATION else CAPTIONS_OFF
-    return off + status.mark()
-}
+): String = selected.label + if (selected.captionsOn) status.mark() else ""
 
 /**
  * The provider button's label — currently unreachable, since the Deepgram/Soniox switcher
@@ -55,10 +50,93 @@ private fun TranscriberStatus.mark(): String = when (this) {
     TranscriberStatus.IDLE, TranscriberStatus.LISTENING -> ""
 }
 
-/** Turning captions on when nothing will be translated. */
-private const val CAPTIONS_ON = "Captions"
+/**
+ * While captions are running, the button that used to open the language menu instead just
+ * turns them off — the menu itself would require reading it, and anyone who picked a
+ * translation did so because they don't read the menu's language (English) comfortably. So
+ * the one thing offered here is named in [selected]'s own language rather than in English:
+ * "Feliratok le" for a viewer who chose Hungarian, not "Captions off". The stream-status mark
+ * [captionMenuButtonLabel] adds is dropped on purpose — pairing a connection-state glyph with
+ * an action label in a language the glyph's meaning was never translated into would be noise,
+ * and the captions on screen are already the evidence a working stream gives.
+ *
+ * Covers every code in [CaptionLanguage.SUPPORTED], including [selected] having none (the
+ * spoken-language row, which is captioned but not translated): that row's viewer reads
+ * English, so the English label is also the correct one, not just the fallback.
+ */
+internal fun captionOffButtonLabel(selected: CaptionMenuOption): String =
+    selected.translateTo?.let { CAPTIONS_OFF_LABEL[it] } ?: CAPTIONS_OFF_LABEL_EN
 
-/** Turning them off again in that same case, where "No translation" would say nothing. */
-private const val CAPTIONS_OFF = "No captions"
+private const val CAPTIONS_OFF_LABEL_EN = "Captions off"
 
-private const val NO_TRANSLATION = "No translation"
+/**
+ * "Captions off" in every language [CaptionLanguage.SUPPORTED] lists. These are this model's
+ * own best-effort translations, not sourced from a native speaker or a reviewed glossary —
+ * fine for a two-word UI label, but **the entries below marked with a trailing comment should
+ * get a native-speaker check before this ships**, same as any machine translation would need.
+ * The major-language entries (French, German, Spanish, Russian, Chinese, Japanese, Korean,
+ * Portuguese, Italian, Dutch, Polish, Turkish, Ukrainian, the Nordics…) carry the common,
+ * well-established phrasing video UIs already use and are lower-risk.
+ */
+private val CAPTIONS_OFF_LABEL: Map<String, String> = mapOf(
+    "af" to "Onderskrifte af", // review
+    "sq" to "Titrat e çaktivizuara", // review
+    "ar" to "الترجمة متوقفة",
+    "az" to "Altyazılar deaktiv", // review
+    "eu" to "Azpidatziak itzalita", // review
+    "be" to "Субтытры выключаны", // review
+    "bn" to "ক্যাপশন বন্ধ",
+    "bs" to "Titlovi isključeni",
+    "bg" to "Субтитрите изключени",
+    "ca" to "Subtítols desactivats",
+    "zh" to "字幕已关闭",
+    "hr" to "Titlovi isključeni",
+    "cs" to "Titulky vypnuté",
+    "da" to "Undertekster fra",
+    "nl" to "Ondertiteling uit",
+    "en" to CAPTIONS_OFF_LABEL_EN,
+    "et" to "Subtiitrid väljas",
+    "fi" to "Tekstitys pois",
+    "fr" to "Sous-titres désactivés",
+    "gl" to "Subtítulos desactivados",
+    "de" to "Untertitel aus",
+    "el" to "Υπότιτλοι ανενεργοί", // review
+    "gu" to "કૅપ્શન બંધ", // review
+    "he" to "כתוביות כבויות",
+    "hi" to "कैप्शन बंद",
+    "hu" to "Feliratok le",
+    "id" to "Subtitel nonaktif",
+    "it" to "Sottotitoli disattivati",
+    "ja" to "字幕オフ",
+    "kn" to "ಶೀರ್ಷಿಕೆಗಳು ಆಫ್", // review
+    "kk" to "Субтитрлер өшірілген", // review
+    "ko" to "자막 꺼짐",
+    "lv" to "Subtitri izslēgti",
+    "lt" to "Subtitrai išjungti",
+    "mk" to "Титловите се исклучени", // review
+    "ms" to "Sari kata dimatikan", // review
+    "ml" to "അടിക്കുറിപ്പുകൾ ഓഫ്", // review
+    "mr" to "सबटायटल्स बंद", // review
+    "no" to "Undertekster av",
+    "fa" to "زیرنویس خاموش", // review
+    "pl" to "Napisy wyłączone",
+    "pt" to "Legendas desativadas",
+    "pa" to "ਕੈਪਸ਼ਨ ਬੰਦ", // review
+    "ro" to "Subtitrări dezactivate",
+    "ru" to "Субтитры выключены",
+    "sr" to "Титлови искључени", // review
+    "sk" to "Titulky vypnuté",
+    "sl" to "Podnapisi izklopljeni",
+    "es" to "Subtítulos desactivados",
+    "sw" to "Manukuu yamezimwa", // review
+    "sv" to "Undertexter av",
+    "tl" to "Naka-off ang caption", // review
+    "ta" to "வசன வரிகள் ஆஃப்", // review
+    "te" to "క్యాప్షన్లు ఆఫ్", // review
+    "th" to "คำบรรยายปิด",
+    "tr" to "Altyazılar kapalı",
+    "uk" to "Субтитри вимкнено",
+    "ur" to "کیپشنز بند", // review
+    "vi" to "Phụ đề đã tắt",
+    "cy" to "Capsiynau i ffwrdd", // review
+)

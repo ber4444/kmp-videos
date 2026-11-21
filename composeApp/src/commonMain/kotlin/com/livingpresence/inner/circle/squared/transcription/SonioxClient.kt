@@ -28,10 +28,12 @@ import kotlinx.serialization.json.Json
  * language; null leaves the stream untranslated.
  *
  * **Domain vocabulary.** The config frame also carries a `context` object built from
- * [CaptionGlossary]: `terms` pins the spelling of vocabulary a general model has no reason
- * to expect, and `translation_terms` pins the accepted rendering of those terms in the
- * language being translated into, so the caption says what the tradition says rather than
- * what a literal translation of the English would.
+ * [CaptionGlossary]: `text` names the subject of every lecture in plain English — the Fourth
+ * Way, the teaching of Peter Ouspensky — so the model resolves this vocabulary in its
+ * technical sense rather than its everyday one; `terms` pins the spelling of words a general
+ * model has no reason to expect; and `translation_terms` pins the accepted rendering of those
+ * terms in the language being translated into, so the caption says what the tradition says
+ * rather than what a literal translation of the English would.
  *
  * **Idle timeouts.** Soniox closes a stream that receives neither audio nor a keepalive
  * for more than ~20 s, reporting `error_message: "Request timeout"` — which a paused video,
@@ -39,6 +41,25 @@ import kotlinx.serialization.json.Json
  * `{"type":"keepalive"}` control message whenever the audio stream goes quiet, and an error
  * that arrives anyway is reported through [failSession] so the base class reconnects instead
  * of leaving the transcript frozen for the rest of the video.
+ *
+ * **Not every `error_message` is routine, though.** Soniox documents its `error_code`s in two
+ * families: 408 (request timeout), 429 (rate limit) and 503 (service unavailable) are
+ * transient — retrying is the right move, same as a dropped socket. 400 is a config-validation
+ * failure — invalid `target_language`, invalid language hint, oversized context — and retrying
+ * resends the exact config Soniox just rejected, forever. [isTerminalFailure] and
+ * [onTerminalFailure] below treat 400 as terminal and silent: no error line in the transcript,
+ * because there is nothing here for a viewer to act on. The most likely real-world case is an
+ * unsupported `target_language` reaching this socket despite [CaptionLanguage]'s curation —
+ * see [CaptionLanguage.MENU_LANGUAGES] — and the graceful outcome is the video playing with no
+ * captions, not a frozen error line or an infinite reconnect loop.
+ *
+ * **Language changes cannot avoid a reconnect.** [translateTo] is fixed for the life of this
+ * socket because the real-time protocol only accepts config in the one frame [onOpen] sends;
+ * there is no documented message to retarget a running session. This isn't a shortcut taken
+ * here — Soniox's own Pipecat integration does the same full reconnect for any settings change
+ * outside speaker-diarization formatting, which is the closest thing to an authoritative second
+ * source on the wire protocol. [LiveTranscriber.enable] opening a fresh session on every
+ * language change is therefore the correct behavior for `stt-rt-v5`, not a gap to close.
  *
  * NOTE: endpoint host and field names should be re-verified against current Soniox
  * docs (see docs/live-captions-plan.md) — they change and this hasn't been run against
@@ -49,6 +70,7 @@ internal class SonioxClient(
     private val sampleRate: Int = 16_000,
     private val languageHints: List<String> = listOf("en"),
     private val translateTo: String? = null,
+    private val domain: String? = null,
     private val terms: List<String> = emptyList(),
     private val translationTerms: Map<String, String> = emptyMap(),
 ) : WebSocketTranscriber(
@@ -81,7 +103,7 @@ internal class SonioxClient(
             sampleRate = sampleRate,
             languageHints = languageHints,
             translation = translateTo?.let { SonioxTranslation(targetLanguage = it) },
-            context = sonioxContext(terms, translationTerms),
+            context = sonioxContext(domain, terms, translationTerms),
         )
         ws.sendText(json.encodeToString(config))
     }
@@ -103,6 +125,27 @@ internal class SonioxClient(
         lineBuffer.clear()
     }
 
+    /**
+     * Soniox's 400 class — invalid `target_language`, invalid language hint, oversized
+     * context, an unsupported model feature — is a config-validation rejection, and retrying
+     * resends the same config to the same rejection. 408/429/503 are Soniox's own retryable
+     * classes (timeout, rate limit, service unavailable) and fall through to the default.
+     */
+    override fun isTerminalFailure(message: String): Boolean =
+        super.isTerminalFailure(message) || isSonioxConfigError(message)
+
+    /**
+     * A config error has nothing for a viewer to act on, so the graceful outcome is the video
+     * playing with no captions — not an error line sitting in the caption strip for the rest
+     * of it. Most likely cause: an unsupported `target_language` reaching this socket despite
+     * [CaptionLanguage]'s curated menu (see [CaptionLanguage.MENU_LANGUAGES]). Anything else
+     * terminal (e.g. an auth rejection) keeps the base class's default message.
+     */
+    override fun onTerminalFailure(message: String) {
+        if (isSonioxConfigError(message)) return
+        super.onTerminalFailure(message)
+    }
+
     override fun handleMessage(text: String) {
         val resp = runCatching { json.decodeFromString<SonioxResponse>(text) }.getOrNull()
         if (resp == null) {
@@ -112,8 +155,10 @@ internal class SonioxClient(
         }
         if (resp.errorMessage != null) {
             // Soniox sends the error, then closes: end this session and let the base class
-            // reconnect. "Request timeout" in particular is routine on a long stream.
-            failSession("Soniox: ${resp.errorMessage}")
+            // decide whether to reconnect. "Request timeout" in particular is routine on a
+            // long stream; a 400 is not, and isTerminalFailure/onTerminalFailure above are
+            // what tell the two apart.
+            failSession(sonioxFailureMessage(resp.errorCode, resp.errorMessage))
             return
         }
         val caption = selectCaptionText(resp.tokens, translating = translateTo != null)
@@ -174,6 +219,24 @@ internal class SonioxClient(
     }
 }
 
+/**
+ * The failure text [SonioxClient.handleMessage] passes to `failSession` for an `error_message`
+ * frame. Carries [errorCode] in a suffix [isSonioxConfigError] can parse back out, so the
+ * terminal/retryable distinction lives in a plain string the base class already threads through
+ * `isTerminalFailure`, rather than a new typed channel just for one provider's error codes.
+ */
+internal fun sonioxFailureMessage(errorCode: Int?, errorMessage: String): String =
+    "Soniox: $errorMessage" + (errorCode?.let { " (error_code=$it)" } ?: "")
+
+/**
+ * Whether [message] (as built by [sonioxFailureMessage]) names Soniox's documented 400 class —
+ * a config-validation rejection such as an invalid `target_language`, invalid language hint, or
+ * oversized context. Soniox's other documented codes — 408 (request timeout), 429 (rate limit),
+ * 503 (service unavailable) — are transient and deliberately excluded here, since those are
+ * exactly where a reconnect is supposed to help.
+ */
+internal fun isSonioxConfigError(message: String): Boolean = "(error_code=400)" in message
+
 /** One result frame's text, split into what can be committed and the tail still being revised. */
 internal data class SonioxCaption(val finalized: String, val partial: String)
 
@@ -208,12 +271,13 @@ internal fun selectCaptionText(tokens: List<SonioxToken>, translating: Boolean):
 private const val TRANSLATION_STATUS_TRANSLATION = "translation"
 
 /**
- * The session `context` Soniox accepts alongside the audio settings. Only the two sections
- * this app has anything to say are modelled; the API also takes `general` key-values and a
- * free-text `text` block.
+ * The session `context` Soniox accepts alongside the audio settings. Only the three sections
+ * this app has anything to say are modelled; the API also takes `general` key-values.
  */
 @Serializable
 internal data class SonioxContext(
+    /** Free-text description of the material — what these recordings are, in a sentence. */
+    val text: String? = null,
     val terms: List<String>? = null,
     @SerialName("translation_terms") val translationTerms: List<SonioxTranslationTerm>? = null,
 )
@@ -223,16 +287,20 @@ internal data class SonioxContext(
 internal data class SonioxTranslationTerm(val source: String, val target: String)
 
 /**
- * Builds the context block, or null when there is nothing to say — an empty `terms` array
- * would otherwise be sent on every session, and the two sections are independently empty:
- * a device with no glossary for its language still gets the transcription terms.
+ * Builds the context block, or null when there is nothing to say. The three sections are
+ * independently empty and each is omitted rather than sent blank — a session captioning into
+ * a language with no glossary still gets the domain sentence and the transcription terms, and
+ * an empty array would otherwise be parsed and ignored on every one of those sessions.
  */
 internal fun sonioxContext(
+    domain: String?,
     terms: List<String>,
     translationTerms: Map<String, String>,
 ): SonioxContext? {
-    if (terms.isEmpty() && translationTerms.isEmpty()) return null
+    val text = domain?.takeIf { it.isNotBlank() }
+    if (text == null && terms.isEmpty() && translationTerms.isEmpty()) return null
     return SonioxContext(
+        text = text,
         terms = terms.takeIf { it.isNotEmpty() },
         translationTerms = translationTerms
             .map { (source, target) -> SonioxTranslationTerm(source, target) }

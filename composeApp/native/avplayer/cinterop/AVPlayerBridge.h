@@ -71,9 +71,12 @@ typedef void (^PreviewFrameCallback)(UIImage * _Nullable image, NSError * _Nulla
 // Item lifecycle
 - (void)replaceCurrentItemWithItem:(AVPlayerItem *)item;
 
-// Creates a UIView whose backing layer is an AVPlayerLayer linked to this player.
-// It automatically resizes the player layer to match its bounds.
+// Creates a clipping UIView hosting this bridge's playerLayer.
+// It automatically resizes the player layer to match its bounds and zoom.
 - (UIView *)createPlayerView;
+
+// Offsets are fractions of the viewport, independent of Compose pixels / UIKit points.
+- (void)setVideoZoomScale:(float)scale offsetX:(float)offsetX offsetY:(float)offsetY;
 
 // Quality / Rendition controls
 @property (nonatomic, assign) double preferredPeakBitRate;

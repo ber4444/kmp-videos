@@ -1,6 +1,7 @@
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
+import config
 
 class WordInfo(BaseModel):
     word: str
@@ -12,6 +13,7 @@ class TranscriptResult(BaseModel):
     text: str
     words: List[WordInfo]
     raw_response: Dict[str, Any]
+    model: str = ""  # Legacy fixtures did not store model provenance.
 
 # --- Streaming (Phase 4) ---
 
@@ -33,6 +35,11 @@ class StreamResult(BaseModel):
     final_words: List[FinalWord]
     audio_duration_s: float
     model: str = ""
+    # The non-secret part of the config frame that opened the session. Recorded because an
+    # arm defined by a config knob is worthless if the vendor quietly ignored the knob:
+    # the fixture would look like a valid negative result. Defaulted so fixtures recorded
+    # before this field existed still parse.
+    session_config: Dict[str, Any] = {}
 
 class Provider(ABC):
     @property
@@ -47,7 +54,7 @@ class Provider(ABC):
 
         is_live = os.environ.get("EVAL_LIVE", "0") == "1"
         clip_id = Path(wav_path).stem
-        fix_dir = os.path.join(os.path.dirname(__file__), "..", "fixtures", f"{self.name}-boost" if boost else self.name)
+        fix_dir = os.path.join(config.FIXTURES_DIR, f"{self.name}-boost" if boost else self.name)
         fix_path = os.path.join(fix_dir, f"{clip_id}.json")
 
         if not is_live:
@@ -73,7 +80,7 @@ class Provider(ABC):
 
         is_live = os.environ.get("EVAL_LIVE", "0") == "1"
         clip_id = Path(wav_path).stem
-        fix_dir = os.path.join(os.path.dirname(__file__), "..", "fixtures", f"{self.name}-stream")
+        fix_dir = os.path.join(config.FIXTURES_DIR, f"{self.name}-stream")
         fix_path = os.path.join(fix_dir, f"{clip_id}.json")
 
         if not is_live:

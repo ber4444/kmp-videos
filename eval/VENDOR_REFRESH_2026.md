@@ -1,109 +1,122 @@
-# 2026 Vendor Refresh
+# 2026 vendor refresh
 
-Tracking doc for re-checking two conclusions that predate a year of vendor releases:
-the Soniox numbers in [`scorecard.md`](reports/scorecard.md) and
-[`the-metric-was-the-bug.md`](../docs/articles/the-metric-was-the-bug.md) were measured
-against `stt-rt-v5` / `stt-async-v5`, and the on-device conclusion in
-[`the-audio-tap-that-never-fires.md`](../docs/articles/the-audio-tap-that-never-fires.md) (which cites an "ADR 0001" at
-`docs/adr/0001-cloud-streaming-asr-for-live-captions.md` that isn't actually committed to this
-repo — a pre-existing dead link in the drafts, flagged here rather than fixed, since it's not
-this doc's job) was measured against Vosk and whisper.cpp on a Fold3, before Moonshine v2 and
-Whistle existed.
+PR #110 rechecks the Soniox evaluation and the earlier decision to abandon local ASR.
+The [complete measured tables](VENDOR_REFRESH_RESULTS_2026.md) and
+[aggregate JSON](VENDOR_REFRESH_RESULTS_2026.json) are committed; recordings, audio,
+references and transcripts remain in the local gitignored archive. The companion Medium article drafts are maintained as untracked local files,
+separately from this evaluation PR.
 
-Following the harness's own honesty convention: a blank is never a guess. Cells not yet
-measured read **n/a (not run)**, same as the scorecard.
+## Results
 
-## Goal
+- Soniox v6 batch mean normalized WER is **0.268**, versus the archived **0.242**.
+  Corpus WER also worsens, **0.184 vs 0.159**, and Entity F1 is **0.680 vs 0.770**.
+- Streaming WER improves, **0.293 vs 0.309**, while flicker worsens,
+  **0.237 vs 0.228**. The mean per-clip median/p95 finalization times are
+  **6.09/7.14 s**, versus **5.77/6.78 s**. These use provider timestamps, not alignment.
+- V6 async translation with the final app context scores **54.1 HU / 54.6 RU chrF**
+  against the existing DeepL references, versus **52.5/53.9** without context.
+  Against existing Gemini references the respective scores are **56.4/59.8** and
+  **54.8/57.9**. All four arms cover all 21 clips.
+- On the user-approved **Pixel 7a / Tensor G2**, Moonshine Medium Streaming and
+  Whistle have median warm compute RTF **0.113** and **0.026**, but mean per-clip
+  WER **0.549** and **0.643**. They keep up in standalone native inference; these
+  unboosted recognition results do not establish a replacement caption pipeline.
+- The one-clip, real-time-paced smoke has warm WER **0.723/0.957** and compute RTF
+  **0.293/0.192** for Moonshine/Whistle. This is not corpus streaming quality.
 
-1. **Rerun the Soniox arm against v6** (`stt-rt-v6` / `stt-async-v6`, released 2026-11-03) and
-   see whether the chrF/WER table in the scorecard moves enough to change anything the articles
-   concluded.
-2. **Bench Moonshine v2 and Whistle** on the same Fold3 (Snapdragon 888) that killed Whisper in
-   ADR 0001, to see whether either changes the on-device conclusion.
+The original Fold3 was unavailable. Pixel measurements are labelled as a hardware
+substitution, not a Snapdragon 888 replication. No HLS/Compose concurrent-load test
+or production provider switch was made. The app remains on its existing configuration;
+this PR upgrades the evaluation candidate.
 
-## Out of scope (checked, no action needed)
+## Protocol and provenance
 
-- **Deepgram** — Nova-3 Multilingual improved WER substantially, but still has no translation
-  API. The second reason it was switched off (no in-band translation) hasn't changed, so a
-  quality-only re-bench wouldn't change the decision.
-- **ElevenLabs Scribe v3 Live** — transcription-only by design. Using it would reintroduce the
-  two-stage architecture `the-metric-was-the-bug.md` already priced out.
-- **Gemini Live Translate / DeepL Voice-to-Voice** — both output synthesized speech, not text.
-  Different product shape than live text captions; not comparable to this feature.
-- **NVIDIA Parakeet TDT** — chunked streaming rather than native, 0.6B params. Likely still too
-  heavy to coexist with HLS decode + 60fps Compose on the hardware budget the article already
-  established as tight. Worth a line in the table below for completeness, not worth a device
-  bench yet.
+The Soniox set contains 21 verified clips, about 21 minutes of audio. Recognition
+recording includes 21 baseline batch, 12 term-boosted batch, and 21 paced streaming
+calls. V6 batch recognition leaves language hints unset, matching the original v5
+recording protocol; the new translation arms explicitly hint English. Batch recognition
+has no full app context. Do not equate those rows with the quality of shipped captions.
 
-## Part 1 — Soniox v5 (shipped) vs v6 (candidate)
+Historical batch fixtures lack embedded model IDs; the v5 attribution follows the
+previous provider code. Their recording configurations are not fully preserved.
+Streaming recognition fixtures explicitly name their model. V5 requests will route to
+v6 after the vendor's December 15, 2026 retirement, so preserve the old fixtures rather
+than trying to reconstruct a v5 baseline later.
 
-| Metric | v5 (shipped, current scorecard) | v6 (candidate) |
-|---|---:|---:|
-| WER (Norm), overall | 0.242 | n/a (not run) |
-| Entity F1, overall | 0.770 | n/a (not run) |
-| Streaming WER | 0.309 | n/a (not run) |
-| Flicker | 0.228 | n/a (not run) |
-| Final latency (med / p95) | 5.77s / 6.78s | n/a (not run) |
-| In-band chrF, hu (context) | 54.4 (n=21) | n/a (not run) |
-| In-band chrF, ru (context) | 53.2 (n=21) | n/a (not run) |
-| Two-stage (cross-engine) chrF, hu | 57.2 (n=21) | n/a (not run) |
-| Different-engine floor, hu | 68.1 (n=21) | n/a (not run) |
+Translation uses `stt-async-v6`, one-way HU/RU translation, and either no context or the
+merged PR #82 app context. The context source was frozen from `origin/main` **07aba75**:
+`CaptionGlossary.DOMAIN` (284 characters), 49 `TERMS`, and the corresponding translation
+map. Every new translation fixture stores the exact request, audio/glossary hashes,
+model, mode, separate original/translated text and raw response. The extractor reuses
+`app_context.py` and validates complete mappings. Set `EVAL_GLOSSARY_PATH` only to an
+explicit reviewed snapshot when measuring from a checkout older than the shipped app.
 
-v6's own release notes claim better alphanumeric preservation (dates, currencies, IDs) and
-better handling of mid-sentence language switching — both are exactly the axis
-`asr_context.md` found worth the most points (phrasing/register context), so there's a
-specific reason to expect the context-vs-no-context delta to move, not just the raw WER.
+The initial PR checkout predated that merge. Ten vocabulary-only translation responses
+were preserved separately under `superseded-without-domain/` and excluded from the
+reported shipped-context arms. The interrupted no-context response was retrieved from
+Soniox rather than rebilled. A too-strict check of optional token language tags was also
+fixed after the smoke, with its already-billed response recovered. One initial streaming
+smoke was repeated after adding terminal-response validation. Including those extra
+responses, nominal Soniox audio processed was about **149 minutes**; this is an audio
+accounting total, not a provider invoice.
 
-**Pros of rerunning now:** same harness, same fixtures, same golden set — this is a version
-string in two places (`providers/soniox.py`) plus a record/score cycle, not new plumbing.
+No DeepL or Gemini API was called. Their existing translations of the verified English
+references were reused. The historical v5 async and real-time translation fixtures lack
+matching context provenance, so they are shown as historical rows, not controlled v5→v6
+translation deltas. The two-stage and oracle experiments were not rerun. Different-engine
+reference agreement is a control, not a human quality ceiling.
 
-**Cons:** `record.py` / `record_stream.py` / `translate.py` are billed. A full 21-clip rerun
-across batch + streaming + translation is the same spend as the original run that produced the
-current scorecard.
+Native tests used released Moonshine Voice 0.1.6 and Cactus Python 4.2.6's pinned engine
+4.1.4. Both ran each golden clip twice with a resident model, sequentially by engine.
+Warm results use the second run. Desktop sanity checks used one golden clip twice per
+engine. See [native setup](native/README.md) for model revisions, compiler flags, sizes,
+chunk pacing and repeat commands. The original Fold3 result is documented in
+[ADR 0001](../docs/adr/0001-cloud-streaming-asr-for-live-captions.md). Its exact benchmark
+executable/audio are not archived in this checkout, so the old ~2× Whisper RTF was not
+independently rerun here.
 
-## Part 2 — On-device ASR
+## Replay and repeat
 
-| Model | RTF on Fold3 (Snapdragon 888) | WER | Multilingual | License | Notes |
-|---|---:|---:|---|---|---|
-| whisper.cpp `base.en` (measured, ADR 0001) | ~2.0× (real time = 1.0×) | n/a (not measured on this set) | No | MIT | Fragmentary output from 30s fixed windows; this is the number the on-device path was killed on. |
-| Moonshine v2 (medium, streaming) | n/a (not run) | n/a (not run) | **No** (English-first) | MIT | Vendor claims ~107ms latency vs Whisper's ~11s on desktop hardware, native variable-length streaming instead of fixed windows — the specific thing that made Whisper's output fragmentary. Desktop number, not a Fold3 number. English-only means it could at most unlock an on-device *English transcript* tier, not the 22-language translated-caption feature. |
-| Whistle (Cactus Compute) | n/a (not run) | n/a (not run) | **Yes** (7 European languages) | Apache 2.0 | 16.9MB, single file, no dependencies. The one on-device candidate that doesn't share Moonshine's English-only limit — worth benching for that reason even though it's newer and less proven. |
-| NVIDIA Parakeet TDT 0.6B v3 | n/a (not run, not planned) | n/a | No (per-language models) | CC-BY-4.0 | Accuracy/throughput leader on server hardware; chunked streaming, not native, and the 0.6B size is likely still too heavy next to HLS decode + Compose compositing. Listed for completeness only. |
+From `eval/`, with its virtual environment and exported `.env` keys for billed recording:
 
-**Pros of benching Moonshine v2 / Whistle:** both are architected against the exact failure
-mode the article documented (fixed-window chunking causing fragmentary captions), not just a
-faster version of the same architecture Whisper used. A desktop sanity check is free (CPU-only,
-no device needed) before spending Fold3 time.
+```bash
+export EVAL_FIXTURES_DIR="$PWD/fixtures/vendor-refresh-2026-v6"
+export EVAL_REPORTS_DIR="$PWD/reports/vendor-refresh-2026-v6"
 
-**Cons:** neither is wired into this repo today — there's no provider adapter, no `sherpa-onnx`
-dependency, and the Fold3 bench needs an APK or adb-pushed binary, not just a Python script.
-This is new plumbing, not a rerun of existing plumbing, so it's a bigger lift than Part 1.
-Moonshine's English-only limitation also means a "win" here doesn't replace Soniox — it would
-only matter for a scenario where translation isn't needed.
+# Dry runs never call a provider or create recordings.
+venv/bin/python scripts/record.py --provider soniox --max-clips 1 --baseline-only --dry-run
+venv/bin/python scripts/record_stream.py --provider soniox --max-clips 1 --dry-run
+venv/bin/python scripts/record_soniox_translation.py --dry-run
 
-## Execution plan — small steps, in order
+# Billed recording: valid cached outputs are skipped.
+venv/bin/python scripts/record.py --provider soniox
+venv/bin/python scripts/record_stream.py --provider soniox
+venv/bin/python scripts/record_soniox_translation.py
 
-Each step is meant to be its own session. Steps 1–2 cost nothing. Steps 3+ spend either API
-credits (Soniox/DeepL) or device time; confirm before running them.
+# Offline, using the original local references and complete recordings.
+venv/bin/python scripts/summarize_vendor_refresh.py
+```
 
-- [x] **Step 0.** Open this doc + a draft PR stating the two goals. *(this PR)*
-- [x] **Step 1 (free).** Bump `model="stt-async-v5"` → `stt-async-v6` and
-      `model="stt-rt-v5"` → `stt-rt-v6` in `eval/providers/soniox.py`. *(this PR — no API call
-      made, just the version string; the SDK accepting it is still unverified.)*
-- [ ] **Step 2 (free).** Smoke-test: one clip through `record.py` restricted to Soniox only, to
-      confirm v6 returns a well-formed response before spending on the full set.
-- [ ] **Step 3 (billed, small).** `record.py` + `record_stream.py` for Soniox v6 across the full
-      21-clip golden set. Regenerate `scorecard.md`'s overall WER/Entity F1/streaming rows.
-- [ ] **Step 4 (billed, small).** `translate.py` rerun against the v6 fixtures. Regenerate the
-      In-Band Translation Quality table (hu, ru).
-- [ ] **Step 5 (free).** Diff v6 numbers against this doc's v5 column. If nothing material
-      moved, say so in the scorecard and close this out. If something moved past the floor
-      established in `the-metric-was-the-bug.md`, flag it before touching the article text.
-- [ ] **Step 6 (free).** Desktop sanity check: run one golden clip through Moonshine v2
-      (`sherpa-onnx`, CPU) and Whistle locally, no device involved. Confirms both actually run
-      on this audio before spending device time.
-- [ ] **Step 7 (device time).** Push Moonshine v2 to the Fold3, measure RTF and WER on the same
-      clip(s) ADR 0001 used for whisper.cpp.
-- [ ] **Step 8 (device time).** Repeat Step 7 for Whistle.
-- [ ] **Step 9 (free).** Fold whichever numbers came back into this doc, and only then decide
-      whether ADR 0001 or either article needs a correction.
+Do not replace historical fixture directories. Replay/scoring use the same explicit
+fixture/report roots; unset the exports to return to the historical defaults. Recording
+caps count pending calls, including boosted/translation arms, using WAV duration.
+A provider failure stops the recorder with a nonzero status. Generic Soniox recording
+rejects cached results from another model or with an invalid result schema. The new
+translation recorder additionally rejects mismatched request/audio identities.
+
+## Vendor facts checked
+
+- [Soniox models](https://docs.soniox.com/stt/models) confirms the November 3 v6 release,
+  active identifiers and v5 retirement. [Context](https://docs.soniox.com/stt/concepts/context)
+  documents `text`, `terms` and `translation_terms`.
+- [Moonshine](https://github.com/moonshine-ai/moonshine) documents incremental recognition
+  and the English checkpoint's MIT license. Other language checkpoints exist under
+  separate terms; this was an English Medium Streaming benchmark.
+- [Whistle](https://www.cactuscompute.com/blog/whistle) and its
+  [model card](https://huggingface.co/Cactus-Compute/whistle) document the 16.9 MB model,
+  seven languages and Apache 2.0 license. Its noncausal encoder and windowed file path
+  do not establish freedom from chunk-boundary errors.
+- [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) is one 600M-parameter,
+  25-language checkpoint under CC-BY-4.0. It was outside this benchmark, along with
+  other cloud providers and speech-to-speech products. That is a scope choice, not a
+  renewed assessment of their capabilities.

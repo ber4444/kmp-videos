@@ -33,13 +33,12 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
-        withHostTestBuilder {
-            // isIncludeAndroidResources = true  (moved to testOptions if needed or omitted for now)
+        withHostTest {
+            // Compose touch tests launch an activity under Robolectric, which
+            // needs the merged test manifest and Android resources.
+            isIncludeAndroidResources = true
         }
     }
-
-    // testOptions are typically not available directly in the simplified KMP DSL,
-    // so we'll start with just withHostTestBuilder.
 
     val iosTargets = if (System.getProperty("os.name").startsWith("Mac OS X")) {
         listOf(
@@ -89,6 +88,7 @@ kotlin {
                 else -> "arm64-apple-ios"
             }
             inputs.file(source)
+            inputs.file(cinteropDir.resolve("AVPlayerBridge.h"))
             inputs.property("sdk", sdk)
             inputs.property("target", target)
             outputs.file(bitcodeFile)
@@ -126,6 +126,11 @@ kotlin {
                 // it explicitly so AVPlayerBridge.h is found regardless of CWD.
                 compilerOpts("-I${cinteropDir.absolutePath}")
             }
+        }
+        // cinterop does not track headers found via compilerOpts. Otherwise a
+        // new bridge method compiles in Obj-C but stays missing from Kotlin.
+        tasks.named(cinteropTaskName).configure {
+            inputs.file(cinteropDir.resolve("AVPlayerBridge.h"))
         }
         // After cinterop generates the klib (which contains cstubs.bc but NOT
         // our Obj-C implementation), inject AVPlayerBridge.bc into the klib's
@@ -260,6 +265,8 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.media3.test.utils.robolectric)
+                implementation(libs.robolectric)
+                implementation(libs.androidx.compose.ui.test.manifest)
                 implementation(libs.kotlinx.coroutines.test)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.uiTest)

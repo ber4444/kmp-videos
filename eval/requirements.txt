@@ -5,3 +5,4 @@ httpx
 pytest
 pydantic
 sacrebleu
+soniox>=2.8,<3

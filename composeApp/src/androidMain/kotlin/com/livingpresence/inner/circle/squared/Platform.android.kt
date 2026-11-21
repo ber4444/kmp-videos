@@ -45,17 +45,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource as androidPainterResource
@@ -231,18 +235,25 @@ private fun ExoPlayerScreen(
         player.playWhenReady = true
     }
     val state = rememberPlayerState(player)
+    val videoZoom = remember(url) { VideoZoomState() }
 
     // Rotate-to-fullscreen toggle (offered for landscape content).
     val fullscreen = rememberFullscreenToggle()
 
     // Phase 8: on-device transcription (CC). The RenderersFactory in the service
     // taps PCM; captions render via CaptionOverlay below.
+    // The chosen caption language persists across videos and app launches; see
+    // rememberCaptionController for why that now outweighs the per-video reset it replaced.
     val captionController = rememberCaptionController()
 
     var isScrubbing by remember(player) { mutableStateOf(false) }
     var sliderFraction by remember(player) { mutableStateOf(0f) }
     var showVideoControls by remember(player) { mutableStateOf(true) }
     var showStats by remember(player) { mutableStateOf(false) }
+    // Holds the controls up while the caption language menu is open: the menu is a child of
+    // the control bar, so auto-hiding out from under it would close a list the viewer is
+    // still reading — and it is long enough that three seconds is not enough to read it.
+    var captionMenuOpen by remember(player) { mutableStateOf(false) }
 
     val canJumpToLive by remember(state, isScrubbing, sliderFraction) {
         derivedStateOf {
@@ -343,6 +354,7 @@ private fun ExoPlayerScreen(
         visible = showVideoControls,
         isScrubbing = isScrubbing,
         isPlaying = state.isPlaying,
+        menuOpen = captionMenuOpen,
         onHide = { showVideoControls = false },
     )
 
@@ -374,6 +386,9 @@ private fun ExoPlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { videoZoom.updateBounds(it.toSize(), videoZoom.contentSize) }
+            .videoZoomGestures(videoZoom, enabled = !HostBridge.inPipState.value)
             .background(Color.Black),
     ) {
         BoxWithConstraints(
@@ -392,25 +407,36 @@ private fun ExoPlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = surfaceModifier.onGloballyPositioned { coords ->
-                        // Report the video's on-screen bounds for the PiP source-rect hint.
-                        val pos = coords.positionInRoot()
-                        val w = coords.size.width
-                        val h = coords.size.height
-                        if (w > 0 && h > 0) {
-                            pipController?.updateSourceBounds(
-                                left = pos.x.toInt(),
-                                top = pos.y.toInt(),
-                                right = (pos.x + w).toInt(),
-                                bottom = (pos.y + h).toInt(),
-                            )
-                        }
-                    },
+                    modifier = surfaceModifier
+                        .onSizeChanged { videoZoom.updateBounds(videoZoom.viewportSize, it.toSize()) }
+                        .onGloballyPositioned { coords ->
+                            // Report the video's on-screen bounds for the PiP source-rect hint.
+                            val pos = coords.positionInRoot()
+                            val w = coords.size.width
+                            val h = coords.size.height
+                            if (w > 0 && h > 0) {
+                                pipController?.updateSourceBounds(
+                                    left = pos.x.toInt(),
+                                    top = pos.y.toInt(),
+                                    right = (pos.x + w).toInt(),
+                                    bottom = (pos.y + h).toInt(),
+                                )
+                            }
+                        },
                 ) {
                     PlayerSurface(
                         player = player,
                         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            // Transform only the video child: the enclosing box
+                            // keeps stable layout bounds for the PiP source hint.
+                            // Read zoom here to avoid recomposing on every move.
+                            val inPip = HostBridge.inPipState.value
+                            scaleX = if (inPip) 1f else videoZoom.scale
+                            scaleY = scaleX
+                            translationX = if (inPip) 0f else videoZoom.offset.x
+                            translationY = if (inPip) 0f else videoZoom.offset.y
+                        },
                     )
                 }
 
@@ -480,6 +506,7 @@ private fun ExoPlayerScreen(
                                 isScrubbing = false
                             },
                             onClose = closePlayer,
+                            captionLanguage = captionController.selected.translateTo,
                             onThumbCenterXChanged = { thumbCenterRootX = it },
                             topRightControls = {
                                 PlayerTopRightControls(
@@ -488,6 +515,7 @@ private fun ExoPlayerScreen(
                                     // controls are down, so switching captions on has
                                     // to take the controls with it or nothing appears.
                                     onCaptionsShown = { showVideoControls = false },
+                                    onCaptionMenuOpenChange = { captionMenuOpen = it },
                                     onToggleStats = { showStats = !showStats },
                                     qualityMenu = {
                                         QualityMenu(
@@ -729,17 +757,20 @@ private fun PlayerErrorOverlay(
 
 /**
  * Auto-hides the controls [CONTROLS_AUTO_HIDE_MS] after the last interaction,
- * only while playing. Paused/scrubbing keeps them visible.
+ * only while playing. Paused/scrubbing keeps them visible, and so does an open
+ * [menuOpen] caption menu — it is drawn inside the control bar, so hiding the bar
+ * takes the menu with it mid-read.
  */
 @Composable
 private fun ControlsAutoHide(
     visible: Boolean,
     isScrubbing: Boolean,
     isPlaying: Boolean,
+    menuOpen: Boolean,
     onHide: () -> Unit,
 ) {
-    if (!visible || isScrubbing || !isPlaying) return
-    LaunchedEffect(visible, isScrubbing, isPlaying) {
+    if (!visible || isScrubbing || !isPlaying || menuOpen) return
+    LaunchedEffect(visible, isScrubbing, isPlaying, menuOpen) {
         delay(CONTROLS_AUTO_HIDE_MS)
         onHide()
     }

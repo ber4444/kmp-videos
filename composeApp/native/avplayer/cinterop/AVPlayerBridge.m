@@ -21,20 +21,32 @@ static NSUInteger ICSID3TagLength(NSData *data) {
 }
 
 @interface AVPlayerBridgeView : UIView
-@property (nonatomic, strong) AVPlayer *player;
+@property (nonatomic, strong) AVPlayerLayer *playerLayer;
+@property (nonatomic, assign) CGFloat zoomScale;
+@property (nonatomic, assign) CGPoint zoomOffset;
 @end
 
 @implementation AVPlayerBridgeView
-+ (Class)layerClass {
-    return [AVPlayerLayer class];
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat width = self.bounds.size.width;
+    CGFloat height = self.bounds.size.height;
+    // The outer view clips the picture without scaling the Compose overlays.
+    // Disable implicit layer animation so the picture tracks the fingers directly.
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    self.playerLayer.frame = CGRectMake(
+        width * (1 - self.zoomScale) / 2 + self.zoomOffset.x * width,
+        height * (1 - self.zoomScale) / 2 + self.zoomOffset.y * height,
+        width * self.zoomScale,
+        height * self.zoomScale
+    );
+    [CATransaction commit];
 }
-- (AVPlayer *)player {
-    return [(AVPlayerLayer *)self.layer player];
-}
-- (void)setPlayer:(AVPlayer *)player {
-    [(AVPlayerLayer *)self.layer setPlayer:player];
-    [(AVPlayerLayer *)self.layer setVideoGravity:AVLayerVideoGravityResizeAspect];
-}
+@end
+
+@interface AVPlayerBridge ()
+@property (nonatomic, weak) AVPlayerBridgeView *playerView;
 @end
 
 @implementation AVPlayerBridge
@@ -226,8 +238,21 @@ static NSUInteger ICSID3TagLength(NSData *data) {
 
 - (UIView *)createPlayerView {
     AVPlayerBridgeView *view = [[AVPlayerBridgeView alloc] initWithFrame:CGRectZero];
-    view.player = self.player;
+    view.playerLayer = self.playerLayer;
+    view.zoomScale = 1;
+    view.clipsToBounds = YES;
+    view.userInteractionEnabled = NO;
+    [view.layer addSublayer:self.playerLayer];
+    self.playerView = view;
     return view;
+}
+
+- (void)setVideoZoomScale:(float)scale offsetX:(float)offsetX offsetY:(float)offsetY {
+    AVPlayerBridgeView *view = self.playerView;
+    view.zoomScale = scale;
+    view.zoomOffset = CGPointMake(offsetX, offsetY);
+    [view setNeedsLayout];
+    [view layoutIfNeeded];
 }
 
 // Quality / Rendition controls
