@@ -166,3 +166,22 @@ Deepgram is **meaningfully worse than Soniox** on this material — ~45% higher 
 WER (0.350 vs 0.242) and much lower Entity F1 (0.49 vs 0.77), i.e. it misses the domain
 vocabulary far more often. Keyterm boosting narrows the gap on individual clips but does
 not close it. See [`reports/scorecard.md`](reports/scorecard.md) for the full breakdown.
+
+## Model refresh recording
+
+For a model refresh, keep the historical fixtures and reports intact. From `eval/`:
+
+```bash
+export EVAL_FIXTURES_DIR="$PWD/fixtures/vendor-refresh-2026-v6"
+export EVAL_REPORTS_DIR="$PWD/reports/vendor-refresh-2026-v6"
+python scripts/record.py --provider soniox --max-clips 1 --baseline-only --dry-run
+python scripts/record_stream.py --provider soniox --max-clips 1 --dry-run
+```
+
+Remove `--dry-run` to make the billed calls. `--provider` accepts one or both
+providers; `--max-clips` selects the first N manifest entries; batch recording also
+offers `--baseline-only`. Existing outputs are skipped and only pending calls count
+toward the audio cap, including boosted calls. A provider error stops recording with
+a nonzero exit status. Keep the same directory exports when replaying, translating,
+or scoring that run; unset both to return to the historical defaults. See
+[`VENDOR_REFRESH_2026.md`](VENDOR_REFRESH_2026.md) for scope and measured results.

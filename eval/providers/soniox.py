@@ -4,6 +4,10 @@ from typing import List
 from .base import Provider, TranscriptResult, WordInfo, StreamResult, StreamEvent, FinalWord
 from .streaming import run_ws_stream
 from soniox.client import SonioxClient
+from soniox.api.stt import CreateTranscriptionConfig
+
+BATCH_MODEL = "stt-async-v6"
+STREAM_MODEL = "stt-rt-v6"
 
 TRANSLATION_STATUS = "translation"
 
@@ -34,53 +38,40 @@ class SonioxProvider(Provider):
 
     def _transcribe_batch(self, wav_path: str, domain_terms: List[str], boost: bool,
                           context: dict = None) -> TranscriptResult:
-        """Transcribe a clip with the async API.
+        """Record the candidate async model, including the configuration actually sent.
 
-        `boost` sends the clip's domain terms as session `context.terms` — the same field
-        the app fills from `CaptionGlossary.kt`, and the same one
-        `transcribe_batch_translated` already used. It was previously a commented-out guess
-        at a `speech_context` field the SDK does not have, so the boosted arm re-ran the
-        baseline and the scorecard reported Soniox boosting as worthless when it had never
-        been switched on.
-
-        `context` overrides that with a caller-supplied block, which is how the oracle arms
-        ask what *better* vocabulary would be worth.
+        Boosting sends domain terms in context.terms; an explicit context overrides
+        that for the existing oracle experiments. The baseline leaves language hints
+        unset to match the original v5 recording protocol used by this refresh.
+        Translation experiments explicitly request English language hints separately.
         """
         api_key = os.environ.get("SONIOX_API_KEY")
         if not api_key:
             raise ValueError("SONIOX_API_KEY is not set")
 
-        from soniox.api.stt import CreateTranscriptionConfig
-
         client = SonioxClient(api_key=api_key)
+
         if context is None and boost and domain_terms:
             context = {"terms": list(domain_terms)}
+        config = CreateTranscriptionConfig(model=BATCH_MODEL, context=context) if context else None
+        res = client.stt.transcribe_and_wait_with_tokens(file=wav_path, model=BATCH_MODEL, config=config)
 
-        config = CreateTranscriptionConfig(
-            language_hints=["en"],
-            context=context or None,
-        )
-        res = client.stt.transcribe_and_wait_with_tokens(
-            file=wav_path, model="stt-async-v5", config=config
-        )
-
-        words = [
-            WordInfo(
+        text = res.text
+        words = []
+        for w in res.tokens:
+            words.append(WordInfo(
                 word=w.text,
-                start_s=getattr(w, "start_ms", 0) / 1000.0,
-                end_s=getattr(w, "end_ms", 0) / 1000.0,
-                confidence=getattr(w, "confidence", None) or 1.0,
-            )
-            for w in res.tokens
-        ]
+                start_s=(w.start_ms or 0) / 1000.0,
+                end_s=(w.end_ms or 0) / 1000.0,
+                confidence=w.confidence if w.confidence is not None else 1.0,
+            ))
+
         return TranscriptResult(
-            text=res.text,
+            text=text,
             words=words,
-            # Records whether context was actually sent, so a null result cannot be
-            # confused with an arm that silently ran without it — which is the exact
-            # failure this method used to have.
-            raw_response={"text": res.text, "model": "stt-async-v5",
-                          "context_sent": context or {}},
+            raw_response={"text": res.text, "model": BATCH_MODEL, "context_sent": context or {},
+                          "config_sent": config.model_dump(exclude_none=True) if config else {"model": BATCH_MODEL}},
+            model=BATCH_MODEL,
         )
 
     def transcribe_batch_translated(
@@ -112,13 +103,13 @@ class SonioxProvider(Provider):
             context=context or None,
         )
         res = client.stt.transcribe_and_wait_with_tokens(
-            file=wav_path, model="stt-async-v5", config=config
+            file=wav_path, model="stt-async-v6", config=config
         )
         text = translated_text(res.tokens)
         return TranscriptResult(
             text=text,
             words=[],  # word timings are meaningless for a translation; chrF is all this arm feeds
-            raw_response={"model": "stt-async-v5", "target_language": target_lang, "text": text},
+            raw_response={"model": "stt-async-v6", "target_language": target_lang, "text": text},
         )
 
     def transcribe_stream_translated(
@@ -134,7 +125,7 @@ class SonioxProvider(Provider):
         scorecard replays the fixture it writes.
 
         This is deliberately a mirror of `SonioxClient.kt`, not a cleaner reimplementation:
-        the same `stt-rt-v5` model, the same one-way translation block, the same session
+        the candidate `stt-rt-v6` model, the same one-way translation block, the same session
         `context`, and the same token selection. Soniox sends the original *and* the
         translation over one socket, distinguished only by `translation_status`, so the app
         keeps the translated tokens and drops the rest — score anything else and the number
@@ -147,7 +138,7 @@ class SonioxProvider(Provider):
         url = "wss://stt-rt.soniox.com/transcribe-websocket"
         config_obj = {
             "api_key": api_key,
-            "model": "stt-rt-v5",
+            "model": "stt-rt-v6",
             "audio_format": "pcm_s16le",
             "sample_rate": 16000,
             "num_channels": 1,
@@ -204,7 +195,7 @@ class SonioxProvider(Provider):
             events=state["events"],
             final_words=state["final_words"],
             audio_duration_s=duration_s,
-            model=f"stt-rt-v5+translate:{target_lang}",
+            model=f"stt-rt-v6+translate:{target_lang}",
             # Everything but the key, so the fixture says what produced it.
             session_config={k: v for k, v in config_obj.items() if k != "api_key"},
         )
@@ -217,7 +208,7 @@ class SonioxProvider(Provider):
         url = "wss://stt-rt.soniox.com/transcribe-websocket"
         config = json.dumps({
             "api_key": api_key,
-            "model": "stt-rt-v5",
+            "model": STREAM_MODEL,
             "audio_format": "pcm_s16le",
             "sample_rate": 16000,
             "num_channels": 1,
@@ -227,16 +218,19 @@ class SonioxProvider(Provider):
         # Soniox streams tokens: final tokens are emitted once (permanent); non-final
         # tokens are the evolving tail, re-sent each message. Display = committed
         # finals + this message's non-final tail.
-        state = {"committed": "", "events": [], "final_words": []}
+        state = {"committed": "", "events": [], "final_words": [], "finished": False}
 
         def on_message(data, t):
             if data.get("error_code"):
                 raise RuntimeError(f"Soniox error {data.get('error_code')}: {data.get('error_message')}")
+            state["finished"] = state["finished"] or bool(data.get("finished"))
             tokens = data.get("tokens", [])
             tail = ""
             finalized_any = False
             for tok in tokens:
                 text = tok.get("text", "")
+                if text in {"<end>", "<fin>"}:
+                    continue
                 if tok.get("is_final"):
                     state["committed"] += text
                     if text.strip():
@@ -256,11 +250,13 @@ class SonioxProvider(Provider):
             init_message=config,
             close_message="",  # empty text frame signals end-of-audio to Soniox
         )
+        if not state["finished"]:
+            raise RuntimeError("Soniox stream closed without a finished response; refusing a partial fixture")
 
         return StreamResult(
             final_text=state["committed"].strip(),
             events=state["events"],
             final_words=state["final_words"],
             audio_duration_s=duration_s,
-            model="stt-rt-v5",
+            model=STREAM_MODEL,
         )
