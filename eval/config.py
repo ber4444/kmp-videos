@@ -26,8 +26,9 @@ CLIPS_DIR = os.path.join(GOLDEN_DIR, "clips")
 REFS_DIR = os.path.join(GOLDEN_DIR, "refs")
 ALIGN_DIR = os.path.join(GOLDEN_DIR, "align")
 
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
+# Keep candidate recording, replay and scoring separate from historical fixtures.
+FIXTURES_DIR = os.environ.get("EVAL_FIXTURES_DIR", os.path.join(os.path.dirname(__file__), "fixtures"))
+REPORTS_DIR = os.environ.get("EVAL_REPORTS_DIR", os.path.join(os.path.dirname(__file__), "reports"))
 
 # Cost caps (in seconds of billed audio)
 MAX_BILLED_AUDIO_SECONDS = 90 * 60
