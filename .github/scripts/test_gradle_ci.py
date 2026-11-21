@@ -56,7 +56,7 @@ sys.exit(response['status'])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, [
             ["--no-daemon", "--console=plain", "assembleDebug", "-Pmessage=two words"],
-            ["--no-daemon", "--console=plain", "--refresh-dependencies", "assembleDebug", "-Pmessage=two words"],
+            ["--no-daemon", "--console=plain", "--refresh-dependencies", "--info", "assembleDebug", "-Pmessage=two words"],
         ])
         self.assertEqual(sleeps, ["10"])
         self.assertIn("BUILD FAILED", result.stdout)

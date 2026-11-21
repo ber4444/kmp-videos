@@ -13,7 +13,8 @@ for attempt in 1 2 3; do
     if (( attempt > 1 )); then
         # Gradle caches missing metadata too. Recheck it without deleting the
         # successfully downloaded artifacts from the previous attempt.
-        command+=(--refresh-dependencies)
+        # Include repository diagnostics if the retry also fails.
+        command+=(--refresh-dependencies --info)
     fi
     command+=("$@")
     if "${command[@]}" 2>&1 | tee "$log"; then
