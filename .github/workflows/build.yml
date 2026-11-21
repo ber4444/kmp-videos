@@ -13,7 +13,17 @@ concurrency:
 permissions:
   contents: read
 
+# setup-java's build-file-only cache key is shared by all jobs and immutable.
+# Gradle's job/commit-scoped cache can retain each job's complete dependency set.
 jobs:
+  ci-tools:
+    name: CI launcher tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check retry behavior
+        run: python3 .github/scripts/test_gradle_ci.py
+
   android:
     name: Android build
     runs-on: ubuntu-latest
@@ -27,7 +37,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -39,7 +51,7 @@ jobs:
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Android debug app
-        run: ./gradlew --no-daemon assembleDebug
+        run: bash .github/scripts/gradle-ci.sh assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
@@ -61,10 +73,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Build Wasm distribution
-        run: ./gradlew --no-daemon wasmJsBrowserDistribution
+        run: bash .github/scripts/gradle-ci.sh wasmJsBrowserDistribution
 
   unit-tests:
     name: Unit tests + coverage + API check
@@ -79,7 +93,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -92,15 +108,15 @@ jobs:
 
       # :mediakit common tests (pure-Kotlin core) + :composeApp Robolectric unit tests.
       - name: Run unit tests
-        run: ./gradlew --no-daemon :mediakit:testAndroidHostTest :composeApp:testAndroidHostTest
+        run: bash .github/scripts/gradle-ci.sh :mediakit:testAndroidHostTest :composeApp:testAndroidHostTest
 
       # Binary-compatibility: :mediakit's public API must match the checked-in snapshot.
       - name: Validate SDK public API
-        run: ./gradlew --no-daemon :mediakit:apiCheck
+        run: bash .github/scripts/gradle-ci.sh :mediakit:apiCheck
 
       # Kover coverage report disabled as Kover is currently incompatible with KMP AGP 9
       # - name: Generate coverage report
-      #   run: ./gradlew --no-daemon koverXmlReport
+      #   run: bash .github/scripts/gradle-ci.sh koverXmlReport
 
       - name: Upload test + coverage reports
         if: always()
@@ -125,7 +141,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       # No Android SDK setup, deliberately: -PserverOnly=true prunes the Android/KMP
       # modules out of settings.gradle.kts, so this job needs nothing but a JDK and
@@ -135,7 +153,7 @@ jobs:
       # with the same flag — the image has no Android SDK either — so a change to
       # settings.gradle.kts that breaks it fails here rather than at `fly deploy`.
       - name: Run token service tests
-        run: ./gradlew --no-daemon -PserverOnly=true :server:test
+        run: bash .github/scripts/gradle-ci.sh -PserverOnly=true :server:test
 
       - name: Upload test reports
         if: always()
@@ -161,10 +179,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Generate Dokka HTML
-        run: ./gradlew --no-daemon :mediakit:dokkaGenerateHtml
+        run: bash .github/scripts/gradle-ci.sh :mediakit:dokkaGenerateHtml
 
       - name: Deploy to GitHub Pages
         if: github.ref == 'refs/heads/main'
