@@ -119,6 +119,30 @@ class DiscordGuildAuthorizerTest {
     }
 
     @Test
+    fun collidingStringHashesCannotReuseAnotherTokensAllowedDecision() = testApplication {
+        val memberToken = "member-Aa"
+        val outsiderToken = "member-BB"
+        assertEquals(memberToken.hashCode(), outsiderToken.hashCode(), "regression input must collide")
+        var calls = 0
+        val discord = HttpClient(MockEngine { request ->
+            calls++
+            val member = request.headers[HttpHeaders.Authorization] == "Bearer $memberToken"
+            respond(
+                content = ByteReadChannel(if (member) """[{"id":"$TEST_GUILD_ID"}]""" else "[]"),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        })
+        application { module(testConfig(), httpClient = soniox(), authorizer = authorizer(discord)) }
+
+        assertEquals(HttpStatusCode.Created, post(token = memberToken))
+        assertEquals(HttpStatusCode.Forbidden, post(token = outsiderToken))
+        assertEquals(HttpStatusCode.Created, post(token = memberToken))
+        assertEquals(HttpStatusCode.Forbidden, post(token = outsiderToken))
+        assertEquals(2, calls, "both decisions should be cached independently")
+    }
+
+    @Test
     fun aRevokedMembershipIsRecheckedOnceTheCacheExpires() = testApplication {
         var member = true
         val discord = HttpClient(
