@@ -6,8 +6,10 @@ internal const val TARGET_SAMPLE_RATE_HZ = 16_000
 /**
  * Averaging-decimates this mono 16-bit PCM signal from [inRate] to
  * [TARGET_SAMPLE_RATE_HZ] and packs it as signed 16-bit little-endian bytes — the
- * format Deepgram/Soniox expect (see [StreamingTranscriber.feedPcm]). Averaging
- * (not nearest-sample) decimation avoids the aliasing that garbles recognition.
+ * format Deepgram/Soniox expect (see [StreamingTranscriber.feedPcm]). Each output
+ * frame averages its source-sample window instead of taking the nearest sample.
+ * The recognition-quality effect requires matched audio and verified references;
+ * see eval/reports/resampling.md for the attempted comparison and its source mismatch.
  *
  * Down-mixing to mono is the caller's responsibility, since the source buffer
  * layout (Core Media float pointer / JS `FloatArray` / Android `ByteBuffer`) is
