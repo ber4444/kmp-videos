@@ -220,10 +220,13 @@ Native audio, prepared arms and responses live in gitignored
 `eval/fixtures/resampling/`; `--root` selects a separate run. The report goes to
 `eval/reports/resampling.md`, with paired per-clip deltas, win counts and
 exploratory paired bootstrap intervals. It contains aggregate values only. The attempted November 2026 run is recorded in
-[`reports/resampling.md`](reports/resampling.md): all 87 calls completed within the
+[`snapshots/resampling.md`](snapshots/resampling.md): all 87 calls completed within the
 cap, but none of the 21 fresh native excerpts matched the old golden audio. The
 URLs serve videos replaced weekly, so quality metrics and deltas are unavailable.
-The validation gate was added after detecting this failed source match.
+The validation gate was added after detecting this failed source match. The
+committed timing correction is in
+[`snapshots/translation_timing.md`](snapshots/translation_timing.md); generated
+reports remain under the gitignored `reports/` directory.
 
 If the native source is 48 kHz, preparation also creates a reference-resampled
 44.1 kHz source for the first 12 verified manifest entries, then compares avg
