@@ -18,8 +18,9 @@ and [Apple TestFlight](https://testflight.apple.com/join/YBHu9W7V)
   The Discord refresh token is stored in `SharedPreferences` on Android, the
   Keychain on iOS, and `localStorage` on web. Membership is re-verified on every
   launch, and *Sign out* clears the saved session, in-memory token and issued
-  host. Public concerts do not change the caption service's authorization:
-  live captions still require an authorized Discord session. See
+  host. Concerts play without live captions: the
+  caption menu is hidden and no Soniox session starts. Captions remain for the
+  Discord feed. See
   [Where the feed comes from](#where-the-feed-comes-from).
 - **Adaptive streaming.** Genuine client-side ABR synthesized from four
   unadvertised sibling renditions, with viewport-aware track selection so the
