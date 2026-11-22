@@ -185,3 +185,46 @@ toward the audio cap, including boosted calls. A provider error stops recording 
 a nonzero exit status. Keep the same directory exports when replaying, translating,
 or scoring that run; unset both to return to the historical defaults. See
 [`VENDOR_REFRESH_2026.md`](VENDOR_REFRESH_2026.md) for scope and measured results.
+
+## PCM resampling experiment
+
+`eval/scripts/eval_resampling.py` compares the app's averaging decimator with
+nearest-sample decimation and `scipy.signal.resample_poly`. It re-fetches the
+verified manifest segments at their native sample rate: the existing 16 kHz
+golden WAVs cannot measure the app's conversion. From the repo root:
+
+```bash
+# Use eval/venv/bin/python, with dependencies in requirements.txt plus:
+python -m pip install -r eval/requirements-resampling.txt
+# Export WOWZA_HOST (scheme excluded) and SONIOX_API_KEY from local configuration.
+python eval/scripts/eval_resampling.py fetch
+python eval/scripts/eval_resampling.py prepare
+python eval/scripts/eval_resampling.py record --dry-run
+python eval/scripts/eval_resampling.py record
+python eval/scripts/eval_resampling.py score
+```
+
+Only `record` calls Soniox (`stt-async-v6`, recognition only, the app's English
+context parsed by `app_context.py`). Before any call, it validates all cached
+response identities and sums the actual duration of every pending arm against
+the same 90-minute cap as `recording.py`; it has no force override. Responses
+include the audio SHA-256, model, context, source rate and arm, and a provider
+failure stops the run. Repeating `record` skips matching cached responses.
+Native audio, prepared arms and responses live in gitignored
+`eval/fixtures/resampling/`; `--root` selects a separate run. The report goes to
+`eval/reports/resampling.md`, with paired per-clip deltas, win counts and
+exploratory paired bootstrap intervals. It contains aggregate values only.
+
+If the native source is 48 kHz, preparation also creates a reference-resampled
+44.1 kHz source for the first 12 verified manifest entries, then compares avg
+with nearest on that source. This preselected supplemental sample keeps the
+whole experiment at about 87 billed minutes (21 × 3 + 12 × 2 one-minute clips).
+Use `--supplemental-clips` to change it; the cap still applies to all pending
+jobs together. The fixed 48-sample signed PCM vector is pinned to the same
+expected bytes in Python and `PcmResamplingTest.kt`.
+
+Translated final words with no provider timestamp have `start_s=null`.
+Finalization latency excludes them and reads `n/a` if none remain. Replay
+also discards all-zero starts in unversioned Soniox translation fixtures: those
+zeros were invented by the old recorder, rather than spoken word times. New
+recordings retain genuine zero starts through an explicit timing schema version.
