@@ -59,3 +59,17 @@ def test_stream_without_finished_response_is_not_a_valid_recording(monkeypatch):
     monkeypatch.setattr(soniox, "run_ws_stream", truncated)
     with pytest.raises(RuntimeError, match="finished"):
         soniox.SonioxProvider()._transcribe_stream_live("clip.wav")
+
+
+@pytest.mark.parametrize('start_ms', ['missing', None, 0, 1250])
+def test_translated_final_preserves_absent_and_real_start_times(monkeypatch, start_ms):
+    def stream(url, wav_path, on_message, **kwargs):
+        token = {'text': 'Szia', 'translation_status': 'translation', 'is_final': True}
+        if start_ms != 'missing':
+            token['start_ms'] = start_ms
+        on_message({'tokens': [token]}, 4.0)
+        return 5.0
+    monkeypatch.setenv('SONIOX_API_KEY', 'offline-test')
+    monkeypatch.setattr(soniox, 'run_ws_stream', stream)
+    result = soniox.SonioxProvider().transcribe_stream_translated('clip.wav', 'hu')
+    assert result.final_words[0].start_s == (None if start_ms in ('missing', None) else start_ms / 1000)

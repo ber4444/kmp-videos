@@ -300,3 +300,18 @@ def test_language_codes_map_to_deepl_targets():
     # DeepL splits Portuguese and English by region and has no bare "PT"/"EN" target.
     assert config.deepl_target("pt") == "PT-BR"
     assert config.deepl_target("en") == "EN-US"
+
+
+def test_legacy_translated_zero_starts_show_na_without_changing_quality(workspace):
+    _, fixtures, reports = workspace
+    for kind in ('soniox-translate', 'soniox-translate-endpointed'):
+        stream = _stream_fixture(CLOSE_HU)
+        stream['final_words'] = [{'word': 'Szia', 'start_s': 0, 'final_t_recv': 32}]
+        _write(str(fixtures / kind / 'hu' / 'clip-1.json'), stream)
+    generate_scorecard()
+    report = _report(reports)
+    endpoint = report.split('### Endpoint detection')[1]
+    row = next(line for line in endpoint.splitlines() if line.startswith('| hu |'))
+    assert '| n/a | n/a |' in row
+    assert '0.000' in row
+    assert '+0.0 (n=1)' in row

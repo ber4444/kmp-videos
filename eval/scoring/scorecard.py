@@ -216,7 +216,9 @@ def generate_scorecard(allow_unverified: bool = False):
     def avg_metric(res_list, key):
         if not res_list:
             return 0.0
-        return sum(r["metrics"].get(key, 0.0) for r in res_list) / len(res_list)
+        vals = [r["metrics"].get(key, 0.0) for r in res_list
+                if r["metrics"].get(key, 0.0) is not None]
+        return sum(vals) / len(vals) if vals else None
         
     md.append("## Overall Metrics\n")
     md.append("| Provider | WER (Norm) | WER (Fmt) | CER (Norm) | Entity F1 |")
@@ -288,7 +290,9 @@ def generate_scorecard(allow_unverified: bool = False):
             flick = avg_metric(runs, "flicker")
             lat_med = avg_metric(runs, "final_latency_med_s")
             lat_p95 = avg_metric(runs, "final_latency_p95_s")
-            md.append(f"| {p} | {len(runs)} | {swer:.3f} | {flick:.3f} | {lat_med:.2f}s | {lat_p95:.2f}s |")
+            med = f"{lat_med:.2f}s" if lat_med is not None else "n/a"
+            p95 = f"{lat_p95:.2f}s" if lat_p95 is not None else "n/a"
+            md.append(f"| {p} | {len(runs)} | {swer:.3f} | {flick:.3f} | {med} | {p95} |")
         md.append("\n")
 
     # Translation fidelity section (ASR -> DeepL)
@@ -446,13 +450,13 @@ def generate_scorecard(allow_unverified: bool = False):
                       "rewritten — because the batch arm above already bounds what any "
                       "latency-buying mechanism can do for the words themselves. Lower flicker "
                       "is a real improvement to what a viewer sees even when chrF does not "
-                      "move; higher finalization latency is what it costs.\n")
+                      "move. Finalization latency is unavailable when translated tokens have no spoken timestamps; old zero-filled translation timings are discarded on replay.\n")
             md.append("| Target | Flicker (default) | Flicker (endpointed) | Δ flicker | "
                       "Final latency med (default) | Final latency med (endpointed) | chrF Δ |")
             md.append("|---|---|---|---|---|---|---|")
 
             def _stream_by_clip(runs, key):
-                return {r["clip_id"]: r["stream"][key] for r in runs if "stream" in r}
+                return {r["clip_id"]: r["stream"][key] for r in runs if "stream" in r and r["stream"].get(key) is not None}
 
             def _paired_stream(a_runs, b_runs, key, fmt="{:+.3f}"):
                 a, b = _stream_by_clip(a_runs, key), _stream_by_clip(b_runs, key)
@@ -462,8 +466,8 @@ def generate_scorecard(allow_unverified: bool = False):
                 return fmt.format(sum(a[c] - b[c] for c in shared) / len(shared)) + f" (n={len(shared)})"
 
             def _mean_stream(runs, key, fmt="{:.3f}"):
-                vals = [r["stream"][key] for r in runs if "stream" in r]
-                return fmt.format(sum(vals) / len(vals)) if vals else "n/a"
+                vals = [r["stream"][key] for r in runs if "stream" in r and r["stream"].get(key) is not None]
+                return (fmt.format(sum(vals) / len(vals)) + f" (n={len(vals)})") if vals else "n/a"
 
             for lang, runs in endpointed.items():
                 base = inband[lang]["context"]
