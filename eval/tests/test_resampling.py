@@ -53,7 +53,7 @@ def experiment(tmp_path, monkeypatch):
         relative = f'audio/48000/{arm}/c1.wav'
         write_pcm(root / relative, b'\0\0' * 32000)
         jobs.append({'clip_id': 'c1', 'source_rate': 48000, 'arm': arm, 'audio': relative})
-    (root / 'preparation.json').write_text(json.dumps({'jobs': jobs}))
+    (root / 'preparation.json').write_text(json.dumps({'jobs': jobs, 'source_validation': {'status': 'matched', 'checked_clips': 1, 'matched_clips': 1}}))
     monkeypatch.delenv('SONIOX_API_KEY', raising=False)
     return root
 
@@ -133,3 +133,103 @@ def test_offline_report_includes_paired_values_and_missing_arm(experiment, monke
     main(['score', '--root', str(experiment)])
     report = (experiment / 'reports/resampling.md').read_text()
     assert '| 48000 | avg − ref | wer_norm | n/a (not run) | 0 |' in report
+
+
+def test_entity_sample_excludes_unlabelled_clips_and_two_rates_share_a_table(experiment, monkeypatch):
+    import json
+    import config
+    from resampling import write_pcm
+    from providers.soniox import SonioxProvider
+    from providers.base import TranscriptResult
+    from scripts.eval_resampling import main
+    manifest = Path(config.MANIFEST_PATH)
+    data = json.loads(manifest.read_text())
+    data['entries'][0]['domain_terms'] = ['hello']
+    data['entries'].append({**data['entries'][0], 'id': 'unlabelled', 'domain_terms': []})
+    manifest.write_text(json.dumps(data))
+    preparation = experiment / 'preparation.json'
+    data = json.loads(preparation.read_text())
+    for clip, rate, arms in [('unlabelled', 48000, ('avg', 'nearest', 'ref')), ('c1', 44100, ('avg', 'nearest'))]:
+        for arm in arms:
+            relative = f'audio/{rate}/{arm}/{clip}.wav'
+            write_pcm(experiment / relative, b'\0\0' * 32000)
+            data['jobs'].append({'clip_id': clip, 'source_rate': rate, 'arm': arm, 'audio': relative})
+    preparation.write_text(json.dumps(data))
+    monkeypatch.setattr(config, 'REPORTS_DIR', str(experiment / 'reports'))
+    monkeypatch.setenv('SONIOX_API_KEY', 'offline-test')
+    monkeypatch.setattr(SonioxProvider, '_transcribe_batch', lambda *a, **k:
+                        TranscriptResult(text='hello', words=[], raw_response={}, model='stt-async-v6'))
+    main(['record', '--root', str(experiment)])
+    main(['score', '--root', str(experiment)])
+    report = (experiment / 'reports/resampling.md').read_text()
+    assert '| 48000 | avg | 0.0000 (n=2) | 1.0000 (n=1) |' in report
+    assert '| 48000 | nearest − avg | entity_f1 | +0.0000 [+0.0000, +0.0000] | 1 |' in report
+    table = report.split('| Source Hz | Paired delta')[1].split('\n\n')[0]
+    assert '| 44100 | nearest − avg | wer_norm |' in table
+
+
+def test_replay_uses_recorded_context_but_live_resume_rejects_configuration_drift(experiment, monkeypatch):
+    import config
+    from providers.soniox import SonioxProvider
+    from providers.base import TranscriptResult
+    from scripts import eval_resampling as run
+    monkeypatch.setattr(config, 'REPORTS_DIR', str(experiment / 'reports'))
+    monkeypatch.setenv('SONIOX_API_KEY', 'offline-test')
+    monkeypatch.setattr(SonioxProvider, '_transcribe_batch', lambda *a, **k:
+                        TranscriptResult(text='hello', words=[], raw_response={}, model='stt-async-v6'))
+    args = ['--root', str(experiment)]
+    run.main(['record', *args])
+    monkeypatch.delenv('SONIOX_API_KEY')
+    monkeypatch.setattr(run, 'soniox_context', lambda lang: {'text': 'new domain', 'terms': ['changed']})
+    monkeypatch.setattr(run, 'BATCH_MODEL', 'future-model')
+    run.main(['score', *args])
+    assert 'stt-async-v6' in (experiment / 'reports/resampling.md').read_text()
+    with pytest.raises(SystemExit):
+        run.main(['record', '--dry-run', *args])
+
+
+def test_recording_refuses_a_run_with_unmatched_reference_audio(experiment, capsys):
+    import json
+    from scripts.eval_resampling import main
+    path = experiment / 'preparation.json'
+    data = json.loads(path.read_text())
+    data['source_validation'] = {'status': 'mismatched'}
+    path.write_text(json.dumps(data))
+    with pytest.raises(SystemExit):
+        main(['record', '--root', str(experiment), '--dry-run'])
+    assert 'source' in capsys.readouterr().err.lower()
+    assert not (experiment / 'responses').exists()
+
+
+def test_source_match_distinguishes_reencoding_from_unrelated_audio():
+    pytest.importorskip('scipy')
+    import random
+    from resampling import source_similarity
+    rng = random.Random(123)
+    original = [rng.randrange(-10000, 10000) for _ in range(16000)]
+    unrelated = [rng.randrange(-10000, 10000) for _ in range(16000)]
+    assert source_similarity(original, original) == pytest.approx(1)
+    assert source_similarity(original, unrelated) < 0.1
+
+
+def test_invalid_source_report_does_not_publish_accuracy_or_quality_deltas(experiment, monkeypatch):
+    import json
+    import config
+    from providers.soniox import SonioxProvider
+    from providers.base import TranscriptResult
+    from scripts.eval_resampling import main
+    monkeypatch.setattr(config, 'REPORTS_DIR', str(experiment / 'reports'))
+    monkeypatch.setenv('SONIOX_API_KEY', 'offline-test')
+    monkeypatch.setattr(SonioxProvider, '_transcribe_batch', lambda *a, **k:
+                        TranscriptResult(text='hello', words=[], raw_response={}, model='stt-async-v6'))
+    main(['record', '--root', str(experiment)])
+    path = experiment / 'preparation.json'
+    data = json.loads(path.read_text())
+    data['source_validation'] = {'status': 'mismatched', 'matched_clips': 0, 'checked_clips': 1}
+    path.write_text(json.dumps(data))
+    main(['score', '--root', str(experiment)])
+    report = (experiment / 'reports/resampling.md').read_text()
+    assert 'invalid source' in report.lower()
+    assert 'n/a (reference mismatch; n=0)' in report
+    assert 'no measurable difference' not in report
+    assert '| 48000 | avg | 1 |' in report

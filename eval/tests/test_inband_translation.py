@@ -315,3 +315,21 @@ def test_legacy_translated_zero_starts_show_na_without_changing_quality(workspac
     assert '| n/a | n/a |' in row
     assert '0.000' in row
     assert '+0.0 (n=1)' in row
+
+
+def test_streaming_report_counts_only_clips_with_timed_words(workspace):
+    from pathlib import Path
+    _, fixtures, reports = workspace
+    manifest = Path(config.MANIFEST_PATH)
+    data = json.loads(manifest.read_text())
+    data['entries'].append({**data['entries'][0], 'id': 'clip-2'})
+    manifest.write_text(json.dumps(data))
+    for clip, start in [('clip-1', 0), ('clip-2', None)]:
+        stream = _stream_fixture('hello')
+        stream['model'] = 'stt-rt-v6'
+        stream['word_timing_version'] = 2
+        stream['final_words'] = [{'word': 'hello', 'start_s': start, 'final_t_recv': 2}]
+        _write(str(fixtures / 'soniox-stream' / f'{clip}.json'), stream)
+    generate_scorecard()
+    row = next(line for line in _report(reports).splitlines() if line.startswith('| soniox | 2 |'))
+    assert '| 2.00s (n=1) | 2.00s (n=1) |' in row

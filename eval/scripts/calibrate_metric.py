@@ -50,7 +50,7 @@ def _load(kind, clip_id, lang):
     if not os.path.exists(path):
         return None
     with open(path, "r") as f:
-        return json.load(f).get("text", "")
+        return json.load(f).get("text")
 
 
 def _inband(clip_id, soniox_lang):
@@ -59,7 +59,7 @@ def _inband(clip_id, soniox_lang):
         return None
     with open(path, "r") as f:
         d = json.load(f)
-    return d.get("final_text") or d.get("text") or ""
+    return d["final_text"] if "final_text" in d else d.get("text")
 
 
 def _chrf(ideal, hyp):
@@ -135,15 +135,15 @@ def main():
         if ideal_deepl and ideal_gemini:
             # The control: perfect input, wrong engine. No ASR error in this number at all.
             cells["control"][clip_id] = _chrf(ideal_deepl, ideal_gemini)
-        if ideal_deepl and inband:
+        if ideal_deepl and inband is not None:
             cells["inband_vs_deepl"][clip_id] = _chrf(ideal_deepl, inband)
-        if ideal_gemini and inband:
+        if ideal_gemini and inband is not None:
             cells["inband_vs_gemini"][clip_id] = _chrf(ideal_gemini, inband)
-        if ideal_deepl and two_deepl:
+        if ideal_deepl and two_deepl is not None:
             cells["deepl2_vs_deepl"][clip_id] = _chrf(ideal_deepl, two_deepl)
-        if ideal_gemini and two_gemini:
+        if ideal_gemini and two_gemini is not None:
             cells["gemini2_vs_gemini"][clip_id] = _chrf(ideal_gemini, two_gemini)
-        if ideal_deepl and two_gemini:
+        if ideal_deepl and two_gemini is not None:
             cells["gemini2_vs_deepl"][clip_id] = _chrf(ideal_deepl, two_gemini)
 
     def avg(key):

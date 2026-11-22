@@ -189,3 +189,19 @@ def test_leads_use_shared_clips_not_difference_of_independent_means(calibration_
     assert '| Two-stage lead (same engine) | +10.00 | 1 | 1 |' in report
     assert '| Cross-engine lead | +10.00 | 1 | 1 |' in report
     assert '| Control gap | +0.00 | 1 | 0 |' in report
+
+
+def test_recorded_empty_hypothesis_scores_zero_but_missing_field_is_absent(calibration_run):
+    import config
+    from pathlib import Path
+    from scripts.calibrate_metric import main
+    root = Path(config.TRANSLATIONS_DIR)
+    (root / 'soniox/c1.HU.json').write_text(json.dumps({'text': ''}))
+    (root / 'soniox-gemini/c1.HU.json').write_text(json.dumps({}))
+    (Path(config.INBAND_DIR) / 'hu/c1.json').write_text(json.dumps({'final_text': ''}))
+    main()
+    report = calibration_run.read_text()
+    assert '| Soniox in-band | DeepL(ref) | 0.00 | 1 |' in report
+    assert '| DeepL(Soniox ASR) | DeepL(ref) | 0.00 | 1 |' in report
+    assert '| Gemini(Soniox ASR) | Gemini(ref) | n/a | 0 |' in report
+    assert '| Two-stage lead (same engine) | +0.00 | 1 | 0 |' in report

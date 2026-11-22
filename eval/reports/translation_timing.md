@@ -15,7 +15,9 @@ A real zero start in a versioned recording remains a valid audio timestamp.
 | hu | 0.000 (n=21) | 0.000 (n=5) | +0.000 (n=5) | n/a (n=0 timed clips) | n/a (n=0 timed clips) | -0.1 (n=5) |
 
 Offline `scoring/scorecard.py` runs before and after the correction produced
-byte-identical preceding scorecard tables. Endpoint flicker and chrF values are
-unchanged; only the invalid latency values and timing explanation changed.
+identical preceding scorecard tables after removing the newly added timed-clip
+counts from transcription latency cells. Accuracy, flicker and chrF values are
+unchanged; translated latency is now unavailable. The vendor-refresh summarizer
+also handles partial or absent timing and prints timed-clip counts.
 Translation lag is n/a (not run): the retained translated-caption events do not
 map each translated final to the last source final it covers.

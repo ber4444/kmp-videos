@@ -290,8 +290,10 @@ def generate_scorecard(allow_unverified: bool = False):
             flick = avg_metric(runs, "flicker")
             lat_med = avg_metric(runs, "final_latency_med_s")
             lat_p95 = avg_metric(runs, "final_latency_p95_s")
-            med = f"{lat_med:.2f}s" if lat_med is not None else "n/a"
-            p95 = f"{lat_p95:.2f}s" if lat_p95 is not None else "n/a"
+            med_n = sum(r["metrics"].get("final_latency_med_s") is not None for r in runs)
+            p95_n = sum(r["metrics"].get("final_latency_p95_s") is not None for r in runs)
+            med = f"{lat_med:.2f}s (n={med_n})" if lat_med is not None else "n/a"
+            p95 = f"{lat_p95:.2f}s (n={p95_n})" if lat_p95 is not None else "n/a"
             md.append(f"| {p} | {len(runs)} | {swer:.3f} | {flick:.3f} | {med} | {p95} |")
         md.append("\n")
 

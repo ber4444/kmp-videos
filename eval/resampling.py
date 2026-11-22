@@ -65,3 +65,21 @@ def reference_pcm(samples, in_rate, out_rate=TARGET_RATE):
     divisor = math.gcd(in_rate, out_rate)
     values = resample_poly(np.asarray(samples, dtype=np.float64), out_rate // divisor, in_rate // divisor)
     return pack_s16(np.clip(np.rint(values), -32768, 32767).astype(np.int16))
+
+
+def source_similarity(original, candidate):
+    """Peak normalized waveform correlation, allowing decoder/seek offset drift.
+
+    Inspect every eighth 16 kHz sample (2 kHz comparison). This is a conservative
+    identity check for an existing excerpt, not a perceptual quality metric.
+    """
+    import numpy as np
+    from scipy.signal import correlate
+    a = np.asarray(original, dtype=np.float64)[::8]
+    b = np.asarray(candidate, dtype=np.float64)[::8]
+    if not len(a) or not len(b):
+        return 0.0
+    a = a - a.mean()
+    b = b - b.mean()
+    denominator = np.linalg.norm(a) * np.linalg.norm(b)
+    return float(np.max(np.abs(correlate(a, b, method='fft'))) / denominator) if denominator else 0.0
