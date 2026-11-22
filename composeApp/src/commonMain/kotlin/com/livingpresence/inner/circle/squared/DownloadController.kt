@@ -15,12 +15,17 @@ import kotlinx.coroutines.flow.StateFlow
  * `GalleryScreen` needs it: when the feed cannot be loaded, this is the only
  * record of where a downloaded extra came from. Empty when the platform cannot
  * report it.
+ *
+ * [title] is the feed's title for the entry when it was enqueued, so the offline
+ * fallback can show a concert's name rather than one guessed from its URL. Empty
+ * when the platform did not record one.
  */
 internal data class EventDownloadState(
     val eventNumber: Int,
     val state: DownloadStatus,
     val percent: Float,
     val streamUrl: String = "",
+    val title: String = "",
 )
 
 /**
@@ -106,9 +111,11 @@ internal fun Collection<EventDownloadState>.toOfflineEvents(): List<EventInfo> =
                 eventNumber = state.eventNumber,
                 isLive = false,
                 durationMs = 0L,
-                title = MediaKitConfig.eventNumberIn(url)
-                    ?.let { "Event $it" }
-                    ?: ExtraVideoCatalog.titleFromUrl(url),
+                title = state.title.ifEmpty {
+                    MediaKitConfig.eventNumberIn(url)
+                        ?.let { "Event $it" }
+                        ?: ExtraVideoCatalog.titleFromUrl(url)
+                },
                 streamUrl = url,
             )
         }

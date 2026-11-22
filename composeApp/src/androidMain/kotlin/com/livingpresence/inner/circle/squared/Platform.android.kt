@@ -126,6 +126,7 @@ internal actual fun loginBackgroundModifier(): Modifier {
 @Composable
 internal actual fun PlatformPlayerScreen(
     url: String,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -179,6 +180,7 @@ internal actual fun PlatformPlayerScreen(
         eventNumber = eventNumber,
         reloadToken = reloadToken,
         onReload = { reloadToken += 1 },
+        captionsAvailable = captionsAvailable,
         onClose = onClose,
     )
 }
@@ -192,6 +194,7 @@ private fun ExoPlayerScreen(
     eventNumber: Int?,
     reloadToken: Int,
     onReload: () -> Unit,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -244,7 +247,7 @@ private fun ExoPlayerScreen(
     // taps PCM; captions render via CaptionOverlay below.
     // The chosen caption language persists across videos and app launches; see
     // rememberCaptionController for why that now outweighs the per-video reset it replaced.
-    val captionController = rememberCaptionController()
+    val captionController = rememberCaptionController(available = captionsAvailable)
 
     var isScrubbing by remember(player) { mutableStateOf(false) }
     var sliderFraction by remember(player) { mutableStateOf(0f) }

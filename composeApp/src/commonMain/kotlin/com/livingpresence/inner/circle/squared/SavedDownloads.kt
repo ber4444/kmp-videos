@@ -18,12 +18,14 @@ import kotlinx.serialization.json.Json
  * @property streamUrl The URL that was downloaded. The offline fallback plays
  *   it, and the player matches it to find this file.
  * @property relativePath Package location relative to `NSHomeDirectory()`.
+ * @property title The feed title when enqueued, for the offline gallery.
  */
 @Serializable
 internal data class SavedDownload(
     @SerialName("event_number") val eventNumber: Int,
     @SerialName("stream_url") val streamUrl: String,
     @SerialName("relative_path") val relativePath: String,
+    @SerialName("title") val title: String = "",
 )
 
 internal object SavedDownloads {
@@ -57,23 +59,32 @@ internal object SavedDownloads {
 }
 
 /**
- * What an iOS download task carries in `taskDescription`: its feed ID and the
- * URL being downloaded.
+ * What an iOS download task carries in `taskDescription`: its feed ID, the URL
+ * being downloaded, and the feed title.
  *
  * The background session keeps `taskDescription` across a relaunch, but a task
  * handed back after one has no asset URL to read, and the app's own memory of
  * what it enqueued died with the process. Without the URL here, a download that
- * finishes after a relaunch cannot be recorded.
+ * finishes after a relaunch cannot be recorded. The URL cannot contain a space,
+ * so the title is simply everything after it.
  */
 internal object DownloadTaskTag {
 
-    fun of(eventNumber: Int, streamUrl: String): String = "$eventNumber $streamUrl"
+    data class Tag(val eventNumber: Int, val streamUrl: String?, val title: String)
 
-    /** The feed ID and, when the tag has one, the URL. Null when there is no ID. */
-    fun parse(tag: String?): Pair<Int, String?>? {
+    fun of(eventNumber: Int, streamUrl: String, title: String): String =
+        "$eventNumber $streamUrl $title".trimEnd()
+
+    /** What [of] wrote, or null when the tag has no feed ID. */
+    fun parse(tag: String?): Tag? {
         val text = tag?.trim().orEmpty()
         val number = text.substringBefore(' ').toIntOrNull() ?: return null
-        return number to text.substringAfter(' ', "").trim().ifEmpty { null }
+        val rest = text.substringAfter(' ', "").trim()
+        return Tag(
+            eventNumber = number,
+            streamUrl = rest.substringBefore(' ').ifEmpty { null },
+            title = rest.substringAfter(' ', "").trim(),
+        )
     }
 }
 

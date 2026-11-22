@@ -48,6 +48,8 @@ import kotlinx.coroutines.flow.StateFlow
  * @param captions the router's caption stream.
  * @param onSelect moves to another row — off, the device language, or any other language.
  * @param onSelectProvider switches the streaming provider.
+ * @param available false for a video that never gets captions (a concert). The menu is not
+ *   shown, captions stay off, and no Soniox session is ever started.
  */
 internal class CaptionController(
     val options: List<CaptionMenuOption>,
@@ -58,6 +60,7 @@ internal class CaptionController(
     val captions: StateFlow<List<CaptionCue>>,
     val onSelect: (CaptionMenuOption) -> Unit,
     val onSelectProvider: (TranscriptionProvider) -> Unit,
+    val available: Boolean = true,
 ) {
     /**
      * Whether a caption session is running. The platform screens render the caption overlay
@@ -66,6 +69,13 @@ internal class CaptionController(
      */
     val enabled: Boolean get() = selected.captionsOn
 }
+
+/**
+ * Whether a video may run live captions: only Discord-feed videos. A concert never does,
+ * whichever feed it is reached from, because its ID is in the concert range.
+ */
+internal fun captionsAvailableFor(feedSource: FeedSource, eventNumber: Int): Boolean =
+    feedSource == FeedSource.DISCORD && eventNumber < FeedConfig.CONCERT_EVENT_NUMBER_BASE
 
 /**
  * Remembers a [CaptionController]. Starts streaming on any row that has captions on (and
@@ -90,17 +100,24 @@ internal class CaptionController(
  * itself: null means nothing has ever been recorded; anything else — including the key "No
  * translation" itself persists as — means a choice already exists, and this default no
  * longer applies.
+ *
+ * **Concerts never caption** ([available] false): music needs no transcript, and a metered
+ * stream on public videos would bill for every anonymous viewer. Such a controller sits on
+ * "No translation", ignores selections, never starts the router, and leaves the stored
+ * preference alone so the viewer's choice still applies to Discord videos.
  */
 @Composable
-internal fun rememberCaptionController(): CaptionController {
+internal fun rememberCaptionController(available: Boolean = true): CaptionController {
     val router = remember { CaptionAudioRouter.get() }
     // The device language is read once per composition — it cannot change without the app
     // being recreated — and decides only which row sits second, not what the menu offers.
     val options = remember { captionMenuOptions(CaptionLanguage.deviceTarget()) }
     val preference = rememberCaptionLanguagePreference()
-    var selected by remember {
+    val off = remember(options) { options.first { !it.captionsOn } }
+    var selected by remember(available) {
         mutableStateOf(
-            preference.load()?.let { optionForSelectionKey(options, it) }
+            if (!available) off
+            else preference.load()?.let { optionForSelectionKey(options, it) }
                 ?: defaultCaptionOptionForFreshInstall(options),
         )
     }
@@ -108,8 +125,8 @@ internal fun rememberCaptionController(): CaptionController {
 
     // A row with captions on → start (or re-point) the stream; "No translation" → stop.
     // Re-runs when the row or the provider changes, switching the live stream.
-    LaunchedEffect(selected, provider) {
-        if (selected.captionsOn) router.enable(provider, selected.translateTo) else router.disable()
+    LaunchedEffect(selected, provider, available) {
+        if (available && selected.captionsOn) router.enable(provider, selected.translateTo) else router.disable()
     }
 
     // Stop streaming if the player screen leaves the composition.
@@ -117,7 +134,7 @@ internal fun rememberCaptionController(): CaptionController {
         onDispose { router.disable() }
     }
 
-    return remember(router, options, selected, provider) {
+    return remember(router, options, selected, provider, available) {
         CaptionController(
             options = options,
             selected = selected,
@@ -126,10 +143,13 @@ internal fun rememberCaptionController(): CaptionController {
             error = router.error,
             captions = router.captions,
             onSelect = {
-                selected = it
-                preference.save(selectionKey(it))
+                if (available) {
+                    selected = it
+                    preference.save(selectionKey(it))
+                }
             },
             onSelectProvider = { TranscriptionSettings.select(it) },
+            available = available,
         )
     }
 }
@@ -268,11 +288,13 @@ internal fun PlayerTopRightControls(
     onCaptionsShown: () -> Unit = {},
     onCaptionMenuOpenChange: (Boolean) -> Unit = {},
 ) {
-    CaptionLanguageMenu(
-        controller = captionController,
-        onCaptionsShown = onCaptionsShown,
-        onMenuOpenChange = onCaptionMenuOpenChange,
-    )
+    if (captionController.available) {
+        CaptionLanguageMenu(
+            controller = captionController,
+            onCaptionsShown = onCaptionsShown,
+            onMenuOpenChange = onCaptionMenuOpenChange,
+        )
+    }
     trailingControls()
 }
 

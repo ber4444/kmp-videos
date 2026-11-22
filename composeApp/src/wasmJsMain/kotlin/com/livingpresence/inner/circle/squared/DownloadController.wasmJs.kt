@@ -92,7 +92,7 @@ private class WasmDownloadController : DownloadController {
         // it, because the offline fallback cannot rebuild it from that ID.
         val masterUrl = event.downloadUrl(tier.toRenditionTier())
         fun state(status: DownloadStatus, percent: Float) =
-            event.eventNumber to EventDownloadState(event.eventNumber, status, percent, masterUrl)
+            event.eventNumber to EventDownloadState(event.eventNumber, status, percent, masterUrl, event.title)
         _states.update { it + state(DownloadStatus.QUEUED, 0f) }
 
         val job = scope.launch {

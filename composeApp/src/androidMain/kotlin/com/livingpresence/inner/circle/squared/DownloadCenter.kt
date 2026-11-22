@@ -58,6 +58,8 @@ internal class DownloadCenter private constructor(
         val percent: Float,
         /** The rendition/playlist URL this download was enqueued with. */
         val streamUrl: String,
+        /** The feed title when enqueued, kept in the request's custom data. */
+        val title: String = "",
     )
 
     enum class DownloadState { QUEUED, WAITING, DOWNLOADING, COMPLETED, FAILED, REMOVING }
@@ -114,6 +116,7 @@ internal class DownloadCenter private constructor(
                 // HLS reports C.PERCENTAGE_UNSET (-1) until the segment count is known.
                 percent = download.percentDownloaded.coerceIn(0f, 100f),
                 streamUrl = download.request.uri.toString(),
+                title = download.request.data.decodeToString(),
             ),
         )
     }
@@ -126,6 +129,9 @@ internal class DownloadCenter private constructor(
         val url = event.downloadUrl(tier)
         val request = DownloadRequest.Builder(event.eventNumber.toString(), android.net.Uri.parse(url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
+            // Persisted with the request in the download index, so the offline
+            // gallery can name the video when the feed that titled it is gone.
+            .setData(event.title.encodeToByteArray())
             .build()
         // Go through the service so it comes up in the foreground: a plain
         // addDownload() leaves the work in a background service the platform stops

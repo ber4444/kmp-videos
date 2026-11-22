@@ -100,6 +100,7 @@ internal object IOSDownloads : DownloadController {
     private val defaults = NSUserDefaults.standardUserDefaults
     private val tasks = mutableMapOf<Int, AVAssetDownloadTask>()
     private val urls = mutableMapOf<Int, String>()
+    private val titles = mutableMapOf<Int, String>()
 
     // iOS may purge downloaded media when storage runs low, so a record whose
     // package is gone is dropped instead of being listed and failing to play.
@@ -127,6 +128,7 @@ internal object IOSDownloads : DownloadController {
                 state = DownloadStatus.COMPLETED,
                 percent = 100f,
                 streamUrl = download.streamUrl,
+                title = download.title,
             )
         }
         session.getAllTasksWithCompletionHandler { running ->
@@ -142,6 +144,7 @@ internal object IOSDownloads : DownloadController {
         // The feed ID may be synthetic even when the URL names a numbered stream.
         val url = event.downloadUrl(tier.toRenditionTier())
         urls[number] = url
+        titles[number] = event.title
         val task = NSURL.URLWithString(url)?.let { nsUrl ->
             session.assetDownloadTaskWithURLAsset(
                 URLAsset = AVURLAsset(uRL = nsUrl, options = null),
@@ -154,7 +157,7 @@ internal object IOSDownloads : DownloadController {
             update(number, DownloadStatus.FAILED, 0f)
             return
         }
-        task.taskDescription = DownloadTaskTag.of(number, url)
+        task.taskDescription = DownloadTaskTag.of(number, url, event.title)
         tasks[number] = task
         update(number, DownloadStatus.DOWNLOADING, 0f)
         task.resume()
@@ -166,6 +169,7 @@ internal object IOSDownloads : DownloadController {
         // that partial package.
         tasks.remove(eventNumber)?.cancel()
         urls.remove(eventNumber)
+        titles.remove(eventNumber)
         forget(eventNumber)
         _states.update { it - eventNumber }
     }
@@ -185,6 +189,7 @@ internal object IOSDownloads : DownloadController {
         val number = task?.eventNumber() ?: return
         tasks[number] = task
         task.streamUrl()?.let { urls[number] = it }
+        task.title()?.let { titles[number] = it }
         update(number, DownloadStatus.DOWNLOADING, 0f)
     }
 
@@ -199,7 +204,7 @@ internal object IOSDownloads : DownloadController {
             return
         }
         saved = saved.filterNot { it.eventNumber == number } +
-            SavedDownload(number, streamUrl, relativePath)
+            SavedDownload(number, streamUrl, relativePath, titles[number] ?: task.title().orEmpty())
         persist()
     }
 
@@ -228,8 +233,10 @@ internal object IOSDownloads : DownloadController {
 
     private fun update(number: Int, status: DownloadStatus, percent: Float) {
         _states.update {
-            val url = urls[number] ?: saved.firstOrNull { d -> d.eventNumber == number }?.streamUrl
-            it + (number to EventDownloadState(number, status, percent, url.orEmpty()))
+            val record = saved.firstOrNull { d -> d.eventNumber == number }
+            val url = urls[number] ?: record?.streamUrl
+            val title = titles[number] ?: record?.title
+            it + (number to EventDownloadState(number, status, percent, url.orEmpty(), title.orEmpty()))
         }
     }
 
@@ -239,9 +246,12 @@ internal object IOSDownloads : DownloadController {
     private fun fileExists(download: SavedDownload): Boolean =
         fileUrl(download).path?.let { NSFileManager.defaultManager.fileExistsAtPath(it) } == true
 
-    private fun NSURLSessionTask.eventNumber(): Int? = DownloadTaskTag.parse(taskDescription)?.first
+    private fun NSURLSessionTask.eventNumber(): Int? = DownloadTaskTag.parse(taskDescription)?.eventNumber
 
-    private fun NSURLSessionTask.streamUrl(): String? = DownloadTaskTag.parse(taskDescription)?.second
+    private fun NSURLSessionTask.streamUrl(): String? = DownloadTaskTag.parse(taskDescription)?.streamUrl
+
+    private fun NSURLSessionTask.title(): String? =
+        DownloadTaskTag.parse(taskDescription)?.title?.ifEmpty { null }
 }
 
 @Composable

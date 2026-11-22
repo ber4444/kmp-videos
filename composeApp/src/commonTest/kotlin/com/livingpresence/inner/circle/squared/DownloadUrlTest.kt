@@ -66,4 +66,19 @@ class OfflineEventsTest {
 
         assertEquals(listOf(3), events.map { it.eventNumber })
     }
+
+    @Test
+    fun aDownloadKeepsTheTitleItWasSavedWith() {
+        val events = listOf(
+            EventDownloadState(
+                1_000_000,
+                DownloadStatus.COMPLETED,
+                100f,
+                "https://public.example/live/event15_360p/playlist.m3u8?DVR",
+                title = "Trio, Saturday November 21",
+            ),
+        ).toOfflineEvents()
+
+        assertEquals("Trio, Saturday November 21", events.single().title)
+    }
 }

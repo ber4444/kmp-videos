@@ -34,4 +34,14 @@ class CaptionMenuControlsTest {
     fun turningCaptionsOffLeavesTheControlsAlone() {
         assertFalse(dismissesControlsOnCaptionSelection(captionsNowEnabled = false))
     }
+
+    /** Concerts are music, and Soniox is metered per viewer, so they never caption. */
+    @Test
+    fun onlyDiscordFeedVideosCanCaption() {
+        assertTrue(captionsAvailableFor(FeedSource.DISCORD, eventNumber = 3))
+        assertTrue(captionsAvailableFor(FeedSource.DISCORD, eventNumber = 10_000))
+        assertFalse(captionsAvailableFor(FeedSource.CONCERTS, eventNumber = 1_000_000))
+        assertFalse(captionsAvailableFor(FeedSource.CONCERTS, eventNumber = 3))
+        assertFalse(captionsAvailableFor(FeedSource.DISCORD, eventNumber = 1_000_000))
+    }
 }

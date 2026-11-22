@@ -94,6 +94,7 @@ internal actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
 @Composable
 internal actual fun PlatformPlayerScreen(
     url: String,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 ) {
     // One AVPlayer (via the Obj-C bridge) per screen. `remember` keeps it across
@@ -141,7 +142,7 @@ internal actual fun PlatformPlayerScreen(
 
     // The chosen caption language persists across videos and app launches; see
     // rememberCaptionController for why that now outweighs the per-video reset it replaced.
-    val captionController = rememberCaptionController()
+    val captionController = rememberCaptionController(available = captionsAvailable)
     var showStats by remember(url) { mutableStateOf(false) }
     var renditions by remember(url) { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
 

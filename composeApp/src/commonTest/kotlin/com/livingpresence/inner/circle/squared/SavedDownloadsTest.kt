@@ -65,15 +65,19 @@ class SavedDownloadsTest {
     }
 
     @Test
-    fun aTaskTagCarriesTheFeedIdAndUrlThroughARelaunch() {
-        val tag = DownloadTaskTag.of(1_000_000, concert.streamUrl)
+    fun aTaskTagCarriesTheFeedIdUrlAndTitleThroughARelaunch() {
+        val tag = DownloadTaskTag.of(1_000_000, concert.streamUrl, "Trio, Saturday November 21")
 
-        assertEquals(1_000_000 to concert.streamUrl, DownloadTaskTag.parse(tag))
+        assertEquals(
+            DownloadTaskTag.Tag(1_000_000, concert.streamUrl, "Trio, Saturday November 21"),
+            DownloadTaskTag.parse(tag),
+        )
     }
 
     @Test
     fun aTagWithOnlyAnIdStillYieldsTheId() {
-        assertEquals(12 to null, DownloadTaskTag.parse("12"))
+        assertEquals(DownloadTaskTag.Tag(12, null, ""), DownloadTaskTag.parse("12"))
+        assertEquals(DownloadTaskTag.Tag(12, "https://x/p.m3u8", ""), DownloadTaskTag.parse("12 https://x/p.m3u8"))
         assertNull(DownloadTaskTag.parse(null))
         assertNull(DownloadTaskTag.parse("not-a-number https://x"))
     }

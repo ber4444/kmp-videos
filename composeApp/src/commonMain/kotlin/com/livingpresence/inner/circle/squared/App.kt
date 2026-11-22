@@ -181,6 +181,9 @@ internal fun App() {
                     } else {
                         PlatformPlayerScreen(
                             url = event?.streamUrl ?: getUrl(eventNumber),
+                            // Concerts never caption: no transcript is needed for
+                            // music, and Soniox is metered per anonymous viewer.
+                            captionsAvailable = captionsAvailableFor(uiState.feedSource, eventNumber),
                             onClose = navController::popBackStack,
                         )
                     }
