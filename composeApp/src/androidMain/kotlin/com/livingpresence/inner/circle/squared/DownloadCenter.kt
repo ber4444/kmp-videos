@@ -121,13 +121,9 @@ internal class DownloadCenter private constructor(
     /** Enqueue a download for [event] at [tier] (default 360p for size). */
     fun enqueue(event: EventInfo, tier: RenditionTier = RenditionTier.P360) {
         require(!event.isLive) { "Cannot download a live (unbounded) event." }
-        // Only numbered events have the `_360p`/`_160p`/`_aac` siblings a tier
-        // selects between; a feed extra is downloaded from its own playlist.
-        val url = if (event.hasRenditionLadder) {
-            config.renditionUrl(event.eventNumber, tier)
-        } else {
-            event.streamUrl
-        }
+        // A manifest may list a numbered stream under a synthetic feed ID.
+        // Derive the tier from the listed URL, never that cache/download ID.
+        val url = event.downloadUrl(tier)
         val request = DownloadRequest.Builder(event.eventNumber.toString(), android.net.Uri.parse(url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .build()

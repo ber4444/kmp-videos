@@ -3,7 +3,6 @@ package com.livingpresence.inner.circle.squared
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.livingpresence.mediakit.EventInfo
-import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.PlaylistInspector
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.js.Js
@@ -88,19 +87,18 @@ private class WasmDownloadController : DownloadController {
 
     override fun enqueue(event: EventInfo, tier: DownloadQuality) {
         if (event.isLive) return
-        _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.QUEUED, 0f)) }
+        // The feed ID may be synthetic even when the URL names a numbered stream
+        // (a public concert), so the tier comes from the URL. Every state records
+        // it, because the offline fallback cannot rebuild it from that ID.
+        val masterUrl = event.downloadUrl(tier.toRenditionTier())
+        fun state(status: DownloadStatus, percent: Float) =
+            event.eventNumber to EventDownloadState(event.eventNumber, status, percent, masterUrl)
+        _states.update { it + state(DownloadStatus.QUEUED, 0f) }
 
         val job = scope.launch {
             try {
-                _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.DOWNLOADING, 0f)) }
+                _states.update { it + state(DownloadStatus.DOWNLOADING, 0f) }
 
-                // A tier only means something for numbered events; a feed extra
-                // has a single playlist and is downloaded from it as-is.
-                val masterUrl = if (event.hasRenditionLadder) {
-                    MediaKitConfig.Default.renditionUrl(event.eventNumber, tier.toRenditionTier())
-                } else {
-                    event.streamUrl
-                }
                 val masterResponse = httpClient.get(masterUrl).bodyAsText()
                 val variants = PlaylistInspector.parseMaster(masterResponse)
                 val chunklistUri = variants.firstOrNull()?.uri ?: throw Exception("No variants found")
@@ -124,24 +122,24 @@ private class WasmDownloadController : DownloadController {
                     filename = filename,
                     urlsJson = urlsJson,
                     onProgress = { progress ->
-                        _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.DOWNLOADING, progress.toFloat())) }
+                        _states.update { it + state(DownloadStatus.DOWNLOADING, progress.toFloat()) }
                     },
                     onSuccess = {
-                        _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.COMPLETED, 100f)) }
+                        _states.update { it + state(DownloadStatus.COMPLETED, 100f) }
                     },
                     onError = { error ->
                         if (error.contains("AbortError")) {
                             println("Download aborted")
                         } else {
                             println("Download failed: $error")
-                            _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.FAILED, 0f)) }
+                            _states.update { it + state(DownloadStatus.FAILED, 0f) }
                         }
                         activeJobs.remove(event.eventNumber)
                     }
                 )
             } catch (e: Exception) {
                 println("Download setup failed: ${e.message}")
-                _states.update { it + (event.eventNumber to EventDownloadState(event.eventNumber, DownloadStatus.FAILED, 0f)) }
+                _states.update { it + state(DownloadStatus.FAILED, 0f) }
                 activeJobs.remove(event.eventNumber)
             }
         }

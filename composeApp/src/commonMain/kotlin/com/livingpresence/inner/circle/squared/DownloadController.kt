@@ -2,6 +2,8 @@ package com.livingpresence.inner.circle.squared
 
 import androidx.compose.runtime.Composable
 import com.livingpresence.mediakit.EventInfo
+import com.livingpresence.mediakit.ExtraVideoCatalog
+import com.livingpresence.mediakit.MediaKitConfig
 import com.livingpresence.mediakit.RenditionTier
 import kotlinx.coroutines.flow.StateFlow
 
@@ -72,3 +74,41 @@ internal interface DownloadController {
 /** Platform download-controller factory. Android wires the DownloadCenter; wasmJs is a no-op. */
 @Composable
 internal expect fun rememberDownloadController(): DownloadController
+
+/** Resolve a download from the stream URL, independently of its feed/cache ID. */
+internal fun EventInfo.downloadUrl(tier: RenditionTier): String {
+    val streamNumber = MediaKitConfig.eventNumberIn(streamUrl) ?: return streamUrl
+    val streamConfig = MediaKitConfig.forStreamUrl(streamUrl) ?: return streamUrl
+    return streamConfig.renditionUrl(streamNumber, tier)
+}
+
+/**
+ * Completed downloads as gallery tiles, for when the feed cannot be loaded.
+ *
+ * What was downloaded is a specific rendition URL, and for a manifest entry it
+ * is the only way back to the stream: the feed that named it is exactly what
+ * failed to load. Only a real event number (below
+ * [ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE]) can rebuild a missing URL. A
+ * manifest extra or public concert with no recorded URL is left out, because
+ * rebuilding from its synthetic ID would play a stream that does not exist.
+ */
+internal fun Collection<EventDownloadState>.toOfflineEvents(): List<EventInfo> =
+    filter { it.state == DownloadStatus.COMPLETED }
+        .mapNotNull { state ->
+            val url = state.streamUrl.ifEmpty {
+                if (state.eventNumber < ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE) {
+                    MediaKitConfig.Default.eventUrl(state.eventNumber)
+                } else {
+                    return@mapNotNull null
+                }
+            }
+            EventInfo(
+                eventNumber = state.eventNumber,
+                isLive = false,
+                durationMs = 0L,
+                title = MediaKitConfig.eventNumberIn(url)
+                    ?.let { "Event $it" }
+                    ?: ExtraVideoCatalog.titleFromUrl(url),
+                streamUrl = url,
+            )
+        }

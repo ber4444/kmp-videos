@@ -52,7 +52,7 @@ class MainViewModelTest {
         val vm = MainViewModel(videoRepositoryWith(emptyList()))
         assertTrue(vm.uiState.value.isGalleryVisible)
 
-        vm.playVideo(1)
+        vm.playVideo(EventInfo(eventNumber = 1, isLive = false, durationMs = 0))
         assertFalse(vm.uiState.value.isGalleryVisible)
     }
 
@@ -129,6 +129,67 @@ class MainViewModelTest {
 
         assertEquals(emptyList(), vm.uiState.value.availableEvents)
         assertFalse(vm.uiState.value.isLoadingVideos)
+    }
+
+    @Test
+    fun selectingConcertsCancelsTheMemberLoadAndClearsItsTilesAndHost() = runTest {
+        val memberLoad = CompletableDeferred<Unit>()
+        val concertLoad = CompletableDeferred<Unit>()
+        val repo = object : VideoRepository(FakeHttpClient) {
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> {
+                val source = feedSource
+                if (source == FeedSource.DISCORD) memberLoad.await() else concertLoad.await()
+                return listOf(EventInfo(
+                    eventNumber = if (source == FeedSource.DISCORD) 1 else 1_000_000,
+                    isLive = false,
+                    durationMs = 1_000,
+                ))
+            }
+        }
+        val vm = MainViewModel(repo)
+        FeedConfig.streamHost = "https://members.example"
+
+        vm.openFeed(FeedSource.CONCERTS)
+        memberLoad.complete(Unit)
+
+        assertEquals(FeedSource.CONCERTS, vm.uiState.value.feedSource)
+        assertTrue(vm.uiState.value.availableEvents.isEmpty())
+        assertEquals("", FeedConfig.streamHost)
+        concertLoad.complete(Unit)
+        assertEquals(listOf(1_000_000), vm.uiState.value.availableEvents.map { it.eventNumber })
+    }
+
+    @Test
+    fun aRestoredConcertChoiceLoadsThePublicFeedImmediately() = runTest {
+        val repo = object : VideoRepository(FakeHttpClient) {
+            override suspend fun loadEvents(forceRefresh: Boolean): List<EventInfo> =
+                if (feedSource == FeedSource.CONCERTS) {
+                    listOf(EventInfo(eventNumber = 1_000_000, isLive = false, durationMs = 1_000))
+                } else {
+                    emptyList()
+                }
+        }
+
+        val vm = MainViewModel(repo, initialFeedSource = FeedSource.CONCERTS)
+
+        assertEquals(FeedSource.CONCERTS, vm.uiState.value.feedSource)
+        assertEquals(listOf(1_000_000), vm.uiState.value.availableEvents.map { it.eventNumber })
+    }
+
+    @Test
+    fun playingADownloadedConcertKeepsItsUrlWithoutARemoteFeed() = runTest {
+        val vm = MainViewModel(videoRepositoryWith(emptyList()))
+        val downloaded = EventInfo(
+            eventNumber = 1_000_000,
+            isLive = false,
+            durationMs = 1_000,
+            streamUrl = "https://public.example/live/event15_360p/playlist.m3u8?DVR",
+        )
+
+        vm.playVideo(downloaded)
+
+        assertEquals(downloaded, vm.uiState.value.selectedEvent)
+        assertTrue(vm.uiState.value.availableEvents.isEmpty())
     }
 
     private fun videoRepositoryWith(events: List<EventInfo>): VideoRepository =

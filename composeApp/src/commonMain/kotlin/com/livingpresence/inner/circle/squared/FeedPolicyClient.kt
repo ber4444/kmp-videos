@@ -17,9 +17,9 @@ import kotlinx.serialization.json.Json
  * The account's feed, in full, as `:server` issued it.
  *
  * Both fields are addresses rather than permissions, and that is the point: the
- * app has no stream host and no manifest URL of its own, so an account that is
- * handed neither cannot reach the catalogue at all — there is nothing compiled
- * into the binary for a patched client to fall back on.
+ * app has no member stream host or member manifest URL of its own. Public
+ * concerts are a separate, explicitly chosen manifest; a refused policy never
+ * falls back to it.
  *
  * @property streamHost Scheme and authority every numbered-event URL is built
  *   from. Empty means no numbered events.

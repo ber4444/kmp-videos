@@ -1,31 +1,27 @@
 package com.livingpresence.inner.circle.squared
 
+import com.livingpresence.inner.circle.squared.transcription.TranscriptionSecrets
 import com.livingpresence.mediakit.MediaKitConfig
 
+/** Public browsing and the independently authorized Discord feed. */
+internal enum class FeedSource { DISCORD, CONCERTS }
+
 /**
- * Where the feed's streams live, for the account currently connected.
+ * Where the public concert list is, and the current member stream host.
  *
- * Unlike `TranscriptionSecrets` and `DiscordConfig`, nothing here is injected at
- * startup by a platform host. Both of this object's former build-time values —
- * the stream host and the extras manifest URL — are issued by `:server` per
- * account, and `VideoRepository` assigns what it was given once a policy has been
- * read.
- *
- * That is the Apollo membership check. It used to be a client-side comparison
- * against a guild snowflake, deciding what the UI *showed* while these addresses
- * shipped inside every build, extractable with `unzip` by anyone regardless of
- * whether they were a member. Withholding an address is a decision a patched
- * client cannot reverse; hiding a tile was not.
- *
- * A review account is issued a manifest and no host, so for it the numbered
- * events are unreachable rather than merely unlisted.
- *
- * PRIVACY: a manifest hosted in a secret gist is unlisted, not access-controlled
- * — anyone with the raw URL can read it. It no longer ships inside the app, only
- * reaching an account that has been admitted, but recordings that need real
- * privacy still want signed URLs or a backend that authorizes each viewer.
+ * Concerts come from `:server`, which serves the list and the streams on it.
+ * The member host and member manifest come only from the authenticated
+ * feed-policy service.
  */
 internal object FeedConfig {
+
+    /** The public concert list. Mirrors `CONCERTS_MANIFEST_PATH` in `:server`. */
+    val concertsManifestUrl: String
+        get() = TranscriptionSecrets.sonioxTokenEndpoint.trimEnd('/') + "/v1/concerts/manifest.txt"
+
+    // Downloads and thumbnails are keyed by event number on every platform.
+    // Keep public concerts separate from members' manifest extras (10_000+).
+    const val CONCERT_EVENT_NUMBER_BASE: Int = 1_000_000
 
     /**
      * Scheme and authority of the stream server, e.g. `https://your-host:443`.

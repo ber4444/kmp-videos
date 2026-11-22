@@ -15,6 +15,8 @@ private const val DEFAULT_VIDEO_LOAD_ERROR = "Unable to load videos"
 
 internal data class MainUiState(
     val isGalleryVisible: Boolean = true,
+    val feedSource: FeedSource = FeedSource.DISCORD,
+    val selectedEvent: EventInfo? = null,
     val availableEvents: List<EventInfo> = emptyList(),
     val isLoadingVideos: Boolean = false,
     val videoLoadError: String? = null,
@@ -22,16 +24,26 @@ internal data class MainUiState(
 
 internal class MainViewModel(
     private val videoRepository: VideoRepository,
+    initialFeedSource: FeedSource = FeedSource.DISCORD,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MainUiState())
+    private val _uiState = MutableStateFlow(MainUiState(feedSource = initialFeedSource))
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     /** The load in flight, so a forced refresh can supersede it. */
     private var loadJob: Job? = null
 
     init {
+        videoRepository.feedSource = initialFeedSource
         ensureVideosLoaded()
+    }
+
+    /** Select a feed without showing tiles or accepting loads from the previous one. */
+    fun openFeed(source: FeedSource) {
+        clearFeed()
+        videoRepository.feedSource = source
+        _uiState.update { it.copy(feedSource = source) }
+        retryLoadingVideos()
     }
 
     fun retryLoadingVideos() {
@@ -46,8 +58,8 @@ internal class MainViewModel(
         loadVideos()
     }
 
-    fun playVideo(eventNumber: Int) {
-        _uiState.update { it.copy(isGalleryVisible = false) }
+    fun playVideo(event: EventInfo) {
+        _uiState.update { it.copy(isGalleryVisible = false, selectedEvent = event) }
     }
 
     /**
@@ -66,6 +78,8 @@ internal class MainViewModel(
     fun clearFeed() {
         loadJob?.cancel()
         loadJob = null
+        videoRepository.feedSource = FeedSource.DISCORD
+        FeedConfig.streamHost = ""
         _uiState.value = MainUiState()
     }
 

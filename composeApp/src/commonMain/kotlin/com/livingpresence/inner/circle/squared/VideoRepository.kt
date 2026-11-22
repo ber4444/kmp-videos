@@ -20,21 +20,17 @@ import kotlinx.coroutines.sync.withLock
  * app's [MainViewModel] decoupled from the SDK's HTTP client wiring.
  *
  * ## Where the feed comes from
- * Both addresses — the stream host and the manifest URL — arrive from `:server`
- * per account, and the app has neither of its own. An Apollo member is given the
- * host and the members' manifest; a review account is given only its demo
- * manifest, so for it the numbered events are not filtered out but unreachable.
- * Nothing is hardcoded to fall back on, which is what makes the membership check
- * hold rather than merely display. See [FeedPolicyClient].
- *
- * The catalogues are therefore built here, once the policy has been read, rather
- * than injected at construction: their addresses are not known until an account
- * has connected.
+ * [FeedSource.DISCORD] gets its addresses from the authenticated policy service.
+ * [FeedSource.CONCERTS] uses only the public manifest, with no membership request
+ * or numbered-event probes. Choosing it is explicit, never a fallback for a
+ * refused Discord login.
  */
 internal open class VideoRepository(
     private val httpClient: HttpClient,
     private val policyClient: FeedPolicyClient? = null,
 ) {
+
+    var feedSource: FeedSource = FeedSource.DISCORD
 
     /**
      * The catalogues built for the last addresses the server issued, so repeat
@@ -58,7 +54,12 @@ internal open class VideoRepository(
      * @param forceRefresh Bypass both caches (event probes and manifest body).
      */
     open suspend fun loadEvents(forceRefresh: Boolean = false): List<EventInfo> = coroutineScope {
-        val policy = policy()
+        val source = feedSource
+        val policy = if (source == FeedSource.CONCERTS) {
+            FeedPolicy(manifestUrl = FeedConfig.concertsManifestUrl)
+        } else {
+            policy()
+        }
         // The SDK's global backs getUrl() and the offline fallback's URL rebuild,
         // so it has to track whatever this account was issued — including being
         // cleared back to empty when the account has no host.
@@ -69,7 +70,17 @@ internal open class VideoRepository(
             runCatching { extraCatalog(policy.manifestUrl)?.loadExtras(forceRefresh).orEmpty() }
                 .getOrDefault(emptyList())
         }
-        probed.await() + extraVideos.await()
+        val loadedExtras = extraVideos.await()
+        probed.await() + if (source == FeedSource.CONCERTS) {
+            loadedExtras.map { event ->
+                event.copy(
+                    eventNumber = FeedConfig.CONCERT_EVENT_NUMBER_BASE +
+                        event.eventNumber - ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE,
+                )
+            }
+        } else {
+            loadedExtras
+        }
     }
 
     /** Just the event numbers, for any call site that still needs them. */

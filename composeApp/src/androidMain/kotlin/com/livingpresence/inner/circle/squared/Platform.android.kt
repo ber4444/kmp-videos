@@ -157,7 +157,7 @@ internal actual fun PlatformPlayerScreen(
 
     LaunchedEffect(url, reloadToken) {
         itemResult = if (eventNumber != null) {
-            runCatching { mediaSourceBuilder.resolveForEvent(eventNumber, ladderResolver) }
+            runCatching { mediaSourceBuilder.resolveForEvent(eventNumber, ladderResolver, fallbackUrl = url) }
                 .getOrNull()
                 ?: LadderMediaSourceBuilder.ItemResult(url, renditions = null)
         } else {

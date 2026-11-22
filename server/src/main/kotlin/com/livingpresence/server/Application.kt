@@ -61,8 +61,10 @@ fun Application.module(
         testUserIds = config.testUserIds,
         demoVideosUrl = config.demoVideosUrl,
     ),
+    concerts: ConcertCatalog = ConcertCatalog(httpClient, config.concertsManifestUrl),
 ) {
     val tokens = SonioxTokenService(httpClient, config)
+    val concertRelay = ConcertRelay(httpClient, concerts)
     val logger = log
 
     install(ContentNegotiation) { json() }
@@ -72,6 +74,9 @@ fun Application.module(
         // The default format logs the full URI. This service has no query string
         // worth recording and one that would be worth *not* recording if it ever
         // grew one, so the line is reduced to method, path and status.
+        // Concert segments arrive every few seconds per viewer, and the privacy
+        // policy says this service does not record which concert anyone watches.
+        filter { call -> !call.request.local.uri.startsWith(CONCERTS_RELAY_PREFIX) }
         format { call ->
             "${call.request.local.method.value} ${call.request.local.uri} -> ${call.response.status()}"
         }
@@ -113,6 +118,20 @@ fun Application.module(
                 limit = config.rateLimit,
                 refillPeriod = config.rateLimitRefillSeconds.seconds,
             )
+            requestKey { call -> call.clientKey() }
+        }
+        register(RateLimitName(CONCERTS_LIMIT)) {
+            rateLimiter(
+                limit = config.rateLimit,
+                refillPeriod = config.rateLimitRefillSeconds.seconds,
+            )
+            requestKey { call -> call.clientKey() }
+        }
+        // A player fetches a playlist and a segment every few seconds, and a
+        // download fetches segments as fast as the connection allows, so this
+        // bucket is per minute and far larger than the others.
+        register(RateLimitName(CONCERT_RELAY_LIMIT)) {
+            rateLimiter(limit = config.relayRateLimit, refillPeriod = 60.seconds)
             requestKey { call -> call.clientKey() }
         }
     }
@@ -165,11 +184,23 @@ fun Application.module(
                 }
             }
         }
+
+        // Public by design: Concerts is the option for viewers without an account.
+        rateLimit(RateLimitName(CONCERTS_LIMIT)) {
+            get(CONCERTS_MANIFEST_PATH) { concertRelay.respondManifest(call) }
+        }
+        rateLimit(RateLimitName(CONCERT_RELAY_LIMIT)) {
+            get("$CONCERTS_RELAY_PREFIX/{path...}") {
+                concertRelay.relay(call, call.parameters.getAll("path").orEmpty())
+            }
+        }
     }
 }
 
 private const val TEMPORARY_KEY_LIMIT = "temporary-key"
 private const val FEED_POLICY_LIMIT = "feed-policy"
+private const val CONCERTS_LIMIT = "concerts"
+private const val CONCERT_RELAY_LIMIT = "concert-relay"
 
 /**
  * The identity the rate limiter counts against.

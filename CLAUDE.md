@@ -96,6 +96,12 @@ declaration needs a visibility modifier, or the build fails.
 
 ## Secrets and configuration
 
+- Concerts (the no-account alternative to Discord login) come from `:server`:
+  `FeedConfig.concertsManifestUrl` is the token service base plus
+  `/v1/concerts/manifest.txt`, and the list's URLs point back at the server,
+  which serves only the listed streams. Never put a stream host or a manifest
+  URL in the app, the docs or the repo; they belong in `fly secrets`
+  (`CONCERTS_MANIFEST_URL` for this list).
 - `secrets.properties` (gitignored; copy `secrets.properties.example`) holds only
   `SONIOX_TOKEN_URL` and `DISCORD_CLIENT_ID`. Both are optional: an empty token
   URL falls back to `TranscriptionSecrets.DEFAULT_SONIOX_TOKEN_URL`, and an empty
@@ -104,7 +110,8 @@ declaration needs a visibility modifier, or the build fails.
   the binary: a `BuildConfig` constant in the dex, an `Info.plist` entry in the
   IPA, a string in the JS bundle. Provider keys and stream addresses belong in
   `:server`'s environment (`fly secrets set …`): `SONIOX_API_KEY`, `STREAM_HOST`,
-  `EXTRA_VIDEOS_URL`, `APOLLO_GUILD_ID`, `TEST_USER_IDS`, `DEMO_VIDEOS_URL`.
+  `EXTRA_VIDEOS_URL`, `APOLLO_GUILD_ID`, `TEST_USER_IDS`, `DEMO_VIDEOS_URL`,
+  `CONCERTS_MANIFEST_URL`.
 - Gradle is the only reader of the file. Android gets `BuildConfig` fields
   (`androidApp/build.gradle.kts`), wasm gets a generated `TranscriptionKeys` object,
   and iOS gets the gitignored `iosApp/Secrets.xcconfig` from
