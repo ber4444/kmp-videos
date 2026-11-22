@@ -78,8 +78,8 @@ import kotlin.math.roundToLong
  * Picture-in-Picture parity, plus the shared HTTP/password/download seams.
  *
  * HLS + ABR are native to AVPlayer (no equivalent of the Android ladder
- * synthesis is needed here). Offline download and transcription are out of
- * scope for this phase (see plan.md Phase 7).
+ * synthesis is needed here). A finished download is played from its local
+ * package instead; see [IOSDownloads].
  *
  * AVPlayer is driven through [AVPlayerBridge] — a tiny Obj-C interop wrapper
  * (see `native/avplayer/cinterop/`). Against the Xcode 26.5 SDK, Kotlin/Native
@@ -94,11 +94,17 @@ internal actual fun createHttpClient(): HttpClient = HttpClient(Darwin)
 @Composable
 internal actual fun PlatformPlayerScreen(
     url: String,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 ) {
     // One AVPlayer (via the Obj-C bridge) per screen. `remember` keeps it across
     // recompositions; the DisposableEffect below releases it on exit.
-    val nsUrl = remember(url) { NSURL.URLWithString(url) ?: NSURL.URLWithString("")!! }
+    // A downloaded stream plays from its package, so it works offline. Online it
+    // trades the ladder for the downloaded rendition, the trade the viewer
+    // made by downloading it.
+    val nsUrl = remember(url) {
+        IOSDownloads.localFileFor(url) ?: NSURL.URLWithString(url) ?: NSURL.URLWithString("")!!
+    }
     val bridge = remember(url) {
         configureBackgroundAudio()
         AVPlayerBridge(uRL = nsUrl)
@@ -136,7 +142,7 @@ internal actual fun PlatformPlayerScreen(
 
     // The chosen caption language persists across videos and app launches; see
     // rememberCaptionController for why that now outweighs the per-video reset it replaced.
-    val captionController = rememberCaptionController()
+    val captionController = rememberCaptionController(available = captionsAvailable)
     var showStats by remember(url) { mutableStateOf(false) }
     var renditions by remember(url) { mutableStateOf<List<com.livingpresence.mediakit.ProbedRendition>?>(null) }
 

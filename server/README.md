@@ -31,6 +31,8 @@ opens a socket, and what it gets back is bounded four ways — the key is
 ```
 POST /v1/soniox/temporary-key   ->  201 {"api_key": "...", "expires_at": "..."}
 GET  /v1/feed/policy            ->  200 {"stream_host": "...", "manifest_url": "..."}
+GET  /v1/concerts/manifest.txt  ->  200 text/plain, one "<url> <title>" per line
+GET  /v1/concerts/relay/…       ->  the listed concert's playlists and segments
 GET  /health                    ->  200 {"status": "ok"}
 ```
 
@@ -42,6 +44,7 @@ allowed one — stop).
 addresses, not permissions: the apps hold no stream host and no manifest URL of
 their own, so an account handed neither cannot reach the catalogue at all. This
 route **is** the Apollo membership check — see [Feed policy](#feed-policy).
+The two `/v1/concerts` routes need no account; see [Concerts](#concerts).
 
 ## Deploy
 
@@ -100,6 +103,8 @@ its environment, so a missing secret fails the deploy rather than serving errors
 | `MAX_SESSION_SECONDS` | `3600` | Caps a session that *did* connect. |
 | `RATE_LIMIT` | `30` | Minted keys per client per window. |
 | `RATE_LIMIT_REFILL_SECONDS` | `300` | |
+| `CONCERTS_MANIFEST_URL` | *(empty)* | Raw URL of the concert list, in the extras manifest format. Read only by this service. Empty turns Concerts off: the list route answers `503`. |
+| `RELAY_RATE_LIMIT` | `3000` | Concert requests per client per **minute**. Sized for a download on a fast connection, which fetches segments back to back. |
 
 ## Authorization
 
@@ -153,8 +158,8 @@ unzip an APK, read an `Info.plist` out of an IPA, or view-source the web bundle.
 Here the addresses *are* the answer: a non-member is not told where the streams
 are, which is a decision a patched client cannot reverse.
 
-A review account is given a manifest and **no stream host**, so the numbered
-events are not filtered out of its gallery — there is no URL for it to build.
+A review account is given a manifest and **no stream host**, so the app loads
+only the listed videos without probing the numbered-event catalogue.
 
 Properties covered by `FeedPolicyRouteTest`:
 
@@ -191,3 +196,39 @@ captions. The apps distinguish the two failure modes so an outage is not an
 eviction: a `403` is terminal and clears the stored session, while an
 unreachable service leaves the session intact and surfaces a retry. Nobody is
 locked out permanently by a bad deploy, but nobody watches anything during one.
+
+## Concerts
+
+Concerts are the option for viewers without a Discord account. Both routes are
+unauthenticated by design.
+
+`/v1/concerts/manifest.txt` reads the list at `CONCERTS_MANIFEST_URL` (cached for
+five minutes; a failed refresh keeps the last good list) and answers in the same
+plain-text format the app's `ExtraVideoCatalog` parses. Every URL in the answer
+points at `/v1/concerts/relay/…` on this service, built from the scheme and host
+the caller used.
+
+`/v1/concerts/relay/…` serves the playlists and segments of the listed concerts
+and nothing else. A listed numbered stream also includes its sibling renditions,
+which the apps use for adaptive quality and the caption audio track. Absolute
+URLs inside a playlist are rewritten to point here. Only `Cache-Control`,
+`Content-Range` and `Accept-Ranges` are passed back from the source. Responses
+carry `Access-Control-Allow-Origin: *` for the web build.
+
+```bash
+fly secrets set CONCERTS_MANIFEST_URL=https://gist.githubusercontent.com/…/raw/concerts.txt \
+    --app apollo-videos-tokens
+```
+
+Use a secret gist raw URL *without* the revision hash, so editing the gist
+changes the list without a deploy.
+
+**Cost.** Concert video is served through this machine, so Fly bills its egress:
+roughly 1 GB per viewer-hour at the top rendition. Segments are buffered whole
+(a few hundred KB each) rather than streamed. While anyone is watching, the
+machine stays up instead of auto-stopping.
+
+Properties covered by `ConcertRelayTest`: the list never contains the source
+address, listed playlists, segments and sibling renditions are served, absolute
+playlist URLs are rewritten, range requests pass through, only listed concerts
+are served, an unset list is a `503`, and a failed refresh keeps the last list.

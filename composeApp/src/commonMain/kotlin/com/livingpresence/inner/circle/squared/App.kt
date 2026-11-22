@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,7 +55,6 @@ import com.livingpresence.inner.circle.squared.discord.DiscordIdentity
 import com.livingpresence.inner.circle.squared.discord.rememberDiscordSessionStore
 import com.livingpresence.mediakit.EventInfo
 import com.livingpresence.mediakit.ExtraVideoCatalog
-import com.livingpresence.mediakit.MediaKitConfig
 
 private object AppRoute {
     const val Landing = "landing"
@@ -80,7 +80,10 @@ internal fun App() {
         }
 
         CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
-            val mainViewModel = rememberMainViewModel()
+            // Navigation survives activity recreation; retain the feed choice
+            // with it so an anonymous concert player can reload its manifest.
+            var feedSourceName by rememberSaveable { mutableStateOf(FeedSource.DISCORD.name) }
+            val mainViewModel = rememberMainViewModel(FeedSource.valueOf(feedSourceName))
             val uiState by mainViewModel.uiState.collectAsState()
             val navController = rememberNavController()
 
@@ -93,13 +96,18 @@ internal fun App() {
                 composable(route = AppRoute.Landing) {
                     LandingRoute(
                         onConnected = {
-                            // The feed depends on who just connected — :server
-                            // confines a review account to its own manifest — and
-                            // the first load ran before anyone was signed in.
-                            mainViewModel.retryLoadingVideos()
+                            feedSourceName = FeedSource.DISCORD.name
+                            mainViewModel.openFeed(FeedSource.DISCORD)
                             // Drop the landing page from the back stack: once the
                             // Apollo check has passed, backing into the gate again
                             // would only offer to re-authorize.
+                            navController.navigate(AppRoute.Gallery) {
+                                popUpTo(AppRoute.Landing) { inclusive = true }
+                            }
+                        },
+                        onConcerts = {
+                            feedSourceName = FeedSource.CONCERTS.name
+                            mainViewModel.openFeed(FeedSource.CONCERTS)
                             navController.navigate(AppRoute.Gallery) {
                                 popUpTo(AppRoute.Landing) { inclusive = true }
                             }
@@ -113,28 +121,22 @@ internal fun App() {
                         uiState = uiState,
                         onRetry = mainViewModel::retryLoadingVideos,
                         onPlayEvent = { event ->
-                            mainViewModel.playVideo(event.eventNumber)
+                            mainViewModel.playVideo(event)
                             onEventClick(event.eventNumber) {
                                 navController.navigate(AppRoute.player(event.eventNumber))
                             }
                         },
-                        onSignOut = {
-                            // Credentials first, and all of them: the refresh token
-                            // off the device, the access token out of memory, and
-                            // the stream host back to empty so nothing can build a
-                            // playlist URL for an account that has left. Then the
-                            // feed those addresses produced.
-                            sessionStore.clear()
-                            DiscordIdentity.clear()
-                            FeedConfig.streamHost = ""
+                        onExit = {
+                            // Leaving public browsing preserves any saved login.
+                            // Member sign-out clears both credentials and feed.
+                            if (uiState.feedSource == FeedSource.DISCORD) {
+                                sessionStore.clear()
+                                DiscordIdentity.clear()
+                            }
                             mainViewModel.clearFeed()
-                            // Same shape as the connect navigation, in reverse:
-                            // drop the gallery so backing out of the gate cannot
-                            // return to a feed this session is no longer entitled
-                            // to. The landing route reads the session at
-                            // construction, and the store is empty by now, so it
-                            // comes up on the connect button rather than trying to
-                            // restore what was just cleared.
+                            feedSourceName = FeedSource.DISCORD.name
+                            // Drop the gallery so backing out of the landing page
+                            // cannot return to the feed that was just cleared.
                             navController.navigate(AppRoute.Landing) {
                                 popUpTo(AppRoute.Gallery) { inclusive = true }
                             }
@@ -158,7 +160,8 @@ internal fun App() {
                     // process death the back stack is restored before the feed
                     // reloads, so wait for it rather than play the wrong stream —
                     // and leave if the reload comes back without this entry.
-                    val event = uiState.availableEvents.firstOrNull { it.eventNumber == eventNumber }
+                    val event = uiState.selectedEvent?.takeIf { it.eventNumber == eventNumber }
+                        ?: uiState.availableEvents.firstOrNull { it.eventNumber == eventNumber }
                     val isUnresolvedExtra =
                         event == null && eventNumber >= ExtraVideoCatalog.EXTRA_EVENT_NUMBER_BASE
 
@@ -178,6 +181,9 @@ internal fun App() {
                     } else {
                         PlatformPlayerScreen(
                             url = event?.streamUrl ?: getUrl(eventNumber),
+                            // Concerts never caption: no transcript is needed for
+                            // music, and Soniox is metered per anonymous viewer.
+                            captionsAvailable = captionsAvailableFor(uiState.feedSource, eventNumber),
                             onClose = navController::popBackStack,
                         )
                     }
@@ -188,12 +194,11 @@ internal fun App() {
 }
 
 @Composable
-private fun rememberMainViewModel(): MainViewModel {
+private fun rememberMainViewModel(initialFeedSource: FeedSource): MainViewModel {
     val videoRepository = remember {
         val httpClient = createHttpClient()
-        // No catalogues are built here: the stream host and the manifest URL are
-        // issued per account by :server, so neither address exists until someone
-        // has connected. See VideoRepository.
+        // Catalogues are built after the viewer chooses the public concerts or
+        // connects to Discord for the server-issued member feed.
         VideoRepository(
             httpClient = httpClient,
             policyClient = FeedPolicyClient(httpClient),
@@ -204,7 +209,7 @@ private fun rememberMainViewModel(): MainViewModel {
     // and threw an unrecoverable exception under Kotlin/Wasm (swallowed by the
     // coroutine handler → blank screen). MainViewModel holds no SavedState, so a
     // plain `remember` is correct and works across all targets.
-    return remember(videoRepository) { MainViewModel(videoRepository) }
+    return remember(videoRepository) { MainViewModel(videoRepository, initialFeedSource) }
 }
 
 /** Brand red. Legible on either ground, so it is the same in both schemes. */
@@ -241,43 +246,32 @@ internal fun InnerCircleSquaredTheme(content: @Composable () -> Unit) {
 
 /**
  * Full-screen gallery of available events. Hosts the [LiveEventsGallery] feed,
- * with the offline fallback in front of it and [SignOutButton] over it.
+ * with the offline fallback in front of it and [GalleryExitButton] over it.
  *
- * @param onSignOut Erase the session and return to the gate. Confirmed by
- *   [SignOutButton] before it is called, so this runs only on a deliberate tap.
+ * @param onExit Return to the landing page; member sessions are signed out after
+ *   confirmation, while public browsing can be left immediately.
  */
 @Composable
 internal fun GalleryScreen(
     uiState: MainUiState,
     onRetry: () -> Unit,
     onPlayEvent: (EventInfo) -> Unit,
-    onSignOut: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val downloadController = rememberDownloadController()
     val downloadStates by downloadController.states.collectAsState()
 
-    val offlineEvents = remember(uiState.videoLoadError, uiState.availableEvents, downloadStates) {
+    // A failed public manifest must not reveal members' downloads as its fallback.
+    val visibleDownloads = remember(uiState.feedSource, downloadStates) {
+        downloadStates.filterKeys { number ->
+            (number >= FeedConfig.CONCERT_EVENT_NUMBER_BASE) ==
+                (uiState.feedSource == FeedSource.CONCERTS)
+        }
+    }
+    val offlineEvents = remember(uiState.videoLoadError, uiState.availableEvents, visibleDownloads) {
         val shouldFallback = uiState.videoLoadError != null || uiState.availableEvents.isEmpty()
         if (shouldFallback && downloadController.isSupported) {
-            downloadStates.values
-                .filter { it.state == DownloadStatus.COMPLETED }
-                .map { state ->
-                    // What was downloaded is a specific rendition URL, and for an
-                    // extra it is the only way back to the stream — the feed that
-                    // named it is exactly what failed to load here.
-                    val url = state.streamUrl.ifEmpty {
-                        MediaKitConfig.Default.eventUrl(state.eventNumber)
-                    }
-                    EventInfo(
-                        eventNumber = state.eventNumber,
-                        isLive = false,
-                        durationMs = 0L,
-                        title = MediaKitConfig.eventNumberIn(url)
-                            ?.let { "Event $it" }
-                            ?: ExtraVideoCatalog.titleFromUrl(url),
-                        streamUrl = url,
-                    )
-                }
+            visibleDownloads.values.toOfflineEvents()
         } else {
             emptyList()
         }
@@ -294,15 +288,16 @@ internal fun GalleryScreen(
             onPlayEvent = onPlayEvent,
             onRetry = onRetry,
             modifier = Modifier.fillMaxSize(),
-            downloadStates = if (downloadController.isSupported) downloadStates else null,
+            downloadStates = if (downloadController.isSupported) visibleDownloads else null,
             onDownload = if (downloadController.isSupported) {
                 { event -> downloadController.enqueue(event) }
             } else null,
             onRemoveDownload = if (downloadController.isSupported) downloadController::remove else null,
         )
 
-        SignOutButton(
-            onConfirm = onSignOut,
+        GalleryExitButton(
+            onConfirm = onExit,
+            isConcerts = uiState.feedSource == FeedSource.CONCERTS,
             modifier = Modifier.align(Alignment.TopEnd),
         )
     }
@@ -322,11 +317,15 @@ internal fun GalleryScreen(
  * authorization round trip out to the browser and back.
  */
 @Composable
-private fun SignOutButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+private fun GalleryExitButton(
+    onConfirm: () -> Unit,
+    isConcerts: Boolean,
+    modifier: Modifier = Modifier,
+) {
     var confirming by remember { mutableStateOf(false) }
 
     TextButton(
-        onClick = { confirming = true },
+        onClick = { if (isConcerts) onConfirm() else confirming = true },
         // The grid insets itself with content padding so its tiles can scroll
         // under the system bars. This must not: it is pinned, so it takes the
         // inset as real padding or it sits under the clock.
@@ -337,7 +336,7 @@ private fun SignOutButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) 
             .background(Color.Black.copy(alpha = 0.45f)),
     ) {
         Text(
-            text = "Sign out",
+            text = if (isConcerts) "Back" else "Sign out",
             color = Color.White,
             style = MaterialTheme.typography.labelLarge,
         )
@@ -350,7 +349,7 @@ private fun SignOutButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) 
             text = {
                 Text(
                     "This erases your session from this device. You will need to " +
-                        "connect to Discord again to reach the feed. Videos you " +
+                        "connect to Discord again to reach the member feed. Videos you " +
                         "have downloaded stay on your device.",
                 )
             },

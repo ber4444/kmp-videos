@@ -2,105 +2,257 @@ package com.livingpresence.inner.circle.squared
 
 import androidx.compose.runtime.Composable
 import com.livingpresence.mediakit.EventInfo
+import kotlinx.cinterop.CValue
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.readValue
+import kotlinx.cinterop.useContents
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-
-import kotlinx.cinterop.CValue
-import kotlinx.cinterop.ExperimentalForeignApi
-import platform.AVFoundation.*
+import kotlinx.coroutines.flow.update
+import platform.AVFoundation.AVAssetDownloadDelegateProtocol
+import platform.AVFoundation.AVAssetDownloadTask
+import platform.AVFoundation.AVAssetDownloadURLSession
+import platform.AVFoundation.AVURLAsset
+import platform.AVFoundation.CMTimeRangeValue
+import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeRange
-import platform.Foundation.*
+import platform.Foundation.NSError
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSHomeDirectory
+import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLErrorCancelled
+import platform.Foundation.NSURLSession
+import platform.Foundation.NSURLSessionConfiguration
+import platform.Foundation.NSURLSessionTask
+import platform.Foundation.NSUserDefaults
+import platform.Foundation.NSValue
 import platform.darwin.NSObject
-import com.livingpresence.mediakit.MediaKitConfig
-import androidx.compose.runtime.remember
 
 @OptIn(ExperimentalForeignApi::class)
 private class DownloadDelegate(
-    private val onProgress: (NSURLSessionTask, Double) -> Unit,
-    private val onComplete: (NSURLSessionTask, NSURL?) -> Unit
+    private val onProgress: (NSURLSessionTask, Float) -> Unit,
+    private val onLocation: (NSURLSessionTask, NSURL) -> Unit,
+    private val onComplete: (NSURLSessionTask, NSError?) -> Unit,
 ) : NSObject(), AVAssetDownloadDelegateProtocol {
-    override fun URLSession(session: NSURLSession, assetDownloadTask: AVAssetDownloadTask, didLoadTimeRange: CValue<CMTimeRange>, totalTimeRangesLoaded: List<*>, timeRangeExpectedToLoad: CValue<CMTimeRange>) {
-        onProgress(assetDownloadTask, 0.5)
+
+    override fun URLSession(
+        session: NSURLSession,
+        assetDownloadTask: AVAssetDownloadTask,
+        didLoadTimeRange: CValue<CMTimeRange>,
+        totalTimeRangesLoaded: List<*>,
+        timeRangeExpectedToLoad: CValue<CMTimeRange>,
+    ) {
+        val loaded = totalTimeRangesLoaded.mapNotNull { value ->
+            (value as? NSValue)?.CMTimeRangeValue?.seconds()
+        }
+        onProgress(assetDownloadTask, downloadPercent(loaded, timeRangeExpectedToLoad.seconds()))
     }
-    
-    override fun URLSession(session: NSURLSession, assetDownloadTask: AVAssetDownloadTask, didFinishDownloadingToURL: NSURL) {
-        onComplete(assetDownloadTask, didFinishDownloadingToURL)
+
+    override fun URLSession(
+        session: NSURLSession,
+        assetDownloadTask: AVAssetDownloadTask,
+        didFinishDownloadingToURL: NSURL,
+    ) {
+        onLocation(assetDownloadTask, didFinishDownloadingToURL)
     }
+
+    override fun URLSession(
+        session: NSURLSession,
+        task: NSURLSessionTask,
+        didCompleteWithError: NSError?,
+    ) {
+        onComplete(task, didCompleteWithError)
+    }
+
+    private fun CValue<CMTimeRange>.seconds(): Double =
+        useContents { CMTimeGetSeconds(duration.readValue()) }
 }
 
+/**
+ * HLS downloads through one background `AVAssetDownloadURLSession`, kept for
+ * the life of the process.
+ *
+ * It is a single object for two reasons. A background session identifier may
+ * be in use by only one session at a time, and the gallery composes its
+ * controller anew each time it is shown. The player also has to find a
+ * finished download, by [localFileFor], from outside the gallery.
+ *
+ * Finished downloads are recorded in `NSUserDefaults` as [SavedDownload]s, so
+ * they are still listed, and still play, after a relaunch. Downloads a previous
+ * launch left running are re-attached from the session, which keeps
+ * them going while the app is not running. Each task carries its feed ID and URL
+ * in `taskDescription` ([DownloadTaskTag]), because a task is all those
+ * callbacks are handed, and after a relaunch it is the only place either survives.
+ */
 @OptIn(ExperimentalForeignApi::class)
-private class IOSDownloadController : DownloadController {
+internal object IOSDownloads : DownloadController {
+
+    private const val SESSION_IDENTIFIER = "com.livingpresence.downloads"
+    private const val SAVED_DOWNLOADS_KEY = "com.livingpresence.downloads.saved.v1"
+
     override val isSupported: Boolean = true
+
     private val _states = MutableStateFlow<Map<Int, EventDownloadState>>(emptyMap())
     override val states: StateFlow<Map<Int, EventDownloadState>> = _states.asStateFlow()
-    
-    private var session: AVAssetDownloadURLSession? = null
+
+    private val defaults = NSUserDefaults.standardUserDefaults
     private val tasks = mutableMapOf<Int, AVAssetDownloadTask>()
-    private val config = MediaKitConfig.Default
-    
-    init {
-        val configuration = NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier("com.livingpresence.downloads")
-        val delegate = DownloadDelegate(
-            onProgress = { task, progress -> 
-                val eventNumber = tasks.entries.firstOrNull { it.value == task }?.key
-                if (eventNumber != null) {
-                    updateState(eventNumber, DownloadStatus.DOWNLOADING, progress.toFloat())
-                }
+    private val urls = mutableMapOf<Int, String>()
+    private val titles = mutableMapOf<Int, String>()
+
+    // iOS may purge downloaded media when storage runs low, so a record whose
+    // package is gone is dropped instead of being listed and failing to play.
+    private var saved: List<SavedDownload> =
+        SavedDownloads.decode(defaults.stringForKey(SAVED_DOWNLOADS_KEY)).filter { fileExists(it) }
+
+    private val session: AVAssetDownloadURLSession = AVAssetDownloadURLSession.sessionWithConfiguration(
+        configuration = NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier(SESSION_IDENTIFIER),
+        assetDownloadDelegate = DownloadDelegate(
+            onProgress = { task, percent ->
+                task.eventNumber()?.let { update(it, DownloadStatus.DOWNLOADING, percent) }
             },
-            onComplete = { task, url -> 
-                val eventNumber = tasks.entries.firstOrNull { it.value == task }?.key
-                if (eventNumber != null) {
-                    updateState(eventNumber, DownloadStatus.COMPLETED, 1.0f)
-                }
+            onLocation = ::recordLocation,
+            onComplete = ::finish,
+        ),
+        // Every callback, and so every touch of the maps above, runs on main.
+        delegateQueue = NSOperationQueue.mainQueue,
+    )
+
+    init {
+        persist()
+        _states.value = saved.associate { download ->
+            download.eventNumber to EventDownloadState(
+                eventNumber = download.eventNumber,
+                state = DownloadStatus.COMPLETED,
+                percent = 100f,
+                streamUrl = download.streamUrl,
+                title = download.title,
+            )
+        }
+        session.getAllTasksWithCompletionHandler { running ->
+            NSOperationQueue.mainQueue.addOperationWithBlock {
+                running.orEmpty().forEach { reattach(it as? AVAssetDownloadTask) }
             }
-        )
-        // Note: AVAssetDownloadURLSession.sessionWithConfiguration is the factory in Obj-C
-        session = AVAssetDownloadURLSession.sessionWithConfiguration(
-            configuration = configuration,
-            assetDownloadDelegate = delegate,
-            delegateQueue = NSOperationQueue.mainQueue
-        ) as? AVAssetDownloadURLSession
+        }
     }
 
     override fun enqueue(event: EventInfo, tier: DownloadQuality) {
-        // A tier only means something for numbered events; a feed extra has a
-        // single playlist and is downloaded from it as-is.
-        val url = if (event.hasRenditionLadder) {
-            config.renditionUrl(event.eventNumber, tier.toRenditionTier())
-        } else {
-            event.streamUrl
+        if (event.isLive || tasks.containsKey(event.eventNumber)) return
+        val number = event.eventNumber
+        // The feed ID may be synthetic even when the URL names a numbered stream.
+        val url = event.downloadUrl(tier.toRenditionTier())
+        urls[number] = url
+        titles[number] = event.title
+        val task = NSURL.URLWithString(url)?.let { nsUrl ->
+            session.assetDownloadTaskWithURLAsset(
+                URLAsset = AVURLAsset(uRL = nsUrl, options = null),
+                assetTitle = event.title,
+                assetArtworkData = null,
+                options = null,
+            )
         }
-        val nsUrl = NSURL.URLWithString(url) ?: return
-        val asset = AVURLAsset.assetWithURL(nsUrl)
-        
-        val task = session?.assetDownloadTaskWithURLAsset(
-            URLAsset = asset,
-            assetTitle = event.title,
-            assetArtworkData = null,
-            options = null
-        )
-        task?.let {
-            tasks[event.eventNumber] = it
-            it.resume()
-            updateState(event.eventNumber, DownloadStatus.DOWNLOADING, 0f)
+        if (task == null) {
+            update(number, DownloadStatus.FAILED, 0f)
+            return
         }
+        task.taskDescription = DownloadTaskTag.of(number, url, event.title)
+        tasks[number] = task
+        update(number, DownloadStatus.DOWNLOADING, 0f)
+        task.resume()
     }
 
     override fun remove(eventNumber: Int) {
-        tasks[eventNumber]?.cancel()
-        tasks.remove(eventNumber)
-        updateState(eventNumber, DownloadStatus.NOT_DOWNLOADED, 0f)
+        // Cancelling still delivers didFinishDownloadingToURL for what was
+        // fetched so far, and then a cancelled completion; finish() deletes
+        // that partial package.
+        tasks.remove(eventNumber)?.cancel()
+        urls.remove(eventNumber)
+        titles.remove(eventNumber)
+        forget(eventNumber)
+        _states.update { it - eventNumber }
     }
 
     override fun refresh() {}
-    
-    private fun updateState(eventNumber: Int, status: DownloadStatus, percent: Float) {
-        val current = _states.value.toMutableMap()
-        current[eventNumber] = EventDownloadState(eventNumber, status, percent)
-        _states.value = current
+
+    /**
+     * The downloaded package holding the stream [url] plays, or null when that
+     * stream has not finished downloading. AVPlayer plays it like any HLS URL.
+     */
+    fun localFileFor(url: String): NSURL? {
+        val completed = saved.filter { _states.value[it.eventNumber]?.state == DownloadStatus.COMPLETED }
+        return SavedDownloads.matching(url, completed)?.takeIf { fileExists(it) }?.let(::fileUrl)
     }
+
+    private fun reattach(task: AVAssetDownloadTask?) {
+        val number = task?.eventNumber() ?: return
+        tasks[number] = task
+        task.streamUrl()?.let { urls[number] = it }
+        task.title()?.let { titles[number] = it }
+        update(number, DownloadStatus.DOWNLOADING, 0f)
+    }
+
+    private fun recordLocation(task: NSURLSessionTask, location: NSURL) {
+        val number = task.eventNumber() ?: return
+        val relativePath = location.relativePath
+        val streamUrl = urls[number] ?: task.streamUrl()
+        if (relativePath == null || streamUrl == null) {
+            // Nothing could find this package again, so it would only take up
+            // space; finish() then reports the download as failed.
+            NSFileManager.defaultManager.removeItemAtURL(location, error = null)
+            return
+        }
+        saved = saved.filterNot { it.eventNumber == number } +
+            SavedDownload(number, streamUrl, relativePath, titles[number] ?: task.title().orEmpty())
+        persist()
+    }
+
+    private fun finish(task: NSURLSessionTask, error: NSError?) {
+        val number = task.eventNumber() ?: return
+        tasks.remove(number)
+        if (error == null && saved.any { it.eventNumber == number }) {
+            update(number, DownloadStatus.COMPLETED, 100f)
+            return
+        }
+        forget(number)
+        // A cancellation is a removal the user asked for, already reflected.
+        if (error?.code != NSURLErrorCancelled) update(number, DownloadStatus.FAILED, 0f)
+    }
+
+    private fun forget(number: Int) {
+        val download = saved.firstOrNull { it.eventNumber == number } ?: return
+        NSFileManager.defaultManager.removeItemAtURL(fileUrl(download), error = null)
+        saved = saved - download
+        persist()
+    }
+
+    private fun persist() {
+        defaults.setObject(SavedDownloads.encode(saved), forKey = SAVED_DOWNLOADS_KEY)
+    }
+
+    private fun update(number: Int, status: DownloadStatus, percent: Float) {
+        _states.update {
+            val record = saved.firstOrNull { d -> d.eventNumber == number }
+            val url = urls[number] ?: record?.streamUrl
+            val title = titles[number] ?: record?.title
+            it + (number to EventDownloadState(number, status, percent, url.orEmpty(), title.orEmpty()))
+        }
+    }
+
+    private fun fileUrl(download: SavedDownload): NSURL =
+        NSURL.fileURLWithPath(NSHomeDirectory()).URLByAppendingPathComponent(download.relativePath)!!
+
+    private fun fileExists(download: SavedDownload): Boolean =
+        fileUrl(download).path?.let { NSFileManager.defaultManager.fileExistsAtPath(it) } == true
+
+    private fun NSURLSessionTask.eventNumber(): Int? = DownloadTaskTag.parse(taskDescription)?.eventNumber
+
+    private fun NSURLSessionTask.streamUrl(): String? = DownloadTaskTag.parse(taskDescription)?.streamUrl
+
+    private fun NSURLSessionTask.title(): String? =
+        DownloadTaskTag.parse(taskDescription)?.title?.ifEmpty { null }
 }
 
 @Composable
-internal actual fun rememberDownloadController(): DownloadController = remember { IOSDownloadController() }
+internal actual fun rememberDownloadController(): DownloadController = IOSDownloads

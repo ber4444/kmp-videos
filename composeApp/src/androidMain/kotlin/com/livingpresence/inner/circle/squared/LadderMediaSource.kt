@@ -57,6 +57,7 @@ internal class LadderMediaSourceBuilder(
     suspend fun resolveForEvent(
         eventNumber: Int,
         resolver: LadderResolver,
+        fallbackUrl: String? = null,
     ): ItemResult = withContext(Dispatchers.IO) {
         val ladder = runCatching { resolver.resolve(eventNumber) }.getOrNull()
         if (ladder != null && ladder.renditions.size > 1) {
@@ -72,10 +73,14 @@ internal class LadderMediaSourceBuilder(
                 DownloadCenter.get(context).snapshot()[eventNumber]?.state == DownloadCenter.DownloadState.COMPLETED
             }.getOrDefault(false)
             
+            // A public concert is downloaded under its feed ID, not the stream's
+            // event number, so the lookup above misses it. The URL the player
+            // was handed is then the right fallback: offline, the gallery hands
+            // over the exact rendition that was downloaded.
             val fallbackUri = if (isDownloaded) {
                 config.renditionUrl(eventNumber, RenditionTier.P360)
             } else {
-                config.eventUrl(eventNumber)
+                fallbackUrl ?: config.eventUrl(eventNumber)
             }
 
             ItemResult(

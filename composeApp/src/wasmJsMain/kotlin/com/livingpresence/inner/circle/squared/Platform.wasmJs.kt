@@ -67,9 +67,10 @@ internal external fun destroyHls(hls: kotlin.js.JsAny?)
 @Composable
 internal actual fun PlatformPlayerScreen(
     url: String,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 ) {
-    WasmPlayerScreen(url, onClose)
+    WasmPlayerScreen(url, captionsAvailable, onClose)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)

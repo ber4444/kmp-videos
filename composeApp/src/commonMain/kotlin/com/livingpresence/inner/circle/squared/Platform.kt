@@ -12,9 +12,14 @@ internal expect fun createHttpClient(): HttpClient
  * not the platform object.
  */
 
+/**
+ * @param captionsAvailable false for a video that never gets live captions (a concert):
+ *   no caption menu and no transcription session. See [rememberCaptionController].
+ */
 @Composable
 internal expect fun PlatformPlayerScreen(
     url: String,
+    captionsAvailable: Boolean,
     onClose: () -> Unit,
 )
 

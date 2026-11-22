@@ -9,19 +9,18 @@ and [Apple TestFlight](https://testflight.apple.com/join/YBHu9W7V)
 
 ## Features
 
-- **Discord-gated landing page.** The app opens on a photo landing screen whose
-  only action is *Connect to Discord*. Authorization uses the OAuth2
-  authorization-code grant with PKCE (mandatory for Discord mobile deep links,
-  and no client secret ever reaches the device). `:server` then decides access
-  from that token: members of the Apollo server are handed the addresses the feed
-  is built from, everyone else is told *"User must be on the Apollo server."* The
-  app carries no stream host and no manifest URL of its own, so a refusal is not
-  a hidden tile — there is nothing to reach. The session persists across launches
-  via a refresh token — stored in `SharedPreferences` on Android, the Keychain on
-  iOS, `localStorage` on web — and membership is **re-verified on every launch**,
-  so leaving Apollo revokes access at the next start rather than never. A **Sign
-  out** control on the feed erases it on demand, dropping the refresh token, the
-  in-memory access token and the issued stream host together. See
+- **Public concerts or Discord sign-in.** The photo landing screen offers
+  *Concerts* for public videos without an account, or *Connect to Discord* for
+  the Apollo feed. Concerts loads the concert list from `:server` and offers a
+  *Back* button to return to sign-in. Discord uses OAuth2 authorization-code
+  with PKCE; `:server` verifies Apollo membership before issuing the member feed
+  addresses. A non-member still sees *"User must be on the Apollo server."*
+  The Discord refresh token is stored in `SharedPreferences` on Android, the
+  Keychain on iOS, and `localStorage` on web. Membership is re-verified on every
+  launch, and *Sign out* clears the saved session, in-memory token and issued
+  host. Concerts play without live captions: the
+  caption menu is hidden and no Soniox session starts. Captions remain for the
+  Discord feed. See
   [Where the feed comes from](#where-the-feed-comes-from).
 - **Adaptive streaming.** Genuine client-side ABR synthesized from four
   unadvertised sibling renditions, with viewport-aware track selection so the
@@ -419,8 +418,9 @@ It used to live in `secrets.properties`, which kept it out of the repository but
 never out of the binary: a `BuildConfig` constant in the dex, an `Info.plist`
 entry in the IPA, a string in the web bundle. A host a client streams from is
 still on the wire once that client is playing — this is not a secret in the
-cryptographic sense — but it is now disclosed only to an account that has been
-admitted, rather than to everyone holding a build.
+cryptographic sense, but it is disclosed only to an account that has been
+admitted. Concerts are served through `:server`, so viewers who choose Concerts
+are not given it either.
 
 `FeedConfig.streamHost` (→ `MediaKitConfig.defaultHost`) tracks whatever the
 current account was issued, and is set back to empty for an account issued none,
@@ -429,9 +429,9 @@ given. `eval/scripts/fetch_clips.py` reads its own host from `WOWZA_HOST`.
 
 ### Where the feed comes from
 
-The feed has two sources — the numbered events (`event1`…`event20`) probed on the
-Wowza server, and a plain-text manifest of extra recordings — and the app holds
-the address of neither. Both are issued per account by `:server` over an
+The Discord feed has two sources — the numbered events (`event1`…`event20`)
+probed on the Wowza server and a plain-text manifest of extra recordings. The
+app holds neither member address. Both are issued per account by `:server` over an
 authenticated route, `GET /v1/feed/policy`:
 
 | Account | Stream host | Manifest |
@@ -440,16 +440,21 @@ authenticated route, `GET /v1/feed/policy`:
 | Review account | *(none)* | its demo list |
 | Anyone else | *(none)* | *(none)* — refused at the gate |
 
-**That is the Apollo membership check**, and it is why the addresses moved. It
-used to be a client-side comparison against a guild snowflake, with `STREAM_HOST`
-and `EXTRA_VIDEOS_URL` compiled into every build: membership decided what the UI
-*showed*, while the addresses it guarded shipped to anyone who could unzip an
-APK, read an `Info.plist` out of an IPA, or view-source the web bundle. Now a
-non-member is simply not told where the streams are — a decision a patched client
-cannot reverse.
+The separate **Concerts** option needs no account. The app reads
+`GET /v1/concerts/manifest.txt` from `:server`, and every URL on that list points
+back at `:server`, which serves the listed streams itself. The list's own address
+is a `fly secrets` value (`CONCERTS_MANIFEST_URL`), so editing or replacing it
+needs no release. The app does not set the SDK's numbered-event host for
+concerts. Pull-to-refresh reloads the list. Concerts have separate
+download/thumbnail IDs, and their offline fallback excludes member downloads.
+The choice survives activity recreation along with navigation. See
+[server/README.md](server/README.md#concerts).
 
-A review account gets a manifest and no host, so for it the numbered events are
-unreachable rather than merely unlisted. Adding or removing one is a `fly secrets`
+**Apollo membership still gates the Discord feed.** A failed login stays on the
+landing page with the membership error; it does not silently open concerts.
+
+A review account gets a manifest and no numbered-event host, so the app loads
+only its listed videos. Adding or removing one is a `fly secrets`
 change, not a release. See [server/README.md](server/README.md#feed-policy).
 
 The manifest format is unchanged — one video per line, URL first with an optional
@@ -467,13 +472,14 @@ keeps it. Editing the manifest is enough to change the feed — no release neede
 Use a gist raw URL *without* the revision hash, or the manifest is frozen at the
 revision you pinned.
 
-A **secret gist** is still the intended host, and is still *unlisted, not
-access-controlled*: anyone with the raw URL can read it. What changed is who
-learns the URL — only an admitted account, rather than everyone holding a build.
+A **secret gist** is the intended host for these lists, and is *unlisted, not
+access-controlled*: anyone with the raw URL can read it. Member and demo lists
+reach only admitted accounts, and the concert list stays on the server.
 Recordings that need real privacy still want signed URLs or a backend that
 authorizes each viewer.
 
-**The service is now a dependency of playback, not just of captions.** The apps
+**The service is a dependency of playback, not just of captions**, for the
+Discord feed and for Concerts alike. The apps
 distinguish the failure modes so an outage is not an eviction: a `403` is
 terminal and clears the stored session, while an unreachable service leaves the
 session intact and offers a retry.

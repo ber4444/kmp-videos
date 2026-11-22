@@ -24,10 +24,8 @@ private const val POLICY_ENDPOINT = "https://tokens.example"
 /**
  * What each account's feed is made of.
  *
- * The repository holds no addresses of its own, so these tests are about what it
- * does with the two it is issued — and, for a review account, about what the
- * absence of a stream host means: not a filtered list, but no way to build an
- * event URL at all.
+ * Member/review addresses come from the policy service. Public concerts use a
+ * separate manifest and never request that policy or probe numbered events.
  */
 class VideoRepositoryTest {
 
@@ -158,6 +156,52 @@ class VideoRepositoryTest {
         assertTrue(repo.loadEvents().isEmpty())
     }
 
+    @Test
+    fun concertsLoadWithoutDiscordOrMemberEventProbes() = runTest {
+        val requests = mutableListOf<String>()
+        val client = backend(HOST, EXTRAS_MANIFEST) { requests += it }
+        val repo = VideoRepository(client, policy(client))
+        repo.feedSource = FeedSource.CONCERTS
+        FeedConfig.streamHost = HOST
+
+        val events = repo.loadEvents()
+
+        assertEquals(listOf("Public concert"), events.map { it.title })
+        assertEquals("$HOST/concert/playlist.m3u8", events.single().streamUrl)
+        assertEquals(1_000_000, events.single().eventNumber)
+        assertEquals("", FeedConfig.streamHost)
+        assertFalse(requests.any { it.startsWith(POLICY_ENDPOINT) || it.contains("/live/event") })
+    }
+
+    @Test
+    fun switchingBackToDiscordFetchesTheMemberPolicyAgain() = runTest {
+        val client = backend(HOST, EXTRAS_MANIFEST)
+        val repo = VideoRepository(client, policy(client))
+        repo.feedSource = FeedSource.CONCERTS
+        repo.loadEvents()
+
+        repo.feedSource = FeedSource.DISCORD
+        val events = repo.loadEvents(forceRefresh = true)
+
+        assertEquals(listOf("Event 1", "Extra one"), events.map { it.title })
+        assertEquals(HOST, FeedConfig.streamHost)
+    }
+
+    @Test
+    fun refreshingConcertsRefetchesThePublicManifest() = runTest {
+        var fetches = 0
+        val client = backend(HOST, EXTRAS_MANIFEST) {
+            if (it == FeedConfig.concertsManifestUrl) fetches++
+        }
+        val repo = VideoRepository(client, policy(client))
+        repo.feedSource = FeedSource.CONCERTS
+
+        repo.loadEvents()
+        repo.loadEvents(forceRefresh = true)
+
+        assertEquals(2, fetches)
+    }
+
     private fun policy(client: HttpClient) = FeedPolicyClient(
         httpClient = client,
         baseUrl = { POLICY_ENDPOINT },
@@ -182,6 +226,8 @@ class VideoRepositoryTest {
                         json("""{"stream_host":"$streamHost","manifest_url":"$manifestUrl"}""")
                     url == EXTRAS_MANIFEST -> text("$HOST/extra/playlist.m3u8 Extra one")
                     url == DEMO_MANIFEST -> text("$HOST/demo/playlist.m3u8 Demo one")
+                    url == FeedConfig.concertsManifestUrl ->
+                        text("$HOST/concert/playlist.m3u8 Public concert")
                     // Only event 1 exists; the rest 404 and drop out, as on the
                     // real server.
                     url.startsWith("$HOST/live/event1/") ||

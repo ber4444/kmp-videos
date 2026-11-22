@@ -151,7 +151,7 @@ function getBufferedAfter(video) {
 internal external fun getBufferedAfter(video: kotlin.js.JsAny): Double
 
 @Composable
-internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
+internal fun WasmPlayerScreen(url: String, captionsAvailable: Boolean, onClose: () -> Unit) {
     val eventNumber = parseEventNumber(url)
     val scope = rememberCoroutineScope()
     val httpClient = remember { HttpClient(Js) }
@@ -172,7 +172,7 @@ internal fun WasmPlayerScreen(url: String, onClose: () -> Unit) {
     var showStats by remember { mutableStateOf(false) }
     // The chosen caption language persists across videos and app launches; see
     // rememberCaptionController for why that now outweighs the per-video reset it replaced.
-    val captionController = rememberCaptionController()
+    val captionController = rememberCaptionController(available = captionsAvailable)
 
     // The Compose surface on web is a single opaque skiko canvas, so (unlike the
     // native players) controls can't be drawn translucently over the HTML <video>.

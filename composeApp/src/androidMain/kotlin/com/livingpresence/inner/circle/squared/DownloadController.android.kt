@@ -169,6 +169,7 @@ private fun DownloadCenter.EventDownloadState.toCommon(): EventDownloadState =
         state = state.toCommon(),
         percent = percent,
         streamUrl = streamUrl,
+        title = title,
     )
 
 private fun DownloadCenter.DownloadState.toCommon(): DownloadStatus = when (this) {

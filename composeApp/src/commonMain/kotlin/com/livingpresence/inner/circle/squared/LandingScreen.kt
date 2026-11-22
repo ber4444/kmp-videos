@@ -47,7 +47,7 @@ private val ScrimTop = Color(0x33000000)
 private val ScrimBottom = Color(0xCC000000)
 
 /**
- * Landing destination: the garden photo, a single "Connect to Discord" button,
+ * Landing destination: the garden photo, Concerts and Connect to Discord,
  * and whatever the gate has to say about the result.
  *
  * This is the state-holder half — it owns the ViewModel, feeds it redirects
@@ -57,7 +57,7 @@ private val ScrimBottom = Color(0xCC000000)
  * @param onConnected Invoked once the account is verified as an Apollo member.
  */
 @Composable
-internal fun LandingRoute(onConnected: () -> Unit) {
+internal fun LandingRoute(onConnected: () -> Unit, onConcerts: () -> Unit) {
     val viewModel = rememberDiscordConnectionViewModel()
     val state by viewModel.state.collectAsState()
     val launchAuthorization = rememberDiscordAuthLauncher()
@@ -87,6 +87,7 @@ internal fun LandingRoute(onConnected: () -> Unit) {
         state = state,
         onConnect = { viewModel.beginConnect()?.let(launchAuthorization) },
         onTryAgain = viewModel::reset,
+        onConcerts = onConcerts,
     )
 }
 
@@ -128,6 +129,7 @@ private fun rememberDiscordConnectionViewModel(): DiscordConnectionViewModel {
  * @param state What the gate currently shows.
  * @param onConnect Start (or restart) Discord authorization.
  * @param onTryAgain Clear a failed/denied result and return to the connect button.
+ * @param onConcerts Open the public concert feed without Discord authorization.
  * @param modifier Layout modifier from the caller.
  */
 @Composable
@@ -135,6 +137,7 @@ internal fun LandingScreen(
     state: DiscordConnectionState,
     onConnect: () -> Unit,
     onTryAgain: () -> Unit,
+    onConcerts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -167,6 +170,22 @@ internal fun LandingScreen(
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            // Do not race session restoration or an OAuth exchange with a feed
+            // choice. Once either fails, Concerts remains available beside retry.
+            if (state == DiscordConnectionState.Disconnected ||
+                state == DiscordConnectionState.NotOnApolloServer ||
+                state is DiscordConnectionState.Failed
+            ) {
+                Button(
+                    onClick = onConcerts,
+                    modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                ) {
+                    Text("Concerts", style = MaterialTheme.typography.titleSmall)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             DiscordGate(
                 state = state,

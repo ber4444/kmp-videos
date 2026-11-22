@@ -55,6 +55,12 @@ data class ServerConfig(
      * refuses those accounts rather than falling back to the members' feed.
      */
     val demoVideosUrl: String,
+    /**
+     * Raw URL of the public concert list, in the same plain-text format. Read
+     * only here: the apps get relayed URLs from [ConcertCatalog], never this
+     * address. Empty turns Concerts off (the list route answers 503).
+     */
+    val concertsManifestUrl: String = "",
     val port: Int,
     /**
      * Origins allowed to call the endpoint from a browser. The wasmJs build is a
@@ -72,6 +78,8 @@ data class ServerConfig(
     /** Minted keys allowed per client per [rateLimitRefillSeconds]. */
     val rateLimit: Int,
     val rateLimitRefillSeconds: Int,
+    /** Concert relay requests allowed per client per minute. */
+    val relayRateLimit: Int = DEFAULT_RELAY_RATE_LIMIT,
 ) {
     companion object {
 
@@ -112,6 +120,7 @@ data class ServerConfig(
                     .filter { it.isNotEmpty() }
                     .toSet(),
                 demoVideosUrl = env("DEMO_VIDEOS_URL")?.trim().orEmpty(),
+                concertsManifestUrl = env("CONCERTS_MANIFEST_URL")?.trim().orEmpty(),
                 port = env("PORT")?.toIntOrNull() ?: 8080,
                 allowedOrigins = env("ALLOWED_ORIGINS").orEmpty()
                     .split(',')
@@ -123,6 +132,7 @@ data class ServerConfig(
                 rateLimit = env("RATE_LIMIT")?.toIntOrNull() ?: DEFAULT_RATE_LIMIT,
                 rateLimitRefillSeconds = env("RATE_LIMIT_REFILL_SECONDS")?.toIntOrNull()
                     ?: DEFAULT_RATE_LIMIT_REFILL_SECONDS,
+                relayRateLimit = env("RELAY_RATE_LIMIT")?.toIntOrNull() ?: DEFAULT_RELAY_RATE_LIMIT,
             )
         }
 
@@ -146,5 +156,11 @@ data class ServerConfig(
          */
         const val DEFAULT_RATE_LIMIT = 30
         const val DEFAULT_RATE_LIMIT_REFILL_SECONDS = 300
+
+        /**
+         * Per minute. A viewer needs well under 100; a 360p download on a fast
+         * connection can need over 1,000, and a refused segment fails it.
+         */
+        const val DEFAULT_RELAY_RATE_LIMIT = 3_000
     }
 }
