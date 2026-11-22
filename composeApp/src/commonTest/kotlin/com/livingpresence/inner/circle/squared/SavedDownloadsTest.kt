@@ -63,4 +63,18 @@ class SavedDownloadsTest {
         assertEquals(100f, downloadPercent(listOf(200.0), 120.0))
         assertEquals(0f, downloadPercent(listOf(30.0), Double.NaN))
     }
+
+    @Test
+    fun aTaskTagCarriesTheFeedIdAndUrlThroughARelaunch() {
+        val tag = DownloadTaskTag.of(1_000_000, concert.streamUrl)
+
+        assertEquals(1_000_000 to concert.streamUrl, DownloadTaskTag.parse(tag))
+    }
+
+    @Test
+    fun aTagWithOnlyAnIdStillYieldsTheId() {
+        assertEquals(12 to null, DownloadTaskTag.parse("12"))
+        assertNull(DownloadTaskTag.parse(null))
+        assertNull(DownloadTaskTag.parse("not-a-number https://x"))
+    }
 }

@@ -57,6 +57,27 @@ internal object SavedDownloads {
 }
 
 /**
+ * What an iOS download task carries in `taskDescription`: its feed ID and the
+ * URL being downloaded.
+ *
+ * The background session keeps `taskDescription` across a relaunch, but a task
+ * handed back after one has no asset URL to read, and the app's own memory of
+ * what it enqueued died with the process. Without the URL here, a download that
+ * finishes after a relaunch cannot be recorded.
+ */
+internal object DownloadTaskTag {
+
+    fun of(eventNumber: Int, streamUrl: String): String = "$eventNumber $streamUrl"
+
+    /** The feed ID and, when the tag has one, the URL. Null when there is no ID. */
+    fun parse(tag: String?): Pair<Int, String?>? {
+        val text = tag?.trim().orEmpty()
+        val number = text.substringBefore(' ').toIntOrNull() ?: return null
+        return number to text.substringAfter(' ', "").trim().ifEmpty { null }
+    }
+}
+
+/**
  * Download progress as the gallery shows it, 0–100, from the seconds of media
  * loaded so far against the seconds the download will fetch in total.
  */

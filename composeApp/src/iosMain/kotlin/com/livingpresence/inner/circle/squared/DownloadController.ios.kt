@@ -82,8 +82,9 @@ private class DownloadDelegate(
  * Finished downloads are recorded in `NSUserDefaults` as [SavedDownload]s, so
  * they are still listed, and still play, after a relaunch. Downloads a previous
  * launch left running are re-attached from the session, which keeps
- * them going while the app is not running. Each task carries its feed ID in
- * `taskDescription`, because a task is all those callbacks are handed.
+ * them going while the app is not running. Each task carries its feed ID and URL
+ * in `taskDescription` ([DownloadTaskTag]), because a task is all those
+ * callbacks are handed, and after a relaunch it is the only place either survives.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal object IOSDownloads : DownloadController {
@@ -153,7 +154,7 @@ internal object IOSDownloads : DownloadController {
             update(number, DownloadStatus.FAILED, 0f)
             return
         }
-        task.taskDescription = number.toString()
+        task.taskDescription = DownloadTaskTag.of(number, url)
         tasks[number] = task
         update(number, DownloadStatus.DOWNLOADING, 0f)
         task.resume()
@@ -183,16 +184,20 @@ internal object IOSDownloads : DownloadController {
     private fun reattach(task: AVAssetDownloadTask?) {
         val number = task?.eventNumber() ?: return
         tasks[number] = task
-        task.URLAsset.URL.absoluteString?.let { urls[number] = it }
+        task.streamUrl()?.let { urls[number] = it }
         update(number, DownloadStatus.DOWNLOADING, 0f)
     }
 
     private fun recordLocation(task: NSURLSessionTask, location: NSURL) {
         val number = task.eventNumber() ?: return
-        val relativePath = location.relativePath ?: return
-        val streamUrl = urls[number]
-            ?: (task as? AVAssetDownloadTask)?.URLAsset?.URL?.absoluteString
-            ?: return
+        val relativePath = location.relativePath
+        val streamUrl = urls[number] ?: task.streamUrl()
+        if (relativePath == null || streamUrl == null) {
+            // Nothing could find this package again, so it would only take up
+            // space; finish() then reports the download as failed.
+            NSFileManager.defaultManager.removeItemAtURL(location, error = null)
+            return
+        }
         saved = saved.filterNot { it.eventNumber == number } +
             SavedDownload(number, streamUrl, relativePath)
         persist()
@@ -234,7 +239,9 @@ internal object IOSDownloads : DownloadController {
     private fun fileExists(download: SavedDownload): Boolean =
         fileUrl(download).path?.let { NSFileManager.defaultManager.fileExistsAtPath(it) } == true
 
-    private fun NSURLSessionTask.eventNumber(): Int? = taskDescription?.toIntOrNull()
+    private fun NSURLSessionTask.eventNumber(): Int? = DownloadTaskTag.parse(taskDescription)?.first
+
+    private fun NSURLSessionTask.streamUrl(): String? = DownloadTaskTag.parse(taskDescription)?.second
 }
 
 @Composable
