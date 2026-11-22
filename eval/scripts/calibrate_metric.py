@@ -9,10 +9,9 @@ the verified reference. That makes two of its columns structurally unlike each o
   by every valid-but-different word an engine that is not DeepL would choose.
 
 chrF is character-n-gram overlap, so the first pairing gets a bonus the second cannot: two
-DeepL outputs of near-identical English share phrasing, register and punctuation. The
-+19.7 the scorecard reports for the two-stage path is therefore an unknown mixture of "the
-translation is better" and "the metric recognises its own handwriting", and it is
-currently the whole business case for adding a second vendor.
+DeepL outputs of near-identical English share phrasing, register and punctuation. The apparent two-stage lead therefore mixes translation differences with resemblance
+to the engine that wrote the answer key. All leads and gaps below use paired per-clip
+differences, so missing recordings cannot turn a sample difference into an effect.
 
 This script separates them with a control: translate the *verified reference* — perfect
 input, no ASR error at all — with a second engine, and score that against the DeepL ideal.
@@ -51,7 +50,7 @@ def _load(kind, clip_id, lang):
     if not os.path.exists(path):
         return None
     with open(path, "r") as f:
-        return json.load(f).get("text", "")
+        return json.load(f).get("text")
 
 
 def _inband(clip_id, soniox_lang):
@@ -60,7 +59,7 @@ def _inband(clip_id, soniox_lang):
         return None
     with open(path, "r") as f:
         d = json.load(f)
-    return d.get("final_text") or d.get("text") or ""
+    return d["final_text"] if "final_text" in d else d.get("text")
 
 
 def _chrf(ideal, hyp):
@@ -124,7 +123,7 @@ def main():
     # scorecard uses — or Gemini(reference), the same reference through the other engine.
     # Reading a row pair tells you how much of a score is the engine and how much is the
     # translation.
-    cells = defaultdict(list)
+    cells = defaultdict(dict)
     for entry in entries:
         clip_id = entry["id"]
         ideal_deepl = _load(DEEPL_REF, clip_id, deepl_lang)
@@ -135,20 +134,20 @@ def main():
 
         if ideal_deepl and ideal_gemini:
             # The control: perfect input, wrong engine. No ASR error in this number at all.
-            cells["control"].append(_chrf(ideal_deepl, ideal_gemini))
-        if ideal_deepl and inband:
-            cells["inband_vs_deepl"].append(_chrf(ideal_deepl, inband))
-        if ideal_gemini and inband:
-            cells["inband_vs_gemini"].append(_chrf(ideal_gemini, inband))
-        if ideal_deepl and two_deepl:
-            cells["deepl2_vs_deepl"].append(_chrf(ideal_deepl, two_deepl))
-        if ideal_gemini and two_gemini:
-            cells["gemini2_vs_gemini"].append(_chrf(ideal_gemini, two_gemini))
-        if ideal_deepl and two_gemini:
-            cells["gemini2_vs_deepl"].append(_chrf(ideal_deepl, two_gemini))
+            cells["control"][clip_id] = _chrf(ideal_deepl, ideal_gemini)
+        if ideal_deepl and inband is not None:
+            cells["inband_vs_deepl"][clip_id] = _chrf(ideal_deepl, inband)
+        if ideal_gemini and inband is not None:
+            cells["inband_vs_gemini"][clip_id] = _chrf(ideal_gemini, inband)
+        if ideal_deepl and two_deepl is not None:
+            cells["deepl2_vs_deepl"][clip_id] = _chrf(ideal_deepl, two_deepl)
+        if ideal_gemini and two_gemini is not None:
+            cells["gemini2_vs_gemini"][clip_id] = _chrf(ideal_gemini, two_gemini)
+        if ideal_deepl and two_gemini is not None:
+            cells["gemini2_vs_deepl"][clip_id] = _chrf(ideal_deepl, two_gemini)
 
     def avg(key):
-        vals = cells.get(key) or []
+        vals = list(cells.get(key, {}).values())
         return (sum(vals) / len(vals), len(vals)) if vals else (None, 0)
 
     rows = [
@@ -171,28 +170,28 @@ def main():
     print(f"\n{'Hypothesis':<22}{'Ideal':<14}{'chrF':>7}{'n':>4}  note")
     for hyp, ideal, key, note in rows:
         val, n = avg(key)
-        shown = f"{val:.1f}" if val is not None else "n/a"
+        shown = f"{val:.2f}" if val is not None else "n/a"
         print(f"{hyp:<22}{ideal:<14}{shown:>7}{n:>4}  {note}")
         md.append(f"| {hyp} | {ideal} | {shown} | {n} | {note} |")
 
-    control, _ = avg("control")
-    inband, _ = avg("inband_vs_deepl")
-    two, _ = avg("deepl2_vs_deepl")
-
-    md.append("")
-    if control is not None and inband is not None:
-        headroom = control - inband
-        md.append(f"**Soniox in-band is {headroom:+.1f} chrF from the different-engine floor "
-                  f"({inband:.1f} vs {control:.1f}).**")
-        print(f"\nIn-band vs the different-engine floor: {inband:.1f} vs {control:.1f} "
-              f"({headroom:+.1f})")
-        if two is not None:
-            md.append(f"The scorecard's two-stage lead over in-band is "
-                      f"{two - inband:+.1f}; the part of it explained by shared-engine "
-                      f"phrasing rather than translation quality is up to "
-                      f"{100 - control:.1f}.")
-            print(f"Two-stage lead: {two - inband:+.1f}. Same-engine bonus available to it: "
-                  f"up to {100 - control:.1f}.")
+    md.extend(["", "All differences are means of per-clip differences on the shared clips.",
+               "Positive counts exclude ties. Same-engine lead is diagnostic, not a quality verdict.", "",
+               "| Paired comparison | chrF delta | n | Positive clips |",
+               "|---|---:|---:|---:|"])
+    comparisons = [
+        ("Two-stage lead (same engine)", "deepl2_vs_deepl", "inband_vs_deepl"),
+        ("Key-swap gap", "gemini2_vs_gemini", "gemini2_vs_deepl"),
+        ("Cross-engine lead", "gemini2_vs_deepl", "inband_vs_deepl"),
+        ("Control gap", "control", "inband_vs_deepl"),
+        ("In-band key-swap gap", "inband_vs_gemini", "inband_vs_deepl"),
+    ]
+    for label, left, right in comparisons:
+        shared = sorted(cells[left].keys() & cells[right].keys())
+        deltas = [cells[left][c] - cells[right][c] for c in shared]
+        shown = f"{sum(deltas) / len(deltas):+.2f}" if deltas else "n/a (not run)"
+        positive = sum(d > 0 for d in deltas)
+        md.append(f"| {label} | {shown} | {len(deltas)} | {positive} |")
+        print(f"{label}: {shown} (n={len(deltas)}, positive={positive})")
 
     out_path = os.path.join(config.REPORTS_DIR, f"metric_calibration.{lang}.md")
     os.makedirs(config.REPORTS_DIR, exist_ok=True)

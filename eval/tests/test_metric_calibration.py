@@ -166,3 +166,42 @@ def test_the_control_outscores_a_different_engines_wording(calibration_run, monk
     control = rows[("Gemini(reference)", "DeepL(ref)")]
     inband = rows[("Soniox in-band", "DeepL(ref)")]
     assert control > inband + 20
+
+
+def test_leads_use_shared_clips_not_difference_of_independent_means(calibration_run, monkeypatch):
+    import config
+    from pathlib import Path
+    from scripts import calibrate_metric as calibrate
+
+    manifest = Path(config.MANIFEST_PATH)
+    data = json.loads(manifest.read_text())
+    data['entries'].append(dict(data['entries'][0], id='c2'))
+    manifest.write_text(json.dumps(data))
+    trans = Path(config.TRANSLATIONS_DIR)
+    for kind, text in [('ref', 'ideal-2'), ('soniox', 'two-2')]:
+        (trans / kind / 'c2.HU.json').write_text(json.dumps({'text': text}))
+    # c1: two-stage 30, in-band 20. c2: only two-stage 100.
+    # Paired lead is +10, whereas subtracting independent means gives +45.
+    monkeypatch.setattr(calibrate, '_chrf', lambda ideal, hyp:
+                        100 if hyp == 'two-2' else 30 if hyp.endswith(' ma.') else 20)
+    calibrate.main()
+    report = calibration_run.read_text()
+    assert '| Two-stage lead (same engine) | +10.00 | 1 | 1 |' in report
+    assert '| Cross-engine lead | +10.00 | 1 | 1 |' in report
+    assert '| Control gap | +0.00 | 1 | 0 |' in report
+
+
+def test_recorded_empty_hypothesis_scores_zero_but_missing_field_is_absent(calibration_run):
+    import config
+    from pathlib import Path
+    from scripts.calibrate_metric import main
+    root = Path(config.TRANSLATIONS_DIR)
+    (root / 'soniox/c1.HU.json').write_text(json.dumps({'text': ''}))
+    (root / 'soniox-gemini/c1.HU.json').write_text(json.dumps({}))
+    (Path(config.INBAND_DIR) / 'hu/c1.json').write_text(json.dumps({'final_text': ''}))
+    main()
+    report = calibration_run.read_text()
+    assert '| Soniox in-band | DeepL(ref) | 0.00 | 1 |' in report
+    assert '| DeepL(Soniox ASR) | DeepL(ref) | 0.00 | 1 |' in report
+    assert '| Gemini(Soniox ASR) | Gemini(ref) | n/a | 0 |' in report
+    assert '| Two-stage lead (same engine) | +0.00 | 1 | 0 |' in report

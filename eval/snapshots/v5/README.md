@@ -14,3 +14,8 @@ rows cover five clips; its controls and two-stage rows cover 21.
 
 The scorecard's transcript alignment links were omitted because those files contain
 unpublished reference and hypothesis text. All aggregate table values are retained.
+
+`metric_calibration.paired.{hu,ru}.md` are later offline rescores of the full
+21-clip archive. They retain clip identity in every cell and compute every lead
+and gap on the intersection of the two arms. The original calibration reports
+remain unchanged; their in-band rows covered five clips.

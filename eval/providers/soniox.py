@@ -171,7 +171,7 @@ class SonioxProvider(Provider):
                     state["committed"] += text
                     if text.strip():
                         state["final_words"].append(
-                            FinalWord(word=text.strip(), start_s=tok.get("start_ms", 0) / 1000.0, final_t_recv=t)
+                            FinalWord(word=text.strip(), start_s=tok["start_ms"] / 1000.0 if tok.get("start_ms") is not None else None, final_t_recv=t)
                         )
                     finalized_any = True
                 else:
@@ -235,7 +235,7 @@ class SonioxProvider(Provider):
                     state["committed"] += text
                     if text.strip():
                         state["final_words"].append(
-                            FinalWord(word=text.strip(), start_s=tok.get("start_ms", 0) / 1000.0, final_t_recv=t)
+                            FinalWord(word=text.strip(), start_s=tok["start_ms"] / 1000.0 if tok.get("start_ms") is not None else None, final_t_recv=t)
                         )
                     finalized_any = True
                 else:

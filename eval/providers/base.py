@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from abc import ABC, abstractmethod
 import config
 
@@ -26,10 +26,25 @@ class StreamEvent(BaseModel):
 class FinalWord(BaseModel):
     """A word once the provider marked it final, with its self-reported spoken time."""
     word: str
-    start_s: float         # provider's own word start time (audio timeline)
+    start_s: Optional[float]  # None when the provider supplies no audio timestamp
     final_t_recv: float    # wall-clock time (since audio start) the word was finalized
 
 class StreamResult(BaseModel):
+    # v1 invented zero starts for untimed Soniox translations. Keep that archive
+    # readable without confusing genuine audio time zero in new recordings.
+    word_timing_version: int = 2
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_translation_starts(cls, data):
+        if isinstance(data, dict) and "word_timing_version" not in data:
+            words = data.get("final_words", [])
+            if "+translate:" in data.get("model", "") and words and all(
+                isinstance(w, dict) and w.get("start_s") == 0 for w in words
+            ):
+                return {**data, "final_words": [{**w, "start_s": None} for w in words]}
+        return data
+
     final_text: str
     events: List[StreamEvent]
     final_words: List[FinalWord]

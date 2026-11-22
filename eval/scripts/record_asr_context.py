@@ -15,7 +15,8 @@ perfect vocabulary would be worth. If the oracle barely moves WER, no OCR pipeli
 Arms, all on the async API so they run as fast as it answers rather than at wall-clock pace:
 
 - `none` — no context at all. The baseline the scorecard's 0.242 WER already reports.
-- `glossary` — the app's own 49 accepted terms, i.e. what the shipping caption path sends.
+- `glossary` — only the app's 49 accepted terms (`context.terms`). The shipping
+  path also sends `context.text` and, for supported target languages, `translation_terms`.
   Also the arm that was previously broken: `boost` used to be a commented-out guess at a
   `speech_context` field the SDK does not have, so the "boosted" fixtures re-ran the
   baseline and the scorecard reported Soniox boosting as worthless.

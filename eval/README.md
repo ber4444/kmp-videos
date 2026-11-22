@@ -185,3 +185,68 @@ toward the audio cap, including boosted calls. A provider error stops recording 
 a nonzero exit status. Keep the same directory exports when replaying, translating,
 or scoring that run; unset both to return to the historical defaults. See
 [`VENDOR_REFRESH_2026.md`](VENDOR_REFRESH_2026.md) for scope and measured results.
+
+## PCM resampling experiment
+
+`eval/scripts/eval_resampling.py` compares the app's averaging decimator with
+nearest-sample decimation and `scipy.signal.resample_poly`. It re-fetches the
+verified manifest segments at their native sample rate: the existing 16 kHz
+golden WAVs cannot measure the app's conversion. From the repo root:
+
+```bash
+# Use eval/venv/bin/python, with dependencies in requirements.txt plus:
+python -m pip install -r eval/requirements-resampling.txt
+# Export WOWZA_HOST (scheme excluded) and SONIOX_API_KEY from local configuration.
+python eval/scripts/eval_resampling.py fetch
+python eval/scripts/eval_resampling.py prepare
+# prepare checks the native/reference-resampled waveforms against the archived golden audio.
+# Recheck an existing prepared run with: python eval/scripts/eval_resampling.py validate
+python eval/scripts/eval_resampling.py record --dry-run
+python eval/scripts/eval_resampling.py record
+python eval/scripts/eval_resampling.py score
+```
+
+Preparation requires a waveform source match against the archived golden clips.
+A URL that now serves replacement footage cannot reuse the old references: the
+run is invalid, recording is refused, and scoring prints unavailable metrics.
+
+Only `record` calls Soniox (`stt-async-v6`, recognition only, the app's English
+context parsed by `app_context.py`). Before any call, it validates all cached
+response identities and sums the actual duration of every pending arm against
+the same 90-minute cap as `recording.py`; it has no force override. Responses
+include the audio SHA-256, model, context, source rate and arm, and a provider
+failure stops the run. Repeating `record` skips matching cached responses.
+Native audio, prepared arms and responses live in gitignored
+`eval/fixtures/resampling/`; `--root` selects a separate run. The report goes to
+`eval/reports/resampling.md`, with paired per-clip deltas, win counts and
+exploratory paired bootstrap intervals. It contains aggregate values only. The attempted November 2026 run is recorded in
+[`snapshots/resampling.md`](snapshots/resampling.md): all 87 calls completed within the
+cap, but none of the 21 fresh native excerpts matched the old golden audio. The
+URLs serve videos replaced weekly, so quality metrics and deltas are unavailable.
+The validation gate was added after detecting this failed source match. The
+committed timing correction is in
+[`snapshots/translation_timing.md`](snapshots/translation_timing.md); generated
+reports remain under the gitignored `reports/` directory.
+
+If the native source is 48 kHz, preparation also creates a reference-resampled
+44.1 kHz source for the first 12 verified manifest entries, then compares avg
+with nearest on that source. This preselected supplemental sample keeps the
+whole experiment at about 87 billed minutes (21 × 3 + 12 × 2 one-minute clips).
+Use `--supplemental-clips` to change it; the cap still applies to all pending
+jobs together. The fixed 48-sample signed PCM vector is pinned to the same
+expected bytes in Python and `PcmResamplingTest.kt`. Each arm resamples the
+entire clip in one call, while the app converts individual callback buffers;
+callback-boundary rounding and provider repeatability are not measured here.
+Use a fresh `--root` when manifest offsets or renditions change: native WAV reuse
+currently checks duration, not source-coordinate provenance.
+
+The run stores its historical model and context in `preparation.json`, so offline
+scoring continues to work after the app glossary or model changes. Live resume
+rejects such configuration drift. Entity F1 uses only clips with labelled domain
+terms, with its own n; WER uses every recorded clip.
+
+Translated final words with no provider timestamp have `start_s=null`.
+Finalization latency excludes them and reads `n/a` if none remain. Replay
+also discards all-zero starts in unversioned Soniox translation fixtures: those
+zeros were invented by the old recorder, rather than spoken word times. New
+recordings retain genuine zero starts through an explicit timing schema version.

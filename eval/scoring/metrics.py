@@ -121,7 +121,7 @@ def _common_prefix_len(a: str, b: str) -> int:
     return i
 
 
-def calculate_streaming_metrics(ref_text: str, stream) -> Dict[str, float]:
+def calculate_streaming_metrics(ref_text: str, stream) -> Dict[str, float | None]:
     """Metrics for a recorded streaming session (a StreamResult).
 
     - stream_wer: normalized WER of the final transcript (comparable to batch WER).
@@ -146,12 +146,12 @@ def calculate_streaming_metrics(ref_text: str, stream) -> Dict[str, float]:
     total_chars = max(1, len(stream.final_text))
     flicker = retracted / total_chars
 
-    lats = sorted(w.final_t_recv - w.start_s for w in stream.final_words)
+    lats = sorted(w.final_t_recv - w.start_s for w in stream.final_words if w.start_s is not None)
     return {
         "stream_wer": stream_wer,
         "flicker": flicker,
-        "final_latency_med_s": _percentile(lats, 50),
-        "final_latency_p95_s": _percentile(lats, 95),
+        "final_latency_med_s": _percentile(lats, 50) if lats else None,
+        "final_latency_p95_s": _percentile(lats, 95) if lats else None,
         "num_final_words": len(stream.final_words),
     }
 

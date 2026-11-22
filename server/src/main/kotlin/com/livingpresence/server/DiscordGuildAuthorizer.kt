@@ -1,5 +1,7 @@
 package com.livingpresence.server
 
+import java.security.MessageDigest
+import java.util.HexFormat
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -63,7 +65,7 @@ class DiscordGuildAuthorizer(
     private val apiBase: String = DISCORD_API_BASE,
 ) : Authorizer {
 
-    private val cache = mutableMapOf<Int, CachedDecision>()
+    private val cache = mutableMapOf<String, CachedDecision>()
     private val cacheLock = Mutex()
 
     override suspend fun authorize(call: ApplicationCall): AuthorizationDecision {
@@ -73,7 +75,11 @@ class DiscordGuildAuthorizer(
             .orEmpty()
         if (token.isEmpty()) return AuthorizationDecision.Denied(NOT_SIGNED_IN)
 
-        val key = token.hashCode()
+        // String.hashCode is only 32 bits: a collision must never reuse another
+        // caller's Allowed decision. Keep only a cryptographic digest of the token.
+        val key = HexFormat.of().formatHex(
+            MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8)),
+        )
         cached(key)?.let { return it }
 
         val decision = checkWithDiscord(token)
@@ -143,7 +149,7 @@ class DiscordGuildAuthorizer(
         return id in testUserIds
     }
 
-    private suspend fun cached(key: Int): AuthorizationDecision? = cacheLock.withLock {
+    private suspend fun cached(key: String): AuthorizationDecision? = cacheLock.withLock {
         val hit = cache[key] ?: return@withLock null
         if (hit.expiresAtMs <= nowMs()) {
             cache.remove(key)
@@ -153,7 +159,7 @@ class DiscordGuildAuthorizer(
         }
     }
 
-    private suspend fun remember(key: Int, decision: AuthorizationDecision) = cacheLock.withLock {
+    private suspend fun remember(key: String, decision: AuthorizationDecision) = cacheLock.withLock {
         // Denials are cached too, and for the same duration: a client that keeps
         // retrying a token Discord already refused must not become a way to spend
         // this service's Discord rate limit.
