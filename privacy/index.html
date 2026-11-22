@@ -70,12 +70,14 @@
 
 <header>
   <h1>Privacy Policy</h1>
-  <p class="sub"><strong>Apollo Videos</strong> · Effective 13 November 2026</p>
+  <p class="sub"><strong>Apollo Videos</strong> · Effective 22 November 2026</p>
 </header>
 
 <div class="lede">
   <p>Apollo Videos plays live and recorded events for the Apollo community. It uses your
-  existing Discord account to verify access and offers optional live captions through Soniox.
+  existing Discord account to verify access to the member feed, or lets you watch public
+  concerts without signing in. It offers optional live captions through Soniox; caption
+  sessions still require an authorized Discord account.
   The app has no advertising, tracking, or analytics SDKs.</p>
 </div>
 
@@ -99,23 +101,28 @@
     </tr>
     <tr>
       <td><strong>Feed and caption service</strong><br><span class="sub">operated by the developer and hosted on Fly.io</span></td>
-      <td>The app sends the Discord access token to request the feed and obtain a short-lived
-          caption key. The service presents the token to Discord and checks your account ID and
+      <td>The app sends the Discord access token to request the member feed or obtain a short-lived
+          caption key. When you choose <em>Concerts</em>, the app loads the concert list and the
+          video itself through this service, without a Discord token. The service presents the token to Discord and checks your account ID and
           guild membership. It uses the request IP address to limit request volume.</td>
-      <td>Provide the correct feed for members and review accounts, authorize caption sessions,
-          and prevent abuse. This service does not receive playback audio or the video URL you select.</td>
+      <td>Provide the correct feed for members and review accounts, serve public concerts,
+          authorize caption sessions, and prevent abuse. For member videos this service does not
+          receive playback audio or the video URL you select; for concerts it serves the video you
+          select and does not record which one.</td>
     </tr>
     <tr>
       <td><strong>The streaming server</strong></td>
       <td>Requests for playlists, audio and video segments, and related media resources.</td>
       <td>Build the feed and play, preview, or download video. The server can see the requested
-          resources and connection information such as IP address and request time.</td>
+          resources and connection information such as IP address and request time. Concerts reach
+          it through the feed service, so for concerts it sees that service's address, not yours.</td>
     </tr>
     <tr>
       <td><strong>GitHub</strong><br><span class="sub">gist.githubusercontent.com</span></td>
       <td>A request for the feed manifest, including ordinary network information such as IP
           address. The app does not include your Discord credentials in that request.</td>
-      <td>Load additional recordings when the feed loads or refreshes.</td>
+      <td>Load additional recordings for an authorized Discord feed when the feed loads or
+          refreshes.</td>
     </tr>
     <tr>
       <td><strong>Soniox</strong></td>
