@@ -27,7 +27,12 @@ kotlin {
 
     android {
         namespace = "com.livingpresence.inner.circle.squared.shared"
-        compileSdk = 37
+        // 37.2 for androidx.compose 1.13.0's minCompileSdk — see the note in
+        // :androidApp. The KMP android block has no compileSdkMinor property, so
+        // the minor version goes through the compileSdk spec.
+        compileSdk {
+            version = release(37) { minorApiLevel = 2 }
+        }
         // Keep in step with :androidApp and :mediakit — see the note there.
         minSdk = 24
         compilerOptions {

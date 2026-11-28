@@ -16,7 +16,14 @@ val uploadKeyProperties = Properties().apply {
 
 android {
     namespace = "com.livingpresence.inner.circle.squared"
-    compileSdk = 37
+    // 37.2, not plain 37 (which is 37.0): androidx.compose 1.13.0 ships AAR
+    // metadata declaring minCompileSdk 37.1, and checkAarMetadata fails the build
+    // against the .0 platform. A minor platform only adds APIs, so this widens
+    // what compiles and changes no runtime behavior. :composeApp and :mediakit
+    // set the same version through the KMP android block — move all three together.
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "com.livingpresence.inner.circle.squared"

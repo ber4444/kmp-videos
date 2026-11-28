@@ -48,7 +48,7 @@ jobs:
         run: yes | sdkmanager --licenses
 
       - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
 
       - name: Build Android debug app
         run: bash .github/scripts/gradle-ci.sh assembleDebug
@@ -104,7 +104,7 @@ jobs:
         run: yes | sdkmanager --licenses
 
       - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
 
       # :mediakit common tests (pure-Kotlin core) + :composeApp Robolectric unit tests.
       - name: Run unit tests
