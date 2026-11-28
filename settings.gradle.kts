@@ -16,10 +16,11 @@ pluginManagement {
     }
 }
 
-// `jvmToolchain(21)` needs a JDK 21 that no machine here ships (the daemon itself
-// runs on 25), so Gradle auto-provisions one. Doing that without a declared
-// toolchain repository is deprecated and becomes an error in Gradle 10 — this
-// resolver is the repository.
+// The whole build is JDK 21: the daemon (gradle/gradle-daemon-jvm.properties) and
+// `jvmToolchain(21)` in every module. On a machine that already has a 21 the daemon
+// satisfies the toolchain itself and nothing is downloaded; on one that doesn't,
+// Gradle auto-provisions it. Doing that without a declared toolchain repository is
+// deprecated and becomes an error in Gradle 10 — this resolver is the repository.
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }

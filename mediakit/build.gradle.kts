@@ -19,10 +19,12 @@ kotlin {
     // Pin compilation to JDK 21 (as :composeApp already does) so the bytecode
     // this module emits does not follow whatever JVM the Gradle daemon happens
     // to run on. Without it the bare `jvm()` target below compiles with the
-    // daemon's JDK — and once gradle-daemon-jvm.properties pinned that to 25,
-    // `jvmApiBuild` started failing with "Unsupported class file major version
-    // 69" because binary-compatibility-validator's ASM cannot read Java 25
-    // classes. The `jvmTarget` set under `android { }` only covers that target.
+    // daemon's JDK, and when that was pinned to 25 `jvmApiBuild` failed with
+    // "Unsupported class file major version 69" because
+    // binary-compatibility-validator's ASM could not read Java 25 classes. The
+    // daemon is on 21 now, so the two agree, but the pin is what keeps them
+    // agreeing the next time the daemon moves. The `jvmTarget` set under
+    // `android { }` only covers that target.
     jvmToolchain(21)
 
     jvm()
