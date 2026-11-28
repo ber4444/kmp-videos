@@ -175,7 +175,7 @@ to compile (`EXPOSED_PARAMETER_TYPE`).
 
 Runs on **Android 7.0+** (`minSdk = 24`, kept in step across `:androidApp`,
 `:composeApp` and `:mediakit` — current androidx no longer supports API 23).
-Compiles against API 37 and targets API 36.
+Compiles against API 37.2 and targets API 37.
 
 ```bash
 ./gradlew assembleDebug            # debug APK → androidApp/build/outputs/apk/debug/

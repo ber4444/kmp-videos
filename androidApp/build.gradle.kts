@@ -16,14 +16,27 @@ val uploadKeyProperties = Properties().apply {
 
 android {
     namespace = "com.livingpresence.inner.circle.squared"
-    compileSdk = 37
+    // 37.2, not plain 37 (which is 37.0): androidx.compose 1.13.0 ships AAR
+    // metadata declaring minCompileSdk 37.1, and checkAarMetadata fails the build
+    // against the .0 platform. A minor platform only adds APIs, so this widens
+    // what compiles and changes no runtime behavior. :composeApp and :mediakit
+    // set the same version through the KMP android block — move all three together.
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "com.livingpresence.inner.circle.squared"
         // 24 (Android 7.0), not 23: androidx.work 2.12.0 — and androidx in general —
         // no longer supports Marshmallow, and the manifest merger refuses the mismatch.
         minSdk = 24
-        targetSdk = 36
+        // 37 opts into Android 17's background audio hardening: a backgrounded
+        // app only keeps audio if its foreground service was started while the
+        // app was visible. PlaybackService is only ever started by the
+        // MediaController in PlaybackConnection, from a live activity, so it
+        // qualifies — but a resume path started from the background (media
+        // button, PlaybackResumption) would be silenced without a sound.
+        targetSdk = 37
         // The checked-in value is the floor for local builds. codemagic.yaml's
         // android-release workflow overrides it with -PversionCode=<highest on
         // Play + 1>, looked up at build time, so a scheduled build never collides
@@ -84,8 +97,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 }
 

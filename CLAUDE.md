@@ -19,8 +19,7 @@ summary. When the two disagree, the code wins — fix whichever doc is stale.
 | `e2e/` | Playwright smoke test that the wasm production build renders something |
 
 Package root: `com.livingpresence.inner.circle.squared`. There's no DI framework:
-wiring is by constructor (`rememberMainViewModel()` in `App.kt`). Metro sits in
-the version catalog, but no build script applies it.
+wiring is by constructor (`rememberMainViewModel()` in `App.kt`).
 
 ## Commands
 
@@ -65,9 +64,15 @@ The Robolectric suites live in `composeApp/src/androidHostTest`. CI runs on Linu
 so iOS tasks are disabled there and nothing in CI compiles Kotlin/Native. If you
 touch `iosMain`, Swift, or the cinterop, build the iOS framework locally.
 
-Toolchain: the Gradle daemon runs on JDK 25 (`gradle/gradle-daemon-jvm.properties`),
-and compilation targets JDK 17 through `jvmToolchain(17)` (foojay auto-provisions
-it). Versions live in `gradle/libs.versions.toml`, but the Kotlin, AGP and
+Toolchain: **JDK 21 everywhere, one version.** The Gradle daemon
+(`gradle/gradle-daemon-jvm.properties`), compilation through `jvmToolchain(21)` and
+`jvmTarget`, `:androidApp`'s `compileOptions`, every `setup-java` step in both GitHub
+Actions workflows, and both `codemagic.yaml` workflows (`java: 21`). 21 is the
+ceiling: Codemagic's Linux image installs no JDK above it, and its macOS image
+jumps from 21 to 26. Regenerate the daemon file with
+`./gradlew updateDaemonJvm --jvm-version=21` rather than hand-editing it — the
+`toolchainUrl` entries are per-platform foojay package downloads that have to match
+`toolchainVersion`. Versions live in `gradle/libs.versions.toml`, but the Kotlin, AGP and
 Compose plugin versions are *also* pinned in `settings.gradle.kts`
 `pluginManagement`. Bump both together.
 

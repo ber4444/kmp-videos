@@ -16,24 +16,32 @@ kotlin {
     // Android. Platform actuals (ExoPlayer, hls.js) arrive in later phases.
     explicitApi()
 
-    // Pin compilation to JDK 17 (as :composeApp already does) so the bytecode
+    // Pin compilation to JDK 21 (as :composeApp already does) so the bytecode
     // this module emits does not follow whatever JVM the Gradle daemon happens
     // to run on. Without it the bare `jvm()` target below compiles with the
-    // daemon's JDK — and once gradle-daemon-jvm.properties pinned that to 25,
-    // `jvmApiBuild` started failing with "Unsupported class file major version
-    // 69" because binary-compatibility-validator's ASM cannot read Java 25
-    // classes. The `jvmTarget` set under `android { }` only covers that target.
-    jvmToolchain(17)
+    // daemon's JDK, and when that was pinned to 25 `jvmApiBuild` failed with
+    // "Unsupported class file major version 69" because
+    // binary-compatibility-validator's ASM could not read Java 25 classes. The
+    // daemon is on 21 now, so the two agree, but the pin is what keeps them
+    // agreeing the next time the daemon moves. The `jvmTarget` set under
+    // `android { }` only covers that target.
+    jvmToolchain(21)
 
     jvm()
 
     android {
         namespace = "com.livingpresence.mediakit"
-        compileSdk = 37
+        // 37.2 to stay in step with :androidApp and :composeApp, which need it for
+        // androidx.compose 1.13.0 — see the note in :androidApp. The KMP android
+        // block has no compileSdkMinor property, so the minor version goes through
+        // the compileSdk spec.
+        compileSdk {
+            version = release(37) { minorApiLevel = 2 }
+        }
         // Keep in step with :androidApp and :composeApp — see the note there.
         minSdk = 24
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
         withHostTestBuilder {}
     }

@@ -1,19 +1,18 @@
 [versions]
-agp = "9.5.2"
+agp = "9.5.3"
 # Keep at or above 2.4.10, the first version with the fix for CVE-2026-53914,
 # unsafe deserialization in the Kotlin build cache metadata.
 kotlin = "2.4.21"
-compose = "1.11.4"
+compose = "1.13.0"
 compose-multiplatform = "1.12.2"
 compose-icons = "1.7.8"
-compose-material3 = "1.4.0"
+compose-material3 = "1.5.0"
 androidx-activityCompose = "1.13.0"
 lifecycle = "2.11.0"
-metro = "1.6.0"
 navigation-compose = "2.10.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-coroutines-test = "1.11.0"
-ktor = "3.6.1"
+ktor = "3.6.2"
 media3 = "1.11.1"
 androidx-work = "2.12.0"
 kotlinx-serialization = "1.13.0"
@@ -31,9 +30,6 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "lifecycle" }
-metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
-metro-viewmodel = { module = "dev.zacsweers.metro:metrox-viewmodel", version.ref = "metro" }
-metro-viewmodel-compose = { module = "dev.zacsweers.metro:metrox-viewmodel-compose", version.ref = "metro" }
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation-compose" }
 compose-ui = { module = "androidx.compose.ui:ui", version.ref = "compose" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "compose" }
@@ -89,7 +85,6 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
-metro = { id = "dev.zacsweers.metro", version.ref = "metro" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 binary-compatibility-validator = { id = "org.jetbrains.kotlinx.binary-compatibility-validator", version.ref = "binary-compatibility-validator" }

@@ -53,7 +53,7 @@ workflows:
       vars:
         PACKAGE_NAME: com.livingpresence.inner.circle.squared
         GOOGLE_PLAY_TRACK: internal
-      java: 17
+      java: 21
     scripts:
       - *write_secrets
 
@@ -67,7 +67,7 @@ workflows:
           keyPassword=$CM_KEY_PASSWORD
           EOF
 
-      # compileSdk 37 may be newer than the image. Use the SDK's own executable
+      # compileSdk 37.2 may be newer than the image. Use the SDK's own executable
       # because Codemagic's macOS image may leave it off PATH.
       - name: Install Android SDK packages
         script: |
@@ -80,7 +80,7 @@ workflows:
           fi
           # Ignore SIGPIPE from yes when sdkmanager finishes reading prompts.
           (set +o pipefail; yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses > /dev/null)
-          "$sdkmanager" --sdk_root="$sdk_root" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          "$sdkmanager" --sdk_root="$sdk_root" "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
           printf 'sdk.dir=%s\n' "$sdk_root" > "$CM_BUILD_DIR/local.properties"
 
       # Play rejects a bundle whose versionCode is not higher than every one it
@@ -133,7 +133,7 @@ workflows:
       vars:
         BUNDLE_ID: com.livingpresence.inner.circle.squared
       xcode: latest
-      java: 17
+      java: 21
     scripts:
       # 1. Reconstruct the gitignored secrets.properties from Codemagic env vars so
       #    Gradle's generateIosSecretsXcconfig (a dependency of the framework link)
