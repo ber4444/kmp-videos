@@ -30,7 +30,13 @@ android {
         // 24 (Android 7.0), not 23: androidx.work 2.12.0 — and androidx in general —
         // no longer supports Marshmallow, and the manifest merger refuses the mismatch.
         minSdk = 24
-        targetSdk = 36
+        // 37 opts into Android 17's background audio hardening: a backgrounded
+        // app only keeps audio if its foreground service was started while the
+        // app was visible. PlaybackService is only ever started by the
+        // MediaController in PlaybackConnection, from a live activity, so it
+        // qualifies — but a resume path started from the background (media
+        // button, PlaybackResumption) would be silenced without a sound.
+        targetSdk = 37
         // The checked-in value is the floor for local builds. codemagic.yaml's
         // android-release workflow overrides it with -PversionCode=<highest on
         // Play + 1>, looked up at build time, so a scheduled build never collides
