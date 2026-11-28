@@ -16,7 +16,7 @@ pluginManagement {
     }
 }
 
-// `jvmToolchain(17)` needs a JDK 17 that no machine here ships (the daemon itself
+// `jvmToolchain(21)` needs a JDK 21 that no machine here ships (the daemon itself
 // runs on 25), so Gradle auto-provisions one. Doing that without a declared
 // toolchain repository is deprecated and becomes an error in Gradle 10 — this
 // resolver is the repository.

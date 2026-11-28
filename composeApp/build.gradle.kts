@@ -23,7 +23,7 @@ kotlin {
     // internal.
     explicitApi()
 
-    jvmToolchain(17)
+    jvmToolchain(21)
 
     android {
         namespace = "com.livingpresence.inner.circle.squared.shared"
@@ -36,7 +36,7 @@ kotlin {
         // Keep in step with :androidApp and :mediakit — see the note there.
         minSdk = 24
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
         withHostTest {
             // Compose touch tests launch an activity under Robolectric, which

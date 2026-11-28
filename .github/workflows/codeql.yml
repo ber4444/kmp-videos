@@ -32,11 +32,11 @@ jobs:
         languages: ${{ matrix.language }}
         tools: latest
         
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       if: matrix.language == 'java-kotlin'
       uses: actions/setup-java@v6
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
     - name: Set up Gradle
